@@ -44,9 +44,11 @@
 
 ```
 .
-├── core/                 MMM-C：核心库源码 + 命令行工程
-│   ├── MMMLC.aardio      权威源码（两个工程都 import MMMLC）
-│   └── MMMLCore/         命令行工程
+├── core/                 无界面、可被别的项目 embed 的代码
+│   ├── launch/           MMM-C：启动核心
+│   │   ├── MMMLC.aardio      库源码（权威，两个工程都 import MMMLC）
+│   │   └── MMMLCore/         命令行工程
+│   └── download/         下载核心（MMMDLC，未开始）
 ├── launcher/             MMM-L
 │   ├── MMMLauncher/      启动器工程
 │   └── ICON design/      图标源文件
@@ -57,6 +59,9 @@
 ├── LICENSE               GPL-3.0
 └── README.md
 ```
+
+`core/` 下按**功能**分层（launch / download），不按角色命名——所以不会有"两个 core"的歧义。
+库名同样成对：`MMMLC`（启动核心）与 `MMMDLC`（下载核心）。
 
 `test/`、`launchertest/` 是本地测试数据与发布版试运行目录，不纳入版本控制。
 
@@ -74,7 +79,7 @@
 tools\deploy-core-lib.bat
 ```
 
-它把 `core/MMMLC.aardio` 复制到 aardio 的用户库目录（`<aardio>\lib\MMMLC.aardio`）。
+它把 `core/launch/MMMLC.aardio` 复制到 aardio 的用户库目录（`<aardio>\lib\MMMLC.aardio`）。
 两个工程都是 `import MMMLC`，实际加载的是用户库目录里那一份，不跑这一步改动不生效。
 
 ## 测试

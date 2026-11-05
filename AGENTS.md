@@ -60,7 +60,8 @@
 
 ## 二、设计文稿
 
-- `设计文稿/design.md` 是**设计源头**：功能该不该做、做成什么样，以它为准。
+- `设计文稿/设计文档v2.md` 是**设计源头**：功能该不该做、做成什么样，以它为准。
+  （`设计文档.md` 是 v1，仅留档，不再更新。）
 - 代码实现和文稿冲突时，先问用户，不要自己决定改哪边。
 - 文稿只写结论，不写实现细节和踩坑（那些进工作日志）。
 
@@ -101,10 +102,12 @@ arr = list;
 
 ### 工程/发布
 
-- **core 只有一个全局用户库 `MMMLC`**：文件在 `D:\Develop\aardio\lib\MMMLC.aardio`，
-  两个工程都直接 `import MMMLC`，**不要再往工程 `lib/` 里复制**。
-  `version_parser` 已合并进 MMMLC（同一命名空间，函数名不带前缀），`sync-core-lib.bat` 已删除。
-  改这个库就是改全局文件（在工作区外，写它需要提权）。
+- **仓库分层按功能，不按角色**：`core/launch/`（启动核心 `MMMLC`）、`core/download/`（下载核心 `MMMDLC`）、
+  `launcher/`（MMM-L 界面）、`downloader/`（MMM-DL 界面）。不要出现"两个 core"这种命名。
+- **core 的权威源码在仓库里**：`core/launch/MMMLC.aardio`。
+  两个工程都是 `import MMMLC`，实际加载的是 aardio 用户库目录那份
+  （`D:\Develop\aardio\lib\MMMLC.aardio`），所以改完要跑 `tools\deploy-core-lib.bat`。
+  **不要再往工程 `lib/` 里复制**。
 - **不要手改 `default.aproj`**：IDE 有工程打开时会用内存配置覆盖它
   （`docs/specs/aproj.md:146`）
 - 新增 `dlg/*.aardio` 后，让用户在 IDE 里右键「窗体文件」→ **同步本地目录**，否则发布版缺窗体
