@@ -2,122 +2,22 @@
 
 //列表小工具：所有管理窗口共用。
 //
-//   fit(ctrl)        打开窗口时把列宽调成「都能看见」：太窄的拉回下限，
-//                    总宽超过可视区域的等比压缩，列数多也不会把最后一列挤出屏幕。
-//   limit_width(ctrl) 用**子类化**给表头列宽设下限：拖动时表头一到下限就停住，
-//                    手感和资源管理器一致（这是系统没有提供的能力，只能拦消息）。
+//只做一件事：打开窗口时把列宽调成「都能看见」——
+//太窄的列拉回最小宽度，总宽超过可视区域的等比压缩，
+//这样列数一多也不会把最后一列挤出屏幕。
+//
+//（「拖动时限制最小宽度」试过三次都没成：onnotify / translateCommand 收不到表头通知，
+//  子类化 listview 拦 HDN_ITEMCHANGING 也无效，且诊断时会把窗口卡死。已放弃，
+//  改由「每次打开窗口重新排版」保证布局不乱。）
 
 namespace m3list {
 	import math;
 	import table;
-	import fsys;
-	import fsys.file;
-	import win.api;
-	import win.subclass;
-
-	// ---------- 诊断 ----------
-
-	// 把调试信息写进 %TEMP%\m3list-msg.log。
-	// 列宽限制不生效时，靠这个文件判断「消息到底有没有到」：
-	//   有 HDN_* 行 = 子类化生效，问题在否决逻辑
-	//   只有 open 行  = 子类化没生效，要换方案
-	var debug_lines = 0;
-
-	function trace(text) {
-		if (debug_lines > 400) return;
-		debug_lines = debug_lines + 1;
-
-		var path = ..string.getenv("TEMP") ++ "\m3list-msg.log";
-		var f = ..fsys.file(path, "a");   // a = 只写追加，保留原内容
-		if (!f) return;
-
-		f.write(tostring(text) ++ "\r\n");
-		f.close();
-	}
 
 	// 每列最小宽度（参数没传时用这个）
 	function min_width_of(min_width) {
 		if (min_width and min_width > 0) return min_width;
 		return 56;
-	}
-
-	// 拖动时限制列宽下限。
-	//
-	// 关键点：表头（header）是 listview 的子窗口，它把 WM_NOTIFY 发给 listview。
-	// 子类化 listview 就能在 aardio 自己的分发之前拦到这些通知：
-	//   HDN_ITEMCHANGING(-320) 否决「宽度小于下限」的变化 → 拖动到下限就停
-	// 之前试过的 onnotify / translateCommand 都不行，因为通知的 hwndFrom 是表头，
-	// aardio 按控件句柄找不到就丢了；子类化是直接拿到原始消息。
-	function limit_width(ctrl, min_width) {
-		if (!ctrl) return false;
-
-		var minw = min_width_of(min_width);
-
-		var header = ::SendMessageInt(ctrl.hwnd, 0x101F /*_LVM_GETHEADER*/, 0, 0);
-		if (!header) {
-			trace("open: LVM_GETHEADER 拿不到表头");
-			return false;
-		}
-
-		trace("open: listview=" ++ tostring(ctrl.hwnd) ++ " header=" ++ tostring(header) ++ " min=" ++ minw);
-
-		// 结构体就是「带类型标注的表」：raw.convert(指针, 这张表) 返回读出来的结构体。
-		// 注意没有 raw.define 这种东西。
-		var nm_type = {
-			pointer hwndFrom;
-			INT idFrom;
-			INT code;
-			INT iItem;
-			INT iButton;
-			pointer pitem;
-		};
-
-		// HDITEM 只取前两个字段：mask、cxy
-		var hd_type = { INT mask; int cxy };
-
-		var seen = 0;
-
-		var obj = win.subclass(ctrl, function(hwnd, message, wParam, lParam) {
-			if (message != 0x4E /*_WM_NOTIFY*/) return;
-			if (!lParam) return;
-
-			var nm = ..raw.convert(..topointer(lParam), nm_type);
-			if (!nm) {
-				trace("notify: raw.convert 返回空");
-				return;
-			}
-
-			// 结构体里的指针字段读出来是 pointer 类型，和 SendMessageInt 返回的数字比较前先转成数字
-			if (tonumber(nm.hwndFrom) != tonumber(header)) return;
-
-			// 前 20 条通知记下来，用来判断表头到底发了什么
-			if (seen < 20) {
-				seen = seen + 1;
-				var hd_now = nm.pitem ? ..raw.convert(nm.pitem, hd_type) : null;
-				trace("notify#" ++ seen ++ ": code=" ++ tostring(nm.code)
-					++ " mask=" ++ tostring(hd_now ? hd_now.mask : -1)
-					++ " cxy=" ++ tostring(hd_now ? hd_now.cxy : -1));
-			}
-
-			// 只处理 HDN_ITEMCHANGING：否决比改宽度可靠（raw.convert 读出来的是副本，
-			// 写回去不会影响原内存）
-			if (nm.code != -320) return;
-			if (!nm.pitem) return;
-
-			var hd = ..raw.convert(nm.pitem, hd_type);
-			if (!hd) return;
-
-			if ((hd.mask & 0x1 /*_HDI_WIDTH*/) == 0) return;
-			if (hd.cxy >= minw) return;
-
-			trace("veto: cxy=" ++ tostring(hd.cxy));
-			return 1;   // 否决这次变化 → 表头保持原宽度，拖到下限就停
-		});
-
-		// 挂在控件上，避免被回收
-		ctrl._width_limit = obj;
-
-		return true;
 	}
 
 	// 打开窗口时用：先保证最小宽度，再把总宽压进可视区域。

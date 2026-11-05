@@ -329,7 +329,6 @@ else {
 
 // 三列加起来超过列表宽度时按比例压缩，保证每列都看得见
 m3list.fit(winform.listJava);
-m3list.limit_width(winform.listJava, 56);
 
 // 列宽只在打开窗口时规整一次；拖动不干预
 

@@ -261,9 +261,6 @@ winform.listAcc.columns = {
 // UUID 很长，按比例压缩后靠省略号截断，保证三列都在视野内
 m3list.fit(winform.listAcc);
 
-// 拖动时列宽不低于 56px（子类化表头消息，手感和资源管理器一致）
-m3list.limit_width(winform.listAcc, 56);
-
 // 列宽只在打开窗口时规整一次；拖动不干预
 
 render();
