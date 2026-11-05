@@ -32,9 +32,9 @@ m3theme.note(winform.lblCase);
 m3theme.note(winform.lblResult);
 
 m3theme.button(winform.btnAnalyze);
-m3theme.primary(winform.btnOpen);
+m3theme.button(winform.btnOpen);
 m3theme.button(winform.btnMulti);
-m3theme.ghost(winform.btnClose);
+m3theme.button(winform.btnClose);
 
 // ---------- 内置样本 ----------
 // 都是真实崩溃报告/日志里能见到的片段，故意写短，够规则匹配就行

@@ -25,8 +25,8 @@ var C_RED = 0x0000FF;
 winform.editLog.color = C_LOG_FG;
 
 m3theme.button(winform.btnClear);
-m3theme.primary(winform.btnPack);
-m3theme.ghost(winform.btnClose);
+m3theme.button(winform.btnPack);
+m3theme.button(winform.btnClose);
 
 // 给 m3log 会话用的两个接口
 winform.append = function(text, is_error) {

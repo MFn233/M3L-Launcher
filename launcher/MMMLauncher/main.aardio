@@ -44,7 +44,7 @@ winform.lblStatus.redraw();
 m3theme.plain(winform.btnTitle);
 
 // 启动游戏 / 设置：同一套外观
-m3theme.primary(winform.btnLaunch);
+m3theme.button(winform.btnLaunch);
 m3theme.button(winform.btnSettings);
 
 // 最小窗口大小，否则缩放后排版会挤在一起

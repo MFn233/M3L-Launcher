@@ -17,7 +17,7 @@ btnClose={cls="plus";text="关闭";left=404;top=366;right=496;bottom=398;font=LO
 /*}}*/
 
 m3theme.ink(winform.lblTitle);
-m3theme.ghost(winform.btnClose);
+m3theme.button(winform.btnClose);
 
 winform.editCredits.color = m3theme.C_INK;
 

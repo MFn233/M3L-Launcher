@@ -86,8 +86,8 @@ m3theme.button(winform.btnVersions);
 m3theme.button(winform.btnDefault);
 m3theme.button(winform.btnUser);
 // 保存 / 取消：和主界面按钮同一套外观，两个等宽
-m3theme.primary(winform.btnSave);
-m3theme.ghost(winform.btnCancel);
+m3theme.button(winform.btnSave);
+m3theme.button(winform.btnCancel);
 
 // ---------- 数据 ----------
 // 必须先声明，下面的函数才能看到它们

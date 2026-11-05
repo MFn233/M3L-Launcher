@@ -33,7 +33,7 @@ m3theme.field(winform.editUuid);
 
 m3theme.button(winform.btnAdd);
 m3theme.button(winform.btnDelete);
-m3theme.primary(winform.btnApply);
+m3theme.button(winform.btnApply);
 m3theme.button(winform.btnCurrent);
 m3theme.ghost(winform.btnClose);
 

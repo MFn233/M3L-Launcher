@@ -18,7 +18,7 @@ lblMsg={cls="static";left=24;top=24;right=536;bottom=72;font=LOGFONT(name='Micro
 m3theme.ink(winform.lblMsg);
 m3theme.note(winform.lblHint);
 
-m3theme.primary(winform.btnAuto);
+m3theme.button(winform.btnAuto);
 m3theme.button(winform.btnManual);
 m3theme.ghost(winform.btnForce);
 

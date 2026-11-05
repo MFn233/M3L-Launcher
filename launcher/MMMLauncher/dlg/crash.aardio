@@ -67,9 +67,9 @@ m3theme.ink(winform.lblV6);
 
 m3theme.button(winform.btnOpen);
 m3theme.button(winform.btnOpenDir);
-m3theme.primary(winform.btnPack);
+m3theme.button(winform.btnPack);
 m3theme.button(winform.btnCopy);
-m3theme.ghost(winform.btnClose);
+m3theme.button(winform.btnClose);
 
 var info = {};
 var logs = {};

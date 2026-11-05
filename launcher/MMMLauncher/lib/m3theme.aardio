@@ -1,57 +1,28 @@
 //m3theme.aardio
 
-//控件主题：黑 / 白 / 灰三色的唯一定义处，外加一套 plus 的自绘样式函数。
-//窗口里不要再写死颜色和圆角，统一 m3theme.primary(...) / note(...) 这样调用。
-//
-//视觉方向：白卡 + 浅灰底 + 大圆角 + 唯一的实心黑主按钮。
-//规则：每个窗口最多一个 primary，其余用 button（白底）或 ghost（纯文字）。
+//控件主题：黑/白/灰三色的唯一定义处，外加 plus 控件的 skin 套用函数。
+//窗口里不要再写死颜色，统一 m3theme.button(...) / m3theme.note(...) 这样调用。
 
 namespace m3theme {
 
 	// ---------- 颜色 ----------
 
-	// plus 的 skin / argbColor 用 ARGB（0xAARRGGBB）
-	INK   = 0xFF111111;   // 主文字
-	INK_HOVER = 0xFF2A2A2A;   // 主按钮悬停
-	INK_DOWN  = 0xFF000000;   // 主按钮按下
+	// plus 的 skin、argbColor 用 ARGB（0xAARRGGBB）
+	INK   = 0xFF1A1A1A;   // 近黑，主文字/边框
 	WHITE = 0xFFFFFFFF;
-	CARD  = 0xFFFFFFFF;   // 卡片 / 次级按钮底
-	BG    = 0xFFF2F2F2;   // 窗口背景（改这里必须同步改各窗体的 bgcolor）
-	MUTED = 0xFF6B6B6B;   // 次要文字
-	LINE  = 0xFFECECEC;   // 分隔线
-	HOVER = 0xFFEDEDED;   // 次级按钮悬停底
-	TRACK = 0xFFE4E4E4;   // 滑条轨道
-	DIS   = 0xFFF5F5F5;   // 禁用底
-	DISFG = 0xFFA8A8A8;   // 禁用字
+	BG    = 0xFFF2F2F2;   // 窗口背景
+	MUTED = 0xFF8C8C8C;   // 次要文字
+	LINE  = 0xFFD8D8D8;   // 分隔线
+	TRACK = 0xFFE2E2E2;   // 滑条轨道
+	DIS   = 0xFFEDEDED;   // 禁用底
+	DISFG = 0xFF9C9C9C;   // 禁用字
 	RED   = 0xFFD03030;   // 错误
 
 	// static / edit 的 color 属性用 COLORREF（0xBBGGRR，和 ARGB 分量顺序相反）
-	C_INK   = 0x111111;
-	C_MUTED = 0x6B6B6B;
-	C_BG    = 0xF2F2F2;   // 必须和窗体的 bgcolor 一致，否则静态文本会露出一块浅灰
+	C_INK   = 0x1A1A1A;
+	C_MUTED = 0x8C8C8C;
+	C_BG    = 0xF2F2F2;   // 窗口背景的 COLORREF：静态文本要和它一致，否则会露出一块浅灰
 	C_RED   = 0x3030D0;   // #D03030 的 COLORREF
-	C_CARD  = 0xFFFFFF;
-
-	// ---------- 尺度 ----------
-
-	R_SM = 6;    // 输入框圆角
-	R_MD = 8;    // 按钮圆角
-	R_LG = 12;   // 卡片圆角
-
-	H_BTN = 36;   // 按钮高度
-	H_FIELD = 32; // 输入框高度
-
-	SP4 = 4;
-	SP8 = 8;
-	SP16 = 16;
-	SP24 = 24;
-	SP32 = 32;
-
-	// 字号（LOGFONT 的 h，负数是字高）：新窗口按这套取值，别再用 -11
-	FS_TITLE = -22;
-	FS_SECTION = -14;
-	FS_BODY = -13;
-	FS_NOTE = -12;
 
 	// ARGB → COLORREF
 	// ARGB 是 0xAARRGGBB（低字节是 BB），COLORREF 是 0x00BBGGRR（低字节是 RR），
@@ -63,101 +34,26 @@ namespace m3theme {
 		return r | (g << 8) | (b << 16);
 	}
 
-	// 圆角的四个状态必须都写死：skin 是按状态合并的，漏一个就会出现
-	// 「鼠标划过之后圆角回不来」。
-	function radius(r) {
-		return {
-			default = { radius = r };
-			hover = { radius = r };
-			active = { radius = r };
-			disabled = { radius = r };
-		};
-	}
+	// ---------- skin ----------
 
-	// ---------- 按钮 ----------
-
-	// 主按钮：实心黑、白字、无边框。每个窗口最多用一个。
-	function primary(ctrl) {
-		if (!ctrl) return;
-
-		ctrl.skin({
-			background = {
-				default = INK;
-				hover = INK_HOVER;
-				active = INK_DOWN;
-				disabled = DIS;
-			};
-			color = {
-				default = WHITE;
-				hover = WHITE;
-				active = WHITE;
-				disabled = DISFG;
-			};
-			border = radius(R_MD);
-		});
-	}
-
-	// 次级按钮：白底、黑字、无边框。同层次的多个操作都用它。
+	// 主要按钮：白底、1px 黑框，悬停整块反色
 	function button(ctrl) {
 		if (!ctrl) return;
 
 		ctrl.skin({
-			background = {
-				default = CARD;
-				hover = HOVER;
-				active = HOVER;
-				disabled = DIS;
-			};
-			color = {
-				default = INK;
-				hover = INK;
-				active = INK;
-				disabled = DISFG;
-			};
-			border = radius(R_MD);
+			background = { default = WHITE; hover = INK; disabled = DIS };
+			color = { default = INK; hover = WHITE; disabled = DISFG };
+			border = { color = INK; width = 1; radius = 0 };
 		});
 	}
 
-	// 文字按钮：无底无框，悬停才变黑（关闭 / 取消 / 次要入口）。
-	// 注意底色填的是 BG，放在白卡上会露出灰块。
+	// 次要按钮：无框灰字，悬停变黑（关闭 / 取消那种）
 	function ghost(ctrl) {
 		if (!ctrl) return;
 
 		ctrl.skin({
-			background = {
-				default = BG;
-				hover = HOVER;
-				active = HOVER;
-				disabled = BG;
-			};
-			color = {
-				default = MUTED;
-				hover = INK;
-				active = INK;
-				disabled = DISFG;
-			};
-			border = radius(R_MD);
-		});
-	}
-
-	// 危险操作：白底、红字（删除这类）。确认由确认框负责，这里只做视觉区分。
-	function danger(ctrl) {
-		if (!ctrl) return;
-
-		ctrl.skin({
-			background = {
-				default = CARD;
-				hover = HOVER;
-				active = HOVER;
-				disabled = DIS;
-			};
-			color = {
-				default = RED;
-				hover = RED;
-				active = RED;
-				disabled = DISFG;
-			};
-			border = radius(R_MD);
+			background = { default = BG; hover = BG };
+			color = { default = MUTED; hover = INK };
 		});
 	}
 
@@ -168,16 +64,6 @@ namespace m3theme {
 		ctrl.skin({
 			background = { default = BG; hover = BG };
 			color = { default = INK; hover = INK };
-		});
-	}
-
-	// 卡片：白底 + 大圆角，用来给一块内容做分组（放 static 当背景，或给 plus 容器）
-	function card(ctrl) {
-		if (!ctrl) return;
-
-		ctrl.skin({
-			background = { default = CARD; hover = CARD; active = CARD };
-			border = radius(R_LG);
 		});
 	}
 
@@ -192,6 +78,7 @@ namespace m3theme {
 
 	// 滑条。plus 的滑块形状只看 border.radius：
 	//   <0 画正圆、>0 画圆角矩形、没有就画方块。
+	// 三个状态必须都写死，否则鼠标移入移出后形状会变不回来。
 	function slider(ctrl) {
 		if (!ctrl) return;
 
@@ -207,13 +94,12 @@ namespace m3theme {
 		});
 	}
 
-	// ---------- 文字与输入 ----------
+	// ---------- 文字颜色 ----------
 
-	// 输入框：白底黑字
+	// 输入框：只改文字颜色，白底保持不变
 	function field(ctrl) {
 		if (!ctrl) return;
 		ctrl.color = C_INK;
-		ctrl.bgcolor = C_CARD;
 	}
 
 	// 静态文本：主要文字
@@ -230,9 +116,9 @@ namespace m3theme {
 		ctrl.bgcolor = C_BG;
 	}
 
-	// 静态文本：错误
-	// 不能叫 error：那是 aardio 的内置保留函数，会报 Can't modify the constant: 'error'
-	function alert(ctrl) {
+	// 静态文本：错误（不能叫 error：那是 aardio 的内置保留函数，会报
+	// Can't modify the constant: 'error'）
+	function danger(ctrl) {
 		if (!ctrl) return;
 		ctrl.color = C_RED;
 		ctrl.bgcolor = C_BG;
@@ -240,34 +126,27 @@ namespace m3theme {
 }
 
 /**intellisense(m3theme)
-INK = 主文字 #111111（ARGB，plus 的 skin 用）
-INK_HOVER = 主按钮悬停色
-INK_DOWN = 主按钮按下色
-CARD = 卡片 / 次级按钮底（白）
-BG = 窗口背景 #F2F2F2（改它必须同步改各窗体的 bgcolor）
-MUTED = 次要文字 #6B6B6B
-LINE = 分隔线 #ECECEC
-HOVER = 次级按钮悬停底
-TRACK = 滑条轨道
-DIS / DISFG = 禁用底 / 禁用字
+INK = 近黑 #1A1A1A（ARGB，plus 的 skin 用）
+WHITE = 纯白
+BG = 窗口背景 #F2F2F2
+MUTED = 次要文字 #8C8C8C
+LINE = 分隔线 #D8D8D8
+TRACK = 滑条轨道 #E2E2E2
+DIS = 禁用状态底色
+DISFG = 禁用状态文字
 RED = 错误红 #D03030
-C_INK / C_MUTED / C_BG / C_RED / C_CARD = 对应的 COLORREF（static / edit 用）
-R_SM / R_MD / R_LG = 圆角：输入框 6 / 按钮 8 / 卡片 12
-H_BTN / H_FIELD = 按钮高度 36 / 输入框高度 32
-SP4 / SP8 / SP16 / SP24 / SP32 = 间距尺度
-FS_TITLE / FS_SECTION / FS_BODY / FS_NOTE = 字号 -22 / -14 / -13 / -12
+C_INK = 近黑 COLORREF（static / edit 的 color 属性用）
+C_MUTED = 次要文字 COLORREF
+C_BG = 窗口背景 COLORREF（静态文本的 bgcolor 用，避免露出一块浅灰）
+C_RED = 错误红 COLORREF
 toRef(__/*argb*/) = ARGB 转 COLORREF
-radius(__/*圆角*/) = 生成四个状态同圆角的 border 表
-primary(__/*控件*/) = 主按钮：实心黑、白字、圆角 8（每窗口最多一个）
-button(__/*控件*/) = 次级按钮：白底黑字、圆角 8
-ghost(__/*控件*/) = 文字按钮：无底无框，悬停变黑（底色填 BG，放白卡上会露灰块）
-danger(__/*控件*/) = 危险操作：白底红字
+button(__/*控件*/) = 主要按钮：白底、1px 黑框，悬停整块反色
+ghost(__/*控件*/) = 次要按钮：无框灰字，悬停变黑
 plain(__/*控件*/) = 无框无底，主页标题那种
-card(__/*控件*/) = 卡片：白底 + 圆角 12
 rule(__/*控件*/) = 分隔线：1px 高的 plus，只填色
 slider(__/*控件*/) = 滑条：圆形滑块，三个状态形状一致
-field(__/*控件*/) = 输入框：白底黑字
+field(__/*控件*/) = 输入框文字颜色（不动背景）
 ink(__/*控件*/) = 静态文本：主要文字
 note(__/*控件*/) = 静态文本：说明 / 标签
-alert(__/*控件*/) = 静态文本：错误红（原 danger，改名以免和按钮的 danger 冲突）
+danger(__/*控件*/) = 静态文本：错误红（不能叫 error，和内置函数冲突）
 end intellisense**/
