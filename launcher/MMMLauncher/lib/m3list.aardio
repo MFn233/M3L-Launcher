@@ -24,7 +24,6 @@ namespace m3list {
 	// 关键点：表头（header）是 listview 的子窗口，它把 WM_NOTIFY 发给 listview。
 	// 子类化 listview 就能在 aardio 自己的分发之前拦到这些通知：
 	//   HDN_ITEMCHANGING(-320) 否决「宽度小于下限」的变化 → 拖动到下限就停
-	//   HDN_TRACK(-328)        把建议宽度改成下限（双保险）
 	// 之前试过的 onnotify / translateCommand 都不行，因为通知的 hwndFrom 是表头，
 	// aardio 按控件句柄找不到就丢了；子类化是直接拿到原始消息。
 	function limit_width(ctrl, min_width) {
@@ -35,40 +34,42 @@ namespace m3list {
 		var header = ::SendMessageInt(ctrl.hwnd, 0x101F /*_LVM_GETHEADER*/, 0, 0);
 		if (!header) return false;
 
-		var NMHEADER = ..raw.define({
-			addr hwndFrom;
+		// 结构体就是「带类型标注的表」：raw.convert(指针, 这张表) 返回读出来的结构体。
+		// 注意没有 raw.define 这种东西。
+		var nm_type = {
+			pointer hwndFrom;
 			INT idFrom;
 			INT code;
 			INT iItem;
 			INT iButton;
 			pointer pitem;
-		});
+		};
 
-		// HDITEM 的前两个字段：mask、cxy（其余用不到，这里只按偏移读）
-		var HDITEM = ..raw.define({
-			INT mask;
-			int cxy;
-		});
+		// HDITEM 只取前两个字段：mask、cxy
+		var hd_type = { INT mask; int cxy };
 
 		var obj = win.subclass(ctrl, function(hwnd, message, wParam, lParam) {
 			if (message != 0x4E /*_WM_NOTIFY*/) return;
 			if (!lParam) return;
 
-			var nm = ..raw.convert(..topointer(lParam), NMHEADER());
+			var nm = ..raw.convert(..topointer(lParam), nm_type);
 			if (!nm) return;
-			if (nm.hwndFrom != header) return;
 
-			if (nm.code != -320 and nm.code != -328) return;
+			// 结构体里的指针字段读出来是 pointer 类型，和 SendMessageInt 返回的数字比较前先转成数字
+			if (tonumber(nm.hwndFrom) != tonumber(header)) return;
+
+			// 只处理 HDN_ITEMCHANGING：否决比改宽度可靠（raw.convert 读出来的是副本，
+			// 写回去不会影响原内存）
+			if (nm.code != -320) return;
 			if (!nm.pitem) return;
 
-			var hd = ..raw.convert(nm.pitem, HDITEM());
+			var hd = ..raw.convert(nm.pitem, hd_type);
 			if (!hd) return;
 
 			if ((hd.mask & 0x1 /*_HDI_WIDTH*/) == 0) return;
 			if (hd.cxy >= minw) return;
 
-			if (nm.code == -320) return 1;   // 否决这次变化
-			hd.cxy = minw;                    // 改建议宽度
+			return 1;   // 否决这次变化 → 表头保持原宽度，拖到下限就停
 		});
 
 		// 挂在控件上，避免被回收
