@@ -24,7 +24,7 @@ var winform = win.form(text="M³ Launcher";right=559;bottom=335;bgcolor=0xF2F2F2
 winform.add(
 btnLaunch={cls="plus";text="启动游戏";left=432;top=238;right=536;bottom=282;anchors={right=1;bottom=1};font=LOGFONT(h=-14;name='Microsoft YaHei');z=4};
 btnSettings={cls="plus";text="设置";left=344;top=238;right=424;bottom=282;anchors={right=1;bottom=1};font=LOGFONT(h=-14;name='Microsoft YaHei');z=3};
-btnTitle={cls="plus";text="M³ Launcher";left=24;top=16;right=250;bottom=54;anchors={left=1;top=1};font=LOGFONT(h=-20;name='Microsoft YaHei');z=1};
+btnTitle={cls="plus";text="M³ Launcher";left=24;top=16;right=250;bottom=54;align="left";anchors={left=1;top=1};font=LOGFONT(h=-20;name='Microsoft YaHei');z=1};
 comboVer={cls="combobox";left=344;top=292;right=536;bottom=318;anchors={right=1;bottom=1};font=LOGFONT(name='Microsoft YaHei');items={};mode="dropdownlist";z=5};
 lblStatus={cls="static";left=24;top=64;right=520;bottom=96;anchors={left=1;top=1};font=LOGFONT(h=-11;name='Microsoft YaHei');z=2}
 )
