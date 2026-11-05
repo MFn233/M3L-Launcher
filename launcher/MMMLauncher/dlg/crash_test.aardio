@@ -1,0 +1,234 @@
+//dlg/crash_test.aardio
+
+//崩溃窗口的测试台（开发用）。
+//崩溃场景很难人为制造，所以这里内置几份真实的崩溃报告片段：
+//  - 选一个样本 → 看 m3crash 分析出什么原因、疑似哪个模组；
+//  - 「打开崩溃窗口」→ 用样本写一个临时目录，走完整的崩溃窗口流程。
+// 入口：控件样式测试台里的按钮，或者主窗口标题上 Ctrl + 右键。
+
+import win.ui;
+import m3theme;
+import m3crash;
+import process;
+import fsys;
+import string;
+
+/*DSG{{*/
+var winform = win.form(text="崩溃窗口测试台";right=600;bottom=520;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+lblCase={cls="static";text="样本";left=24;top=18;right=80;bottom=40;font=LOGFONT(name='Microsoft YaHei';h=-12);z=1};
+comboCase={cls="combobox";left=88;top=14;right=400;bottom=114;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+editSample={cls="richedit";left=24;top=48;right=576;bottom=248;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;font=LOGFONT(name='Consolas';h=-12);z=3};
+lblResult={cls="static";text="分析结果";left=24;top=258;right=120;bottom=280;font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
+editResult={cls="richedit";left=24;top=284;right=576;bottom=428;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
+btnAnalyze={cls="plus";text="分析";left=24;top=440;right=120;bottom=472;font=LOGFONT(name='Microsoft YaHei';h=-12);z=6};
+btnOpen={cls="plus";text="打开崩溃窗口";left=128;top=440;right=272;bottom=472;font=LOGFONT(name='Microsoft YaHei';h=-12);z=7};
+btnMulti={cls="plus";text="连开 3 个";left=280;top=440;right=404;bottom=472;font=LOGFONT(name='Microsoft YaHei';h=-12);z=9};
+btnClose={cls="plus";text="关闭";left=476;top=440;right=576;bottom=472;font=LOGFONT(name='Microsoft YaHei';h=-13);z=8};
+)
+/*}}*/
+
+m3theme.note(winform.lblCase);
+m3theme.note(winform.lblResult);
+
+m3theme.button(winform.btnAnalyze);
+m3theme.button(winform.btnOpen);
+m3theme.button(winform.btnMulti);
+m3theme.button(winform.btnClose);
+
+// ---------- 内置样本 ----------
+// 都是真实崩溃报告/日志里能见到的片段，故意写短，够规则匹配就行
+var SAMPLES = {
+	{
+		title = "Java 版本过低（class file 61 = Java 17）";
+		text = '---- Minecraft Crash Report ----'
+			++ '\r\n' ++ '// Oh dear. Looks like a problem occurred.'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
+			++ '\r\n' ++ 'Description: Initializing game'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'java.lang.UnsupportedClassVersionError: net/fabricmc/loader/impl/launch/knot/KnotClient has been compiled by a more recent version of the Java Runtime (class file version 61.0), this version of the Java Runtime only recognizes class file versions up to 52.0'
+			++ '\r\n' ++ '\tat java.base/java.lang.ClassLoader.defineClass1(Native Method)'
+			++ '\r\n' ++ '\tat java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1017)'
+			++ '\r\n' ++ '\tat net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:139)'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
+			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+	};
+	{
+		title = "模组 Mixin 注入失败";
+		text = '---- Minecraft Crash Report ----'
+			++ '\r\n' ++ '// Daisy, daisy...'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
+			++ '\r\n' ++ 'Description: Rendering overlay'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Redirector onTick()V in examplemod.mixins.json:GameRendererMixin failed injection check, (0/1) succeeded.'
+			++ '\r\n' ++ '\tat org.spongepowered.asm.mixin.injection.struct.InjectionInfo.postInject(InjectionInfo.java:468)'
+			++ '\r\n' ++ '\tat com.example.examplemod.mixin.GameRendererMixin.render(GameRendererMixin.java:42)'
+			++ '\r\n' ++ '\tat com.example.examplemod.core.RenderHook.onRender(RenderHook.java:88)'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
+			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+	};
+	{
+		title = "内存不足";
+		text = '---- Minecraft Crash Report ----'
+			++ '\r\n' ++ '// This doesn\'t make any sense!'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
+			++ '\r\n' ++ 'Description: Ticking entity'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'java.lang.OutOfMemoryError: Java heap space'
+			++ '\r\n' ++ '\tat java.base/java.util.Arrays.copyOf(Arrays.java:3512)'
+			++ '\r\n' ++ '\tat net.minecraft.world.level.chunk.LevelChunk.<init>(LevelChunk.java:120)'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
+			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+	};
+	{
+		title = "Fabric 模组依赖冲突";
+		text = '---- Minecraft Crash Report ----'
+			++ '\r\n' ++ '// Uh... Did I do that?'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
+			++ '\r\n' ++ 'Description: Initializing game'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'net.fabricmc.loader.impl.FormattedException: Mod resolution encountered an incompatible mod set!'
+			++ '\r\n' ++ 'A potential solution has been determined:'
+			++ '\r\n' ++ '\t- Replace mod \'sodium\' (any) with version 0.5.8 or later.'
+			++ '\r\n' ++ 'Unmet dependency listing:'
+			++ '\r\n' ++ '\t- Mod \'sodium\' requires any version of minecraft, which is missing!'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ '\tat net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:139)'
+			++ '\r\n' ++ ''
+			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
+			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+	};
+};
+
+var current = 1;
+
+function refresh_sample() {
+	var sample = SAMPLES[current];
+	if (!sample) return;
+
+	winform.editSample.text = sample.text;
+}
+
+function refresh_result() {
+	var sample = SAMPLES[current];
+	if (!sample) return;
+
+	var reasons = m3crash.analyze_text(sample.text);
+	var suspects = m3crash.suspected_mods(sample.text);
+
+	var out = {};
+
+	if (#reasons == 0) {
+		table.push(out, "（没有命中任何规则）");
+	}
+	else {
+		for i, r in reasons {
+			var line = "· " ++ r.title;
+			if (#r.detail > 0) line = line ++ "　" ++ r.detail;
+			table.push(out, line);
+		}
+	}
+
+	table.push(out, "");
+	if (#suspects == 0) {
+		table.push(out, "疑似相关模组：（无）");
+	}
+	else {
+		table.push(out, "疑似相关模组：" ++ table.concat(suspects, "、"));
+	}
+
+	winform.editResult.text = table.concat(out, '\r\n');
+}
+
+winform.comboCase.add("Java 版本过低");
+winform.comboCase.add("模组 Mixin 注入失败");
+winform.comboCase.add("内存不足");
+winform.comboCase.add("Fabric 模组依赖冲突");
+winform.comboCase.selIndex = 1;
+
+winform.comboCase.onSelChange = function() {
+	var i = winform.comboCase.selIndex;
+	if (i <= 0) return;
+
+	current = i;
+	refresh_sample();
+	refresh_result();
+}
+
+winform.btnAnalyze.oncommand = function(id, event) {
+	refresh_result();
+}
+
+// 用样本写一个临时目录，造出（但先不显示）一个崩溃窗口
+function build_crash_form(sample, idx) {
+	var base = string.getenv("TEMP") ++ "\m3l-crash-test" ++ tostring(idx or 1);
+	fsys.createDir(base ++ "\logs");
+	fsys.createDir(base ++ "\mods");
+
+	string.save(base ++ "\logs\latest.log", sample.text);
+	string.save(base ++ "\mods\example-mod-1.0.0.jar", "");
+
+	var frm = winform.loadForm("/dlg/crash.aardio");
+	frm.bind({
+		info = {
+			version = "测试版本（" ++ sample.title ++ "）";
+			game_dir = base;
+			work_dir = base;
+			java = "C:\Java\jre1.8.0_401\bin\javaw.exe";
+			memory = 4096;
+			exit_code = 1;
+			seconds = 42;
+		};
+		logs = m3crash.collect(base);
+		session = sample.text;
+		cmdline = "javaw.exe -Xmx4096M -cp ... net.minecraft.client.main.Main";
+		show_tip = false;
+	});
+
+	return frm;
+}
+
+// 用样本写一个临时目录，走进完整的崩溃窗口（模态，一次一个）
+winform.btnOpen.oncommand = function(id, event) {
+	var sample = SAMPLES[current];
+	if (!sample) return;
+
+	build_crash_form(sample, 1).doModal(winform);
+}
+
+// 多实例崩溃窗口：三个样本各开一个，非模态，验证它们能同时存在
+winform.btnMulti.oncommand = function(id, event) {
+	for i = 1; #SAMPLES; 1 {
+		var sample = SAMPLES[i];
+		if (!sample) continue;
+
+		var frm = build_crash_form(sample, i);
+		frm.center(winform);
+
+		if (i > 1) {
+			var rc = frm.getRect(true);
+			var off = (i - 1) * 28;
+			frm.setPos(rc.left + off, rc.top + off);
+		}
+
+		frm.show();
+	}
+}
+
+winform.btnClose.oncommand = function(id, event) {
+	winform.close();
+}
+
+// ---------- 初始化 ----------
+
+refresh_sample();
+refresh_result();
+
+return winform;

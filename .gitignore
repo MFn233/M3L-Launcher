@@ -1,0 +1,27 @@
+# aardio 构建与临时产物
+.build/
+*.build/
+dist/
+*.exe
+*.log
+*.pdb
+
+# 本地测试数据（游戏实例、发布版试运行目录）
+test/
+launchertest/
+
+# 本地运行时配置（含用户名、路径、账号，不进仓库）
+launcher/MMMLauncher/config.json
+launcher/MMMLauncher/config.txt
+
+# 临时文件
+*.tmp
+待办临时.txt
+Thumbs.db
+desktop.ini
+
+# 压缩包快照
+*.zip
+
+# 与本项目无关的另一个工程（暂放同一目录，不纳入版本控制）
+MFn's PCL Fixer/

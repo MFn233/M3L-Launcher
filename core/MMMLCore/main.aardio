@@ -1,0 +1,281 @@
+//main.aardio
+
+//MMMLCore —— MFn's Minimalist Mclauncher / core
+//命令行入口。这里只有参数解析和输出，游戏逻辑全部在 MMMLC 库里。
+
+import console;
+import MMMLC;
+import process;
+import string;
+import table;
+import crypt;
+import fsys;
+
+var VERSION = "0.2";
+
+//退出码（与设计文档里的接口契约一致）
+var E_OK = 0;       //成功
+var E_ARGS = 1;     //参数错误
+var E_JAVA = 2;     //Java 不可用
+var E_VERSION = 3;  //版本文件 / 库 / natives 有问题
+var E_LAUNCH = 4;   //创建进程失败，或游戏异常退出
+
+//日志文件句柄（--log-file），没指定时为 null
+var log_handle = null;
+
+//所有输出都走这里：控制台照常显示，指定了 --log-file 时同时写进文件。
+//注意不能靠命令行 > 重定向：aardio 的 console.log 走 WriteConsole，
+//stdout 被重定向到文件时写不进去，日志会是空的。
+function say(s) {
+	s = tostring(s);
+	console.log(s);
+
+	if (log_handle) {
+		log_handle.write(s ++ '\r\n');
+
+		//每行都刷。游戏启动一两千行日志，刷盘开销可以忽略；
+		//不刷的话按 Ctrl+C 掐掉时，最后十几行会丢在缓冲区里。
+		log_handle.flush();
+	}
+}
+
+function exit_with(code) {
+	if (log_handle) {
+		log_handle.flush();
+		log_handle.close();
+		log_handle = null;
+	}
+
+	//console 的输出是直接写控制台的；被重定向时可能走 stdio，硬退出前刷一下
+	if (io.stdout and io.stdout.flush) io.stdout.flush();
+
+	var exitProcess = ::Kernel32.api("ExitProcess", "void(INT)");
+	exitProcess(code);
+}
+
+function fail(code, msg) {
+	say("错误: " + msg);
+	exit_with(code);
+}
+
+function usage() {
+	say("M³LC " + VERSION + "  ——  MFn's minimalism toolbox / core");
+	say("");
+	say("用法:");
+	say("  MMMLCore --game-dir <游戏目录> --version <版本名称> --username <玩家名> [选项]");
+	say("");
+	say("必需参数:");
+	say("  --game-dir       .minecraft 目录（里面有 versions / libraries / assets）");
+	say("  --version        versions 下的版本文件夹名");
+	say("  --username       玩家名（离线模式）");
+	say("");
+	say("可选参数:");
+	say("  --memory         内存大小 MB，默认 2048，最小 512");
+	say("  --java           java.exe 路径，默认依次找 JAVA_HOME、系统 PATH");
+	say("  --work-dir       游戏工作目录，默认 <game-dir>\versions\<version>");
+	say("  --uuid           玩家 UUID，默认按玩家名离线生成");
+	say("  --access-token   访问令牌，默认 0");
+	say("  --user-type      用户类型，默认 msa");
+	say("  --version-type   版本类型，默认 M3LC");
+	say("  --width          窗口宽度，默认 854");
+	say("  --height         窗口高度，默认 480");
+	say("  --log-file       把同样的输出写一份到指定文件");
+	say("  --no-wait        启动后立即返回，不等待游戏退出");
+	say("  --dry-run        只打印启动参数，不启动游戏");
+	say("  --help           显示本说明");
+	say("");
+	say("退出码:");
+	say("  0 成功   1 参数错误   2 Java 不可用   3 版本/库有问题   4 启动失败");
+}
+
+/* ---------- 1. 解析参数 ---------- */
+
+if (_ARGV.help or _ARGV["?"]) {
+	usage();
+	exit_with(E_OK);
+}
+
+var opts = {};
+opts.minecraft_dir = _ARGV["game-dir"];
+opts.version = _ARGV.version;
+opts.username = _ARGV.username;
+opts.work_dir = _ARGV["work-dir"];
+opts.java_hint = _ARGV.java;
+opts.access_token = _ARGV["access-token"] or "0";
+opts.user_type = _ARGV["user-type"] or "msa";
+opts.version_type = _ARGV["version-type"] or "M3LC";
+opts.log_file = _ARGV["log-file"];
+opts.no_wait = _ARGV["no-wait"] !== null;
+opts.dry_run = _ARGV["dry-run"] !== null;
+
+//日志文件先打开，这样后面参数校验失败也能留下记录
+if (opts.log_file) {
+	var log_path = io.fullpath(opts.log_file);
+	var log_dir = io.splitpath(log_path).dir;
+	if (log_dir and !io.exist(log_dir)) fsys.createDir(log_dir);
+
+	log_handle = io.file(log_path, "w+b");
+	if (!log_handle) fail(E_ARGS, "无法写入日志文件: " + log_path);
+
+	//UTF-8 BOM，省得记事本把中文认成 ANSI
+	log_handle.write('\xEF\xBB\xBF');
+}
+
+if (!opts.minecraft_dir) { usage(); fail(E_ARGS, "缺少 --game-dir"); }
+if (!opts.version) fail(E_ARGS, "缺少 --version");
+if (!opts.username) fail(E_ARGS, "缺少 --username");
+
+if (!io.exist(opts.minecraft_dir)) fail(E_ARGS, "游戏目录不存在: " + opts.minecraft_dir);
+opts.minecraft_dir = io.fullpath(opts.minecraft_dir);
+
+opts.memory = 2048;
+if (_ARGV.memory !== null) {
+	var m = tonumber(_ARGV.memory);
+	if (!m) fail(E_ARGS, "--memory 必须是数字");
+	if (m < 512) fail(E_ARGS, "--memory 不能小于 512");
+	opts.memory = m;
+}
+
+opts.width = tonumber(_ARGV.width) or 854;
+opts.height = tonumber(_ARGV.height) or 480;
+
+if (!opts.work_dir) opts.work_dir = io.joinpath(opts.minecraft_dir, "versions", opts.version);
+opts.work_dir = io.fullpath(opts.work_dir);
+if (!io.exist(opts.work_dir)) {
+	if (!fsys.createDir(opts.work_dir)) fail(E_ARGS, "无法创建游戏工作目录: " + opts.work_dir);
+}
+
+opts.uuid = _ARGV.uuid or crypt.md5("OfflinePlayer:" + opts.username);
+
+/* ---------- 2. 读版本 ---------- */
+
+say("M³LC " + VERSION + "  ——  core");
+say("");
+say("  游戏目录  " + opts.minecraft_dir);
+say("  版本      " + opts.version);
+say("  玩家      " + opts.username);
+say("  内存      " + opts.memory + " MB");
+say("  工作目录  " + opts.work_dir);
+say("");
+
+var info, err = MMMLC.read_json(opts.minecraft_dir, opts.version);
+if (!info) fail(E_VERSION, err);
+
+say("  主类      " + info.main_class);
+say("  资源索引  " + info.asset_index);
+say("  类路径    " + #info.classpath + " 个 jar");
+say("");
+
+if (!io.exist(info.assets_dir)) {
+	say("[警告] 找不到 assets 目录: " + info.assets_dir);
+}
+
+if (#info.missing > 0) {
+	say("[警告] 有 " + #info.missing + " 个库文件缺失，游戏可能因此崩溃：");
+	for i, p in info.missing {
+		if (i > 6) { say("  ..."); break; }
+		say("  " + p);
+	}
+}
+
+var ok, nerr = MMMLC.prepare_natives(info, function(msg) {
+	say("[信息] " + msg);
+});
+if (!ok) fail(E_VERSION, nerr);
+
+/* ---------- 3. 找 Java ---------- */
+
+var java, jerr = MMMLC.find_java(opts.java_hint);
+if (!java) fail(E_JAVA, jerr);
+
+var major, verr, fatal = MMMLC.get_java_version(java);
+if (fatal) fail(E_JAVA, verr);
+if (!major) say("[警告] " + verr + "，继续启动");
+
+if (major) {
+	say("  Java      " + java + "（Java " + major + "）");
+	if (major != info.java_version) {
+		say("[警告] 这个版本声明需要 Java " + info.java_version + "，当前是 Java " + major);
+	}
+	say("");
+}
+
+opts.java = java;
+opts.java_major = major;
+
+/* ---------- 4. 拼参数 ---------- */
+
+var args, aerr = MMMLC.build_args(info, opts);
+if (!args) fail(E_VERSION, aerr);
+
+//${clientid} / ${auth_xuid} 是正版登录才有的字段，离线启动时留着原样游戏也能接受，
+//所以这两项不当作警告。
+var ignorable = {"${clientid}"; "${auth_xuid}"};
+var left = {};
+var found = MMMLC.unresolved(args);
+for i, tag in found {
+	var skip = false;
+	for j, k in ignorable {
+		if (tag == k) skip = true;
+	}
+	if (!skip) table.push(left, tag);
+}
+if (#left > 0) {
+	say("[警告] 有占位符没有替换：" + string.join(left, " "));
+}
+
+if (opts.dry_run) {
+	say("启动参数:");
+	say(process.joinArguments(args));
+	say("");
+	for i, a in args {
+		say("  " + a);
+	}
+	exit_with(E_OK);
+}
+
+/* ---------- 5. 启动 ---------- */
+
+var prcs, pid, lerr = MMMLC.launch(info, opts);
+if (!prcs) fail(E_LAUNCH, lerr);
+
+//把子进程绑到作业对象上：本程序退出（包括 Ctrl+C、崩溃）时游戏一起结束。
+//否则 CREATE_NO_WINDOW 起的 java 收不到控制台 Ctrl+C，会变成无窗口的孤儿进程，
+//只能去任务管理器里手动结束。
+//--no-wait 是"启动完就走"，那种情况不能绑。
+if (!opts.no_wait) prcs.killOnExit();
+
+say("已启动，PID = " + pid);
+say("--------------------------------------------------");
+
+if (opts.no_wait) exit_with(E_OK);
+
+//边读边等。必须一直读：子进程写满输出管道后会卡住，游戏就"假死"了。
+//按行缓冲再输出，避免多字节中文被管道切在两段里。
+var buffer = "";
+for (all, out, errout in prcs.each(50)) {
+	buffer = buffer ++ (out or "") ++ (errout or "");
+
+	while (true) {
+		var p = string.indexOf(buffer, '\n');
+		if (!p) break;
+
+		var line = string.slice(buffer, 1, p - 1);
+		if (!line) line = "";
+		say(string.trimRight(line));
+
+		buffer = string.slice(buffer, p + 1);
+		if (!buffer) buffer = "";
+	}
+}
+if (#buffer > 0) say(string.trimRight(buffer));
+
+var code = prcs.getExitCode();
+prcs.close();
+
+say("--------------------------------------------------");
+say("游戏已退出，退出码 " + tostring(code));
+
+var exit_code = E_LAUNCH;
+if (code == 0) exit_code = E_OK;
+exit_with(exit_code);

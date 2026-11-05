@@ -1,0 +1,390 @@
+//dlg/settings.aardio
+
+//一级设置：游戏本体 + 启动器。由主页 loadForm + doModal 打开。
+//这里不调 show()。
+
+import win.ui;
+import m3theme;
+import m3config;
+import m3java;
+import sys.mem;
+import fsys;
+import string;
+import math;
+/*DSG{{*/
+var winform = win.form(text="设置";right=620;bottom=620;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+btnAuto={cls="plus";text="自动配置";left=460;top=108;right=592;bottom=134;font=LOGFONT(name='Microsoft YaHei');z=10};
+btnCancel={cls="plus";text="取消";left=416;top=576;right=500;bottom=608;font=LOGFONT(h=-13;name='Microsoft YaHei');z=31};
+btnDefault={cls="plus";text="默认大小";left=436;top=154;right=592;bottom=180;font=LOGFONT(name='Microsoft YaHei');z=16};
+btnJava={cls="plus";text="Java 管理";left=488;top=198;right=592;bottom=224;font=LOGFONT(name='Microsoft YaHei');z=19};
+btnPaths={cls="plus";text="路径管理";left=388;top=242;right=484;bottom=268;font=LOGFONT(name='Microsoft YaHei');z=22};
+btnSave={cls="plus";text="保存";left=508;top=576;right=592;bottom=608;font=LOGFONT(h=-13;name='Microsoft YaHei');z=32};
+btnUser={cls="plus";text="用户配置";left=120;top=68;right=280;bottom=94;font=LOGFONT(name='Microsoft YaHei');z=4};
+btnVersions={cls="plus";text="版本管理";left=492;top=242;right=592;bottom=268;font=LOGFONT(name='Microsoft YaHei');z=33};
+chkDebug={cls="checkbox";text="调试模式";left=120;top=450;right=460;bottom=472;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei');z=28};
+chkHide={cls="checkbox";text="启动后隐藏启动器";left=120;top=394;right=420;bottom=416;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei');z=26};
+chkLog={cls="checkbox";text="启动时弹出日志窗口";left=120;top=366;right=420;bottom=388;bgcolor=0xF2F2F2;checked=1;font=LOGFONT(name='Microsoft YaHei');z=25};
+chkMulti={cls="checkbox";text="允许同时运行多个实例";left=120;top=478;right=460;bottom=500;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei');z=29};
+chkShot={cls="checkbox";text="崩溃时提醒「请勿直接截图分享此窗口」";left=120;top=506;right=520;bottom=528;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei');z=36};
+chkStatus={cls="checkbox";text="显示主页状态栏";left=120;top=422;right=420;bottom=444;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei');z=27};
+comboMode={cls="combobox";left=120;top=154;right=280;bottom=180;font=LOGFONT(name='Microsoft YaHei');items={};mode="dropdownlist";z=12};
+comboPath={cls="combobox";left=120;top=242;right=380;bottom=268;font=LOGFONT(name='Microsoft YaHei');items={};mode="dropdownlist";z=21};
+comboPri={cls="combobox";left=120;top=328;right=300;bottom=354;font=LOGFONT(name='Microsoft YaHei');items={};mode="dropdownlist";z=35};
+editH={cls="edit";text="480";left=368;top=154;right=428;bottom=180;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');num=1;z=15};
+editJava={cls="edit";left=120;top=198;right=480;bottom=224;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=18};
+editMem={cls="edit";text="4096";left=348;top=108;right=420;bottom=130;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');num=1;z=8};
+editW={cls="edit";text="854";left=288;top=154;right=348;bottom=180;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');num=1;z=13};
+lblHint={cls="static";left=28;top=542;right=592;bottom=564;font=LOGFONT(h=-11;name='Microsoft YaHei');z=30};
+lblJava={cls="static";text="Java";left=28;top=204;right=112;bottom=224;font=LOGFONT(name='Microsoft YaHei');z=17};
+lblLogin={cls="static";left=290;top=72;right=592;bottom=92;font=LOGFONT(name='Microsoft YaHei');z=5};
+lblMB={cls="static";text="MB";left=426;top=116;right=452;bottom=136;font=LOGFONT(name='Microsoft YaHei');z=9};
+lblMem={cls="static";text="分配内存";left=28;top=116;right=112;bottom=136;font=LOGFONT(name='Microsoft YaHei');z=6};
+lblPath={cls="static";text="游戏路径";left=28;top=248;right=112;bottom=268;font=LOGFONT(name='Microsoft YaHei');z=20};
+lblPri={cls="static";text="进程优先级";left=28;top=334;right=112;bottom=354;font=LOGFONT(name='Microsoft YaHei');z=34};
+lblSec1={cls="static";text="游戏设置";left=28;top=18;right=300;bottom=42;font=LOGFONT(h=-14;name='Microsoft YaHei';weight=700);z=1};
+lblSec2={cls="static";text="启动器";left=28;top=288;right=300;bottom=312;font=LOGFONT(h=-14;name='Microsoft YaHei';weight=700);z=23};
+lblUser={cls="static";text="用户";left=28;top=72;right=112;bottom=92;font=LOGFONT(name='Microsoft YaHei');z=3};
+lblWin={cls="static";text="游戏窗口";left=28;top=160;right=112;bottom=180;font=LOGFONT(name='Microsoft YaHei');z=11};
+lblX={cls="static";text="x";left=352;top=160;right=364;bottom=180;font=LOGFONT(name='Microsoft YaHei');z=14};
+line1={cls="plus";left=28;top=50;right=592;bottom=51;z=2};
+line2={cls="plus";left=28;top=320;right=592;bottom=321;z=24};
+slider={cls="plus";left=120;top=110;right=340;bottom=132;z=7}
+)
+/*}}*/
+
+// ---------- 主题 ----------
+
+m3theme.rule(winform.line1);
+m3theme.rule(winform.line2);
+
+m3theme.ink(winform.lblSec1);
+m3theme.ink(winform.lblSec2);
+m3theme.note(winform.lblUser);
+m3theme.note(winform.lblLogin);
+m3theme.note(winform.lblMem);
+m3theme.note(winform.lblMB);
+m3theme.note(winform.lblWin);
+m3theme.note(winform.lblX);
+m3theme.note(winform.lblJava);
+m3theme.note(winform.lblPath);
+m3theme.note(winform.lblPri);
+m3theme.note(winform.lblHint);
+
+m3theme.field(winform.editMem);
+m3theme.field(winform.editJava);
+m3theme.field(winform.editW);
+m3theme.field(winform.editH);
+
+m3theme.slider(winform.slider);
+winform.slider.setTrackbarRange(512, 16384);
+
+m3theme.button(winform.btnAuto);
+m3theme.button(winform.btnJava);
+m3theme.button(winform.btnPaths);
+m3theme.button(winform.btnVersions);
+m3theme.button(winform.btnDefault);
+m3theme.button(winform.btnUser);
+// 保存 / 取消：和主界面按钮同一套外观，两个等宽
+m3theme.button(winform.btnSave);
+m3theme.button(winform.btnCancel);
+
+// ---------- 数据 ----------
+// 必须先声明，下面的函数才能看到它们
+var cfg = null;
+var paths = {};
+var path_dirs = {};
+
+var syncing = false;
+
+// 当前用户 + 登录方式，显示在「用户配置」按钮右边
+function user_summary(cfg) {
+	if (#cfg.username == 0) return "尚未配置账号";
+
+	var acc = m3config.find_account(cfg, cfg.username);
+
+	var type_text = "离线登录";
+	if (acc and (acc.type == "msa" or acc.type == "mojang")) type_text = "正版登录";
+
+	return type_text ++ "：" ++ cfg.username;
+}
+
+function mode_index(m) {
+	if (m == "fullscreen") return 2;
+	if (m == "match") return 3;
+	return 1;
+}
+
+// 进程优先级：配置里存字符串，界面上是下拉框序号
+function priority_index(p) {
+	if (p == "idle") return 1;
+	if (p == "below") return 2;
+	if (p == "above") return 4;
+	if (p == "high") return 5;
+	return 3;
+}
+
+function priority_value(i) {
+	if (i == 1) return "idle";
+	if (i == 2) return "below";
+	if (i == 4) return "above";
+	if (i == 5) return "high";
+	return "normal";
+}
+
+function update_mode_ui() {
+	var manual = (winform.comboMode.selIndex == 1);
+	winform.editW.disabled = !manual;
+	winform.editH.disabled = !manual;
+}
+
+// 取某个游戏目录下的第一个版本名，换路径后用来兜底
+function first_version(dir) {
+	if (!dir) return null;
+
+	var vdir = io.joinpath(dir, "versions");
+	if (!io.exist(vdir)) return null;
+
+	var files, folders = fsys.list(vdir);
+	if (#folders == 0) return null;
+
+	return folders[1];
+}
+
+function has_version(dir, name) {
+	var vdir = io.joinpath(dir, "versions");
+	if (!io.exist(vdir)) return false;
+
+	var files, folders = fsys.list(vdir);
+	for(i = 1; #folders; 1) {
+		if (folders[i] == name) return true;
+	}
+
+	return false;
+}
+
+// 注意：combobox 的 add 不返回索引（listbox 才返回），
+// 所以用 path_dirs 这个平行数组记住每项对应的路径，不要用 setItemData。
+function refresh_path_combo() {
+	winform.comboPath.clear();
+	path_dirs = {};
+
+	for i, p in paths {
+		var label = p.name;
+		if (!label or #label == 0) label = p.dir;
+
+		winform.comboPath.add(label);
+		table.push(path_dirs, p.dir);
+
+		if (p.dir == cfg.game_path) winform.comboPath.selIndex = #path_dirs;
+	}
+}
+
+function selected_path() {
+	var i = winform.comboPath.selIndex;
+	if (i <= 0) return null;
+	return path_dirs[i];
+}
+
+// ---------- 事件 ----------
+
+winform.slider.onPosChanged = function(pos, triggeredByUser) {
+	if (!triggeredByUser) return;
+	if (syncing) return;
+
+	syncing = true;
+	winform.editMem.text = tostring(pos);
+	syncing = false;
+}
+
+winform.editMem.onChange = function() {
+	if (syncing) return;
+
+	var v = tonumber(string.trim(winform.editMem.text));
+	if (!v) return;
+
+	if (v < 512) v = 512;
+	if (v > 16384) v = 16384;
+
+	syncing = true;
+	winform.slider.progressPos = v;
+	syncing = false;
+}
+
+winform.comboMode.onSelChange = function() {
+	update_mode_ui();
+}
+
+winform.comboPath.onSelChange = function() {
+	var dir = selected_path();
+	if (!dir) return;
+	if (dir == cfg.game_path) return;
+
+	// 下拉框切换 = 立刻切换当前路径（和「路径管理」里点「设为当前」一致），
+	// 不然用户会以为没生效，还得进路径管理再点一次。
+	var c = m3config.read();
+	c.game_path = dir;
+
+	// 换路径后原来的版本可能不存在，落到新路径下的第一个版本
+	if (!has_version(dir, c.version)) {
+		var v = first_version(dir);
+		if (v) c.version = v;
+		else c.version = "";
+	}
+
+	m3config.save_keys(c, {"game_path"; "version"});
+
+	cfg = m3config.read();
+	cfg.game_path = dir;
+	cfg.version = c.version;
+
+	winform.lblHint.text = "当前游戏路径已切换：" ++ dir;
+}
+
+winform.btnAuto.oncommand = function(id, event) {
+	var status = sys.mem.getStatus();
+	var total_mb = math.floor(status.totalPhys / 1048576);
+
+	var mb = math.floor(total_mb / 4 / 256) * 256;
+	if (mb < 1024) mb = 1024;
+	if (mb > 8192) mb = 8192;
+
+	winform.editMem.text = tostring(mb);
+	winform.slider.progressPos = mb;
+	winform.lblHint.text = "按物理内存的 1/4 建议：" ++ mb ++ " MB（本机共 " ++ total_mb ++ " MB）";
+}
+
+winform.btnDefault.oncommand = function(id, event) {
+	winform.editW.text = "854";
+	winform.editH.text = "480";
+	winform.lblHint.text = "已设为默认窗口大小 854 × 480。";
+}
+
+winform.btnJava.oncommand = function(id, event) {
+	winform.loadForm("/dlg/java.aardio").doModal(winform);
+
+	cfg = m3config.read();
+	winform.editJava.text = cfg.java;
+}
+
+winform.btnPaths.oncommand = function(id, event) {
+	winform.loadForm("/dlg/paths.aardio").doModal(winform);
+
+	cfg = m3config.read();
+	paths = cfg.game_paths;
+
+	refresh_path_combo();
+}
+
+// 用户配置在单独窗口里管理
+winform.btnUser.oncommand = function(id, event) {
+	winform.loadForm("/dlg/accounts.aardio").doModal(winform);
+
+	cfg = m3config.read();
+	winform.lblLogin.text = user_summary(cfg);
+}
+
+// 版本管理在路径管理右边
+winform.btnVersions.oncommand = function(id, event) {
+	winform.loadForm("/dlg/versions.aardio").doModal(winform);
+
+	// 里面可能改了当前版本或者隔离设置
+	cfg = m3config.read();
+	paths = cfg.game_paths;
+}
+
+winform.btnSave.oncommand = function(id, event) {
+	var c = m3config.read();
+
+	var mb = tonumber(string.trim(winform.editMem.text)) or c.memory;
+	if (mb < 512) mb = 512;
+	if (mb > 32768) mb = 32768;
+	c.memory = mb;
+
+	var dir = selected_path();
+	if (dir) c.game_path = dir;
+
+	// 版本改到主页的下拉框里选了；这里只保证换路径后版本依然有效
+	if (#c.game_path > 0 and !has_version(c.game_path, c.version)) {
+		var v = first_version(c.game_path);
+		if (v) c.version = v;
+		else c.version = "";
+	}
+
+	c.java = string.trim(winform.editJava.text);
+
+	c.width = tonumber(string.trim(winform.editW.text)) or 854;
+	c.height = tonumber(string.trim(winform.editH.text)) or 480;
+	if (c.width < 320) c.width = 320;
+	if (c.height < 240) c.height = 240;
+
+	var mi = winform.comboMode.selIndex;
+	if (mi == 2) c.window_mode = "fullscreen";
+	elseif (mi == 3) c.window_mode = "match";
+	else c.window_mode = "manual";
+
+	c.priority = priority_value(winform.comboPri.selIndex);
+
+	c.log = winform.chkLog.checked;
+	c.hide_after_launch = winform.chkHide.checked;
+	c.status_bar = winform.chkStatus.checked;
+	c.debug = winform.chkDebug.checked;
+	c.allow_multi = winform.chkMulti.checked;
+	c.shot_tip = winform.chkShot.checked;
+
+	m3config.save(c);
+	winform.endModal(true);
+}
+
+winform.btnCancel.oncommand = function(id, event) {
+	winform.endModal(false);
+}
+
+winform.onOk = function() {
+	winform.btnSave.oncommand();
+}
+
+winform.onCancel = function() {
+	winform.btnCancel.oncommand();
+}
+
+// ---------- 初始化 ----------
+
+cfg = m3config.read();
+paths = cfg.game_paths;
+
+	// 用户配置：账号在专门的窗口里管理，这里只显示当前用户
+	winform.lblLogin.text = user_summary(cfg);
+
+	winform.editMem.text = tostring(cfg.memory);
+winform.editJava.text = cfg.java;
+winform.editW.text = tostring(cfg.width);
+winform.editH.text = tostring(cfg.height);
+winform.chkLog.checked = cfg.log;
+winform.chkHide.checked = cfg.hide_after_launch;
+winform.chkStatus.checked = cfg.status_bar;
+winform.chkDebug.checked = cfg.debug;
+winform.chkMulti.checked = cfg.allow_multi;
+winform.chkShot.checked = cfg.shot_tip;
+
+winform.comboMode.add("手动设置");
+winform.comboMode.add("全屏");
+winform.comboMode.add("与启动器一致");
+winform.comboMode.selIndex = mode_index(cfg.window_mode);
+update_mode_ui();
+
+winform.comboPri.add("低");
+winform.comboPri.add("较低");
+winform.comboPri.add("正常");
+winform.comboPri.add("较高");
+winform.comboPri.add("高");
+winform.comboPri.selIndex = priority_index(cfg.priority);
+
+refresh_path_combo();
+
+var mb = cfg.memory;
+if (mb < 512) mb = 512;
+if (mb > 16384) mb = 16384;
+winform.slider.progressPos = mb;
+
+return winform;

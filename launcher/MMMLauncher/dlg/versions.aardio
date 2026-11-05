@@ -1,0 +1,418 @@
+//dlg/versions.aardio
+
+//版本管理：列出当前游戏目录下的版本，可以设为当前、切换版本隔离、重命名、删除。
+//删除是移到回收站，可以恢复。
+
+import win.ui;
+import m3theme;
+import m3list;
+import m3config;
+import m3version;
+import process;
+import fsys;
+import json;
+import string;
+import math;
+/*DSG{{*/
+var winform = win.form(text="版本管理";right=600;bottom=400;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+btnClose={cls="plus";text="关闭";left=464;top=340;right=584;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=9};
+btnCurrent={cls="plus";text="设为当前";left=16;top=340;right=116;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=6};
+btnDelete={cls="plus";text="删除";left=240;top=340;right=332;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=8};
+btnIsolate={cls="plus";text="切换隔离";left=124;top=340;right=232;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=7};
+btnOpen={cls="plus";text="打开目录";left=340;top=340;right=456;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=10};
+btnRename={cls="plus";text="重命名";left=400;top=300;right=584;bottom=324;font=LOGFONT(name='Microsoft YaHei');z=5};
+editNew={cls="edit";left=72;top=300;right=392;bottom=324;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=4};
+lblHint={cls="static";left=16;top=12;right=584;bottom=32;font=LOGFONT(h=-11;name='Microsoft YaHei');z=1};
+lblNew={cls="static";text="新名称";left=16;top=304;right=68;bottom=324;font=LOGFONT(name='Microsoft YaHei');z=3};
+listVers={cls="listview";left=16;top=38;right=584;bottom=290;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=2}
+)
+/*}}*/
+
+m3theme.note(winform.lblHint);
+m3theme.note(winform.lblNew);
+m3theme.field(winform.editNew);
+
+m3theme.button(winform.btnRename);
+m3theme.button(winform.btnCurrent);
+m3theme.button(winform.btnIsolate);
+m3theme.button(winform.btnDelete);
+m3theme.button(winform.btnOpen);
+m3theme.ghost(winform.btnClose);
+
+var cfg = null;
+var rows = {};
+var selected = null;
+
+// 没在 shared 表里记过的，默认隔离（每个版本用自己的目录）。
+// 注意只记「关闭隔离」的版本，表里只会有 true / 缺省，不存 false。
+function is_isolated(name) {
+	if (cfg.shared and cfg.shared[name]) return false;
+	return true;
+}
+
+// 版本名排序（简单插入排序，版本数量很少）
+function sort_names(list) {
+	var out = {};
+
+	for i, item in list {
+		var at = #out + 1;
+
+		for k, v in out {
+			if (item < v) {
+				at = k;
+				break;
+			}
+		}
+
+		table.insert(out, item, at);
+	}
+
+	return out;
+}
+
+function list_version_names() {
+	var names = {};
+
+	var vdir = io.joinpath(cfg.game_path, "versions");
+	if (!vdir) return names;
+	if (!io.exist(vdir)) return names;
+
+	var files, folders = fsys.list(vdir);
+	for(i = 1; #folders; 1) {
+		if (folders[i]) table.push(names, folders[i]);
+	}
+
+	// 顺手自愈：JSON 文件名不对、或里面 id 与目录名不一致时修正过来。
+	// 用户在资源管理器里改过文件夹名的版本，靠这一步才能正常启动。
+	for i, name in names {
+		m3version.repair(cfg.game_path, name);
+	}
+
+	return sort_names(names);
+}
+
+function render() {
+	winform.listVers.clear();
+	rows = {};
+
+	var names = list_version_names();
+
+	for i, name in names {
+		var mark = "";
+		if (name == cfg.version) mark = "[当前] ";
+
+		var isolate_text = "隔离";
+		if (!is_isolated(name)) isolate_text = "共用根目录";
+
+		// 真正的游戏版本 + 加载器：读版本 JSON 判断，不靠文件夹名
+		var info = m3version.describe(cfg.game_path, name);
+
+		winform.listVers.addItem({ mark ++ name; info.game; info.loader; isolate_text });
+		table.push(rows, name);
+	}
+
+	// 按名字找回选中项
+	if (selected) {
+		var at = 0;
+		for i, name in rows {
+			if (name == selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) {
+			winform.listVers.selIndex = at;
+		}
+		else {
+			selected = null;
+		}
+	}
+
+	if (#rows == 0) {
+		winform.lblHint.text = "该游戏目录下还没有游戏版本：" ++ cfg.game_path;
+	}
+	else {
+		winform.lblHint.text = "共 " ++ #rows ++ " 个版本。（删除的版本将移至回收站，可恢复）";
+	}
+}
+
+function current_item() {
+	var i = winform.listVers.selIndex;
+	if (i > 0 and i <= #rows) return rows[i];
+
+	return selected;
+}
+
+winform.listVers.onSelChanged = function(sel, item, subItem, nm) {
+	var i = winform.listVers.selIndex;
+	if (i <= 0 or i > #rows) return;
+
+	selected = rows[i];
+	winform.editNew.text = selected;
+}
+
+winform.btnCurrent.oncommand = function(id, event) {
+	var name = current_item();
+	if (!name) {
+		winform.lblHint.text = "请先选择一个版本。";
+		return;
+	}
+
+	cfg.version = name;
+	m3config.save_keys(cfg, {"version"});
+	render();
+	winform.lblHint.text = "已设为当前版本：" ++ short_name(name);
+}
+
+// 提示行里显示用的短名字（太长的版本名会把提示撑爆）
+function short_name(name) {
+	if (#name <= 16) return name;
+	return string.slice(name, 1, 16) ++ "…";
+}
+
+winform.btnIsolate.oncommand = function(id, event) {
+	var name = current_item();
+	if (!name) {
+		winform.lblHint.text = "请先选择一个版本。";
+		return;
+	}
+
+	cfg.shared = cfg.shared or {};
+
+	// 只往表里写 true，恢复隔离就把键删掉——避免往表里存 false
+	if (is_isolated(name)) {
+		cfg.shared[name] = true;
+	}
+	else {
+		cfg.shared[name] = null;
+	}
+
+	m3config.save_keys(cfg, {"shared"});
+	render();
+
+	if (is_isolated(name)) {
+		winform.lblHint.text = short_name(name) ++ "：开启隔离（用 versions" ++ '\\' ++ short_name(name) ++ " 作为游戏目录）";
+	}
+	else {
+		winform.lblHint.text = short_name(name) ++ "：关闭隔离（与其它版本共用 .minecraft 根目录）";
+	}
+}
+
+// 当前游戏目录下版本名最多能有多长：
+// 完整路径是 <versions>\<名字>\<名字>.json，要压在 250 字符以内
+function max_name_length() {
+	var vdir = io.joinpath(cfg.game_path, "versions");
+	if (!vdir) return 0;
+
+	var room = 250 - #vdir - 7;  // 两个反斜杠 + ".json"
+	if (room < 2) return 0;
+
+	return math.floor(room / 2);
+}
+
+// 重命名：改目录名、json/jar 文件名，并更新 json 里的 id
+// 注意：Windows 的路径上限是 260，版本名要在 <目录>\<名字>\<名字>.json
+// 里出现两次，所以长名字很容易把完整路径顶爆——超长时 io.joinpath 会
+// 静默截断，于是出现「文件夹改名成功、json 却叫另一个名字」的坏状态。
+// 所以这里先把所有路径算出来，任何一个不对劲就直接放弃。
+function rename_version(old, new) {
+	var vdir = io.joinpath(cfg.game_path, "versions");
+	if (!vdir) return false, "游戏目录路径无效。";
+
+	var src = io.joinpath(vdir, old);
+	var dst = io.joinpath(vdir, new);
+	if (!src or !dst) return false, "新名称太长，超出限制。";
+
+	if (!io.exist(src)) return false, "版本目录不存在。";
+	if (io.exist(dst)) return false, "已存在同名版本。";
+
+	var old_json = io.joinpath(dst, old ++ ".json");
+	var new_json = io.joinpath(dst, new ++ ".json");
+	var old_jar = io.joinpath(dst, old ++ ".jar");
+	var new_jar = io.joinpath(dst, new ++ ".jar");
+
+	if (!old_json or !new_json or !old_jar or !new_jar) {
+		return false, "新名称太长，超出限制。";
+	}
+
+	if (#new_json >= 250 or #new_jar >= 250) {
+		return false, "新名称太长，超出限制。";
+	}
+
+	if (!fsys.rename(src, dst)) return false, "无法进行重命名操作，游戏可能正在运行。";
+
+	// json：先改名，再更新里面的 id。
+	// 任何一步失败都要整体回滚，否则会留下「目录改了名、json 还是旧名」的坏状态。
+	if (io.exist(old_json)) {
+		if (!fsys.rename(old_json, new_json)) {
+			fsys.rename(dst, src);
+			return false, "json 文件重命名失败";
+		}
+
+		var data = json.load(new_json);
+		if (data) {
+			data.id = new;
+			if (data.jar == old) data.jar = new;
+			json.save(new_json, data);
+		}
+	}
+
+	// 客户端 jar
+	if (io.exist(old_jar)) {
+		if (!fsys.rename(old_jar, new_jar)) {
+			if (io.exist(new_json)) fsys.rename(new_json, old_json);
+			fsys.rename(dst, src);
+			return false, "客户端 jar 重命名失败";
+		}
+	}
+
+	return true;
+}
+
+winform.btnRename.oncommand = function(id, event) {
+	var name = current_item();
+	if (!name) {
+		winform.lblHint.text = "请先选择一个版本。";
+		return;
+	}
+
+	var new_name = string.trim(winform.editNew.text);
+	if (#new_name == 0 or new_name == name) {
+		winform.lblHint.text = "请输入一个新名字。";
+		return;
+	}
+
+	// 文件名非法字符
+	var bad_chars = '\\/:*?"<>|';
+	for i = 1; #bad_chars; 1 {
+		if (string.indexOf(new_name, string.slice(bad_chars, i, i))) {
+			winform.lblHint.text = '版本名里不可包含 \\ / : * ? " < > | 。';
+			return;
+		}
+	}
+
+	// 长度：完整路径里 <名字> 会出现两次，先用当前游戏目录算一下还能放多少
+	var limit = max_name_length();
+	if (limit <= 0) {
+		winform.lblHint.text = "游戏目录路径太长，无法重命名版本。";
+		return;
+	}
+	if (#new_name > limit) {
+		winform.lblHint.text = "名称过长：当前游戏目录下最多 " ++ limit ++ " 字符（Windows 路径上限 260）。";
+		return;
+	}
+
+	var ok, err = rename_version(name, new_name);
+	if (!ok) {
+		winform.lblHint.text = "重命名失败：" ++ err;
+		return;
+	}
+
+	// 当前版本 / 隔离设置跟着改
+	if (cfg.version == name) cfg.version = new_name;
+
+	cfg.shared = cfg.shared or {};
+	if (cfg.shared[name]) {
+		cfg.shared[new_name] = true;
+		cfg.shared[name] = null;
+	}
+
+	selected = new_name;
+
+	m3config.save_keys(cfg, {"version"; "shared"});
+	render();
+	winform.lblHint.text = "已重命名为：" ++ short_name(new_name);
+}
+
+// 打开所选版本的文件夹
+winform.btnOpen.oncommand = function(id, event) {
+	var name = current_item();
+	if (!name) {
+		winform.lblHint.text = "请先选择一个版本。";
+		return;
+	}
+
+	var dir = io.joinpath(cfg.game_path, "versions", name);
+	if (!io.exist(dir)) {
+		winform.lblHint.text = "此版本目录已被删除或迁移。";
+		return;
+	}
+
+	process.explore(dir);
+}
+
+winform.btnDelete.oncommand = function(id, event) {	var name = current_item();
+	if (!name) {
+		winform.lblHint.text = "请先选择一个版本。";
+		return;
+	}
+
+	var frm = winform.loadForm("/dlg/confirm.aardio");
+	frm.lblMsg.text = "确定删除版本「" ++ short_name(name) ++ "」吗？" ++ '\r\n\r\n' ++ "（版本目录将被移至回收站，可恢复）";
+	if (!frm.doModal(winform)) return;
+
+	var dir = io.joinpath(cfg.game_path, "versions", name);
+	if (!dir) {
+		winform.lblHint.text = "路径太长，无法删除该版本。";
+		return;
+	}
+
+	if (!fsys.delete(dir, true)) {
+		winform.lblHint.text = "删除失败，游戏可能正在运行。";
+		return;
+	}
+
+	if (cfg.version == name) {
+		cfg.version = "";
+	}
+
+	cfg.shared = cfg.shared or {};
+	cfg.shared[name] = null;
+	selected = null;
+
+	m3config.save_keys(cfg, {"version"; "shared"});
+	render();
+	winform.lblHint.text = "已删除版本：" ++ short_name(name);
+}
+
+winform.btnClose.oncommand = function(id, event) {
+	cfg.version_columns = winform.listVers.columns;
+	m3config.save_keys(cfg, {"version"; "shared"; "version_columns"});
+	winform.endModal(true);
+}
+
+winform.onCancel = function() {
+	cfg.version_columns = winform.listVers.columns;
+	m3config.save_keys(cfg, {"version"; "shared"; "version_columns"});
+	winform.endModal(true);
+}
+
+// ---------- 初始化 ----------
+
+cfg = m3config.read();
+
+winform.listVers.fullRow = true;
+
+var saved_cols = cfg.version_columns;
+if (type(saved_cols) == "table" and #saved_cols >= 4) {
+	winform.listVers.columns = saved_cols;
+}
+else {
+	winform.listVers.columns = {
+		{ "版本名"; 240 };
+		{ "游戏版本"; 110 };
+		{ "加载器"; 250 };
+		{ "隔离"; 110 };
+	};
+}
+
+// 四列加起来会比列表宽，按比例压一下，「隔离」才不会被挤出屏幕
+m3list.fit(winform.listVers);
+
+// 列宽只在打开窗口时规整一次；拖动不干预（见工作日志：定时器纠正的手感和系统不一致，已撤）
+
+render();
+
+return winform;

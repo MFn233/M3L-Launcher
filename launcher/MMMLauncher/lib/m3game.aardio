@@ -1,0 +1,40 @@
+//m3game.aardio
+
+//改游戏自己的 options.txt。
+//MC 没有 --fullscreen 参数，全屏只认 options.txt 里的 fullscreen:true。
+
+namespace m3game{
+	import io;
+	import string;
+	import table;
+
+	function set_fullscreen(game_dir, on) {
+		var file = io.joinpath(game_dir, "options.txt");
+
+		var text = "";
+		if (io.exist(file)) text = string.load(file) or "";
+
+		var lines = string.split(text, '\n');
+		var out = {};
+		var found = false;
+
+		for i, line in lines {
+			var l = string.trimRight(line);
+			if (#l == 0) continue;
+
+			if (string.startsWith(l, "fullscreen:")) {
+				table.push(out, "fullscreen:" ++ (on ? "true" : "false"));
+				found = true;
+			}
+			else {
+				table.push(out, l);
+			}
+		}
+
+		if (!found) {
+			table.push(out, "fullscreen:" ++ (on ? "true" : "false"));
+		}
+
+		return string.save(file, table.concat(out, '\r\n') ++ '\r\n');
+	}
+}

@@ -1,0 +1,32 @@
+//dlg/notice.aardio
+
+//提示框：只有一个「确定」。
+//主窗口设置 lblMsg.text 之后 doModal，这里不调 show()。
+
+import win.ui;
+import m3theme;
+
+/*DSG{{*/
+var winform = win.form(text="提示";right=460;bottom=180;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+lblMsg={cls="static";text="";left=24;top=22;right=436;bottom=80;font=LOGFONT(name='Microsoft YaHei';h=-12);z=1};
+btnOk={cls="plus";text="确定";left=356;top=116;right=436;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+)
+/*}}*/
+
+m3theme.button(winform.btnOk);
+m3theme.ink(winform.lblMsg);
+
+winform.btnOk.oncommand = function(id, event) {
+	winform.endModal(true);
+}
+
+winform.onOk = function() {
+	winform.endModal(true);
+}
+
+winform.onCancel = function() {
+	winform.endModal(true);
+}
+
+return winform;

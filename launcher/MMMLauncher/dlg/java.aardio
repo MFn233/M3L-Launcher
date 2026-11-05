@@ -1,0 +1,337 @@
+//dlg/java.aardio
+
+//Java 管理：列出检测到的 Java，允许添加、移除、拉黑、设为当前。
+//列表用资源管理器「详细信息」那种视图：两个列，横向竖向都能滚。
+
+import win.ui;
+import m3theme;
+import m3list;
+import MMMLC;
+import m3config;
+import m3java;
+import process;
+import fsys.dlg;
+import string;
+/*DSG{{*/
+var winform = win.form(text="Java 管理";right=600;bottom=400;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+btnAdd={cls="plus";text="添加";left=128;top=300;right=232;bottom=332;font=LOGFONT(name='Microsoft YaHei');z=4};
+btnBlack={cls="plus";text="加入/移出黑名单";left=16;top=340;right=200;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=6};
+btnClose={cls="plus";text="关闭";left=464;top=340;right=584;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=8};
+btnCurrent={cls="plus";text="设为当前";left=208;top=340;right=328;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=7};
+btnOpen={cls="plus";text="打开目录";left=336;top=340;right=456;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=9};
+btnRemove={cls="plus";text="移除";left=240;top=300;right=344;bottom=332;font=LOGFONT(name='Microsoft YaHei');z=5};
+btnRescan={cls="plus";text="重新检测";left=16;top=300;right=120;bottom=332;font=LOGFONT(name='Microsoft YaHei');z=3};
+lblHint={cls="static";left=16;top=12;right=584;bottom=32;font=LOGFONT(h=-11;name='Microsoft YaHei');z=1};
+listJava={cls="listview";left=16;top=38;right=584;bottom=290;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=2}
+)
+/*}}*/
+
+m3theme.note(winform.lblHint);
+
+m3theme.button(winform.btnRescan);
+m3theme.button(winform.btnAdd);
+m3theme.button(winform.btnRemove);
+m3theme.button(winform.btnBlack);
+m3theme.button(winform.btnCurrent);
+m3theme.button(winform.btnOpen);
+m3theme.ghost(winform.btnClose);
+
+var cfg = null;
+var rows = {};
+var selected = null;
+
+// 排序规则：版本号大的在前 → 同版本路径短的在前 → 再相同按路径字典序
+// （只在显示时排，不改 config 里的原始顺序）
+function java_before(a, b) {
+	var ma = a.major or 0;
+	var mb = b.major or 0;
+	if (ma != mb) return ma > mb;
+
+	var la = #(a.path or "");
+	var lb = #(b.path or "");
+	if (la != lb) return la < lb;
+
+	return (a.path or "") < (b.path or "");
+}
+
+function sort_javas(list) {
+	var out = {};
+
+	for i, item in list {
+		var at = #out + 1;
+
+		for k, v in out {
+			if (java_before(item, v)) {
+				at = k;
+				break;
+			}
+		}
+
+		// 注意 aardio 的签名是 table.insert(表, 值, 位置)，位置是第三个参数
+		table.insert(out, item, at);
+	}
+
+	return out;
+}
+
+function render() {
+	winform.listJava.clear();
+	rows = {};
+
+	// 注意：for..in 只能跟函数迭代器或表变量，
+	// 直接跟 sort_javas(...) 这种调用会被当成「调用一个表」而报错。
+	var sorted = sort_javas(cfg.javas);
+
+	for i, j in sorted {
+		var major_text = "?";
+		if (j.major and j.major > 0) major_text = "Java " ++ j.major;
+
+		// 完整版本号（1.8.0_511 / 21.0.3），老配置里没有就只显示主版本
+		if (j.version and #j.version > 0) major_text = major_text ++ " (" ++ j.version ++ ")";
+
+		var vendor_text = j.vendor;
+		if (!vendor_text or #vendor_text == 0) vendor_text = m3java.vendor_of(j.path, j.version);
+
+		var mark = "";
+		if (j.black) mark = mark ++ "[黑名单] ";
+		if (cfg.java == j.path) mark = mark ++ "[当前] ";
+
+		winform.listJava.addItem({ mark ++ major_text; vendor_text; j.path });
+		table.push(rows, j.path);
+	}
+
+	// 按路径找回原来的选中项，重建列表不会把选中状态弄丢
+	if (selected) {
+		var at = 0;
+		for i, p in rows {
+			if (p == selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) {
+			winform.listJava.selIndex = at;
+		}
+		else {
+			selected = null;
+		}
+	}
+
+	winform.lblHint.text = "共 " ++ #cfg.javas ++ " 个。黑名单里的 Java 不会被自动选中。";
+}
+
+function current_item() {
+	var i = winform.listJava.selIndex;
+	if (i > 0 and i <= #rows) return rows[i];
+
+	return selected;
+}
+
+winform.listJava.onSelChanged = function(sel, item, subItem, nm) {
+	var i = winform.listJava.selIndex;
+	if (i > 0 and i <= #rows) selected = rows[i];
+}
+
+winform.btnRescan.oncommand = function(id, event) {
+	winform.lblHint.text = "检测中…";
+
+	winform.setTimeout(function() {
+		var paths = m3java.scan_paths(cfg.game_path);
+
+		// 已经问过版本的直接复用，只有第一次需要逐个起进程
+		var cache = {};
+		for i, j in cfg.javas {
+			var major = j.major or 0;
+			if (j.path and major > 0) cache[string.lower(j.path)] = major;
+		}
+
+		for i, p in paths {
+			var major = cache[string.lower(p)];
+			if (!major) major = MMMLC.get_java_version(p) or 0;
+
+			var found = false;
+			for k, j in cfg.javas {
+				if (string.lower(j.path or "") == string.lower(p)) {
+					j.major = major;
+					found = true;
+				}
+			}
+
+			if (!found) {
+				table.push(cfg.javas, { path = p; major = major; black = false });
+			}
+		}
+
+		m3config.save_keys(cfg, {"javas"; "java"});
+		render();
+		winform.lblHint.text = "检测完成，共 " ++ #paths ++ " 个 Java。";
+	}, 50);
+}
+
+winform.btnAdd.oncommand = function(id, event) {
+	var f = fsys.dlg.open("可执行文件|*.exe|所有文件|*.*|", "选择 java.exe", "", winform, , "java.exe");
+	if (!f) return;
+
+	for i, j in cfg.javas {
+		if (j.path == f) {
+			winform.lblHint.text = "该 Java 已在列表当中。";
+			return;
+		}
+	}
+
+	var major = MMMLC.get_java_version(f);
+	table.push(cfg.javas, { path = f; major = major or 0; black = false });
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	render();
+}
+
+winform.btnRemove.oncommand = function(id, event) {
+	var path = current_item();
+	if (!path) {
+		winform.lblHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	for i, j in cfg.javas {
+		if (j.path == path) {
+			table.remove(cfg.javas, i);
+			break;
+		}
+	}
+
+	if (cfg.java == path) cfg.java = "";
+	selected = null;
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	render();
+}
+
+winform.btnBlack.oncommand = function(id, event) {
+	var path = current_item();
+	if (!path) {
+		winform.lblHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	var hit = null;
+	for i, j in cfg.javas {
+		if (j.path == path) {
+			hit = j;
+			break;
+		}
+	}
+
+	if (!hit) {
+		winform.lblHint.text = "列表里找不到此记录，请点击「重新检测」。";
+		return;
+	}
+
+	if (hit.black) {
+		hit.black = false;
+	}
+	else {
+		hit.black = true;
+	}
+
+	selected = path;
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	render();
+
+	// 全都拉黑了就没有能自动选的，得提醒
+	var usable = 0;
+	for i, j in cfg.javas {
+		if (j.path and !j.black) usable++;
+	}
+
+	if (hit.black) {
+		if (usable == 0) {
+			winform.lblHint.text = "已加入黑名单：" ++ path ++ "　—— 所有 Java 都在黑名单中，启动时将无法自动选择。";
+		}
+		else {
+			winform.lblHint.text = "已加入黑名单：" ++ path;
+		}
+	}
+	else {
+		winform.lblHint.text = "已移出黑名单：" ++ path;
+	}
+}
+
+// 在资源管理器里选中这条 Java
+winform.btnOpen.oncommand = function(id, event) {
+	var path = current_item();
+	if (!path) {
+		winform.lblHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	if (!io.exist(path)) {
+		winform.lblHint.text = "此 Java 已被删除或迁移。";
+		return;
+	}
+
+	process.exploreSelect(path);
+}
+
+winform.btnCurrent.oncommand = function(id, event) {
+	var path = current_item();
+	if (!path) {
+		winform.lblHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	cfg.java = path;
+	selected = path;
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	render();
+}
+
+winform.btnClose.oncommand = function(id, event) {
+	save_columns();
+	m3config.save_keys(cfg, {"javas"; "java"; "java_columns"});
+	winform.endModal(true);
+}
+
+winform.onCancel = function() {
+	save_columns();
+	m3config.save_keys(cfg, {"javas"; "java"; "java_columns"});
+	winform.endModal(true);
+}
+
+// 列宽用列表自己的（拖列头调过之后）存起来
+function save_columns() {
+	cfg.java_columns = winform.listJava.columns;
+}
+
+// ---------- 初始化 ----------
+
+cfg = m3config.read();
+
+// 三列：版本 / 厂商 / 路径——总宽超过可视区就出现横向滚动条。
+// 列宽可以在表头上拖动，关窗口时记下来。
+winform.listJava.fullRow = true;
+
+var saved_cols = cfg.java_columns;
+if (type(saved_cols) == "table" and #saved_cols >= 3) {
+	winform.listJava.columns = saved_cols;
+}
+else {
+	winform.listJava.columns = {
+		{ "版本"; 190 };
+		{ "厂商"; 140 };
+		{ "路径"; 640 };
+	};
+}
+
+// 三列加起来超过列表宽度时按比例压缩，保证每列都看得见
+m3list.fit(winform.listJava);
+
+// 列宽只在打开窗口时规整一次；拖动不干预
+
+render();
+
+return winform;

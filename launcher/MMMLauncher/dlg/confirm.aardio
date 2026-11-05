@@ -1,0 +1,38 @@
+//dlg/confirm.aardio
+
+//确认框：取消 / 确定，doModal 返回 true / false。
+//主窗口设置 lblMsg.text 之后调用。
+
+import win.ui;
+import m3theme;
+
+/*DSG{{*/
+var winform = win.form(text="确认";right=460;bottom=190;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+lblMsg={cls="static";text="";left=24;top=22;right=436;bottom=94;font=LOGFONT(name='Microsoft YaHei';h=-12);z=1};
+btnCancel={cls="plus";text="取消";left=268;top=126;right=348;bottom=158;font=LOGFONT(name='Microsoft YaHei';h=-13);z=2};
+btnOk={cls="plus";text="确定";left=356;top=126;right=436;bottom=158;font=LOGFONT(name='Microsoft YaHei';h=-13);z=3};
+)
+/*}}*/
+
+// 主题从 m3theme 取，不再各窗口各写一套
+m3theme.button(winform.btnOk);
+m3theme.button(winform.btnCancel);
+
+winform.btnOk.oncommand = function(id, event) {
+	winform.endModal(true);
+}
+
+winform.btnCancel.oncommand = function(id, event) {
+	winform.endModal(false);
+}
+
+winform.onOk = function() {
+	winform.endModal(true);
+}
+
+winform.onCancel = function() {
+	winform.endModal(false);
+}
+
+return winform;

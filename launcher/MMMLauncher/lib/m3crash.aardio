@@ -1,0 +1,423 @@
+//m3crash.aardio
+
+//崩溃处理用的小工具：找日志、分析崩溃原因、拼诊断文本。
+//原因规则移植自 HMCL 的 CrashReportAnalyzer（Java 正则 → aardio 的 Lua 模式），
+//只保留对普通用户最有用的那些。
+
+namespace m3crash {
+	import io;
+	import fsys;
+	import string;
+	import table;
+
+	// ---------- 找文件 ----------
+
+	// 列出目录里名字匹配的条目，按名字升序（崩溃报告的名字里带时间，排序即时间序）
+	function list_matching(dir, prefix, suffix) {
+		var out = {};
+		if (!dir) return out;
+		if (!io.exist(dir)) return out;
+
+		var files, folders = fsys.list(dir);
+		if (type(files) != "table") return out;
+
+		// fsys.list 的表里每个文件名既有数组项又有哈希项，必须用数字下标遍历
+		for i = 1; #files; 1 {
+			var name = files[i];
+			if (!name) continue;
+			if (prefix and #prefix > 0 and !string.startsWith(name, prefix)) continue;
+			if (suffix and #suffix > 0 and !string.endsWith(string.lower(name), suffix)) continue;
+
+			table.push(out, { name = name; path = dir ++ "\" ++ name });
+		}
+
+		var sorted = {};
+		for i, item in out {
+			var at = #sorted + 1;
+			for k, v in sorted {
+				if (item.name < v.name) {
+					at = k;
+					break;
+				}
+			}
+			table.insert(sorted, item, at);
+		}
+
+		return sorted;
+	}
+
+	// 收集这个实例相关的日志：{ {name; path}; ... }
+	function collect(work_dir) {
+		var out = {};
+		if (!work_dir) return out;
+
+		var latest = io.joinpath(work_dir, "logs", "latest.log");
+		if (io.exist(latest)) {
+			table.push(out, { name = "游戏日志 latest.log"; path = latest });
+		}
+
+		var reports = list_matching(io.joinpath(work_dir, "crash-reports"), "crash-", ".txt");
+		if (#reports > 0) {
+			var item = reports[#reports];
+			table.push(out, { name = "崩溃报告 " ++ item.name; path = item.path });
+		}
+
+		var hs = list_matching(work_dir, "hs_err_pid", ".log");
+		if (#hs > 0) {
+			var item = hs[#hs];
+			table.push(out, { name = "JVM 崩溃日志 " ++ item.name; path = item.path });
+		}
+
+		return out;
+	}
+
+	// 读一个文本文件的最后 n 行
+	function tail(path, n) {
+		if (!path or !io.exist(path)) return "";
+		if (!n or n <= 0) n = 40;
+
+		var text = string.load(path);
+		if (!text) return "";
+
+		var lines = string.split(text, '\n');
+		var from = #lines - n + 1;
+		if (from < 1) from = 1;
+
+		var out = {};
+		for i = from; #lines; 1 {
+			table.push(out, lines[i]);
+		}
+
+		return table.concat(out, '\n');
+	}
+
+	// ---------- 找崩溃报告 ----------
+
+	// 游戏崩溃时会在控制台打一行标记，后面跟着报告路径
+	CRASH_MARK = "#@!@# Game crashed! Crash report saved to: #@!@# ";
+
+	// 从日志文本里找到崩溃报告路径（找不到返回 null）
+	function find_report_path(log_text) {
+		if (type(log_text) != "string") return null;
+
+		var p = string.match(log_text, "#@!@# Game crashed! Crash report saved to: #@!@# ([^%r%n]+)");
+		if (!p) return null;
+
+		p = string.trim(p);
+		if (#p == 0) return null;
+
+		return p;
+	}
+
+	// 报告正文：优先用日志里标出来的那份，否则取 crash-reports 里最新的一份
+	function read_report(work_dir, log_text) {
+		var p = find_report_path(log_text);
+		if (p and io.exist(p)) {
+			var text = string.load(p);
+			if (text) return { path = p; text = text };
+		}
+
+		var reports = list_matching(io.joinpath(work_dir, "crash-reports"), "crash-", ".txt");
+		if (#reports == 0) return null;
+
+		var item = reports[#reports];
+		var text = string.load(item.path);
+		if (!text) return null;
+
+		return { path = item.path; text = text };
+	}
+
+	// ---------- 分析原因 ----------
+
+	// 每条规则：{ 说明; { 探针模式… }; 可选的详情模式 }
+	// 模式是 aardio（Lua）风格：%d %s 是字符类，( ) 是捕获，不要写 Java 的 \\d / (?<name>…)
+	RULES = {
+		// Java
+		{ "Java 版本过低"; { "UnsupportedClassVersionError:.-version (%d+)%." }; "java_major" };
+		{ "Java 版本过高"; { "Unsupported class file major version"; "module java.base does not export"; "NoSuchFieldException: ucp" } };
+		{ "使用了 OpenJ9（不受支持）"; { "OpenJ9 is not supported"; "OpenJ9 is incompatible"; ".J9VMInternals." } };
+		{ "内存不足"; {
+			"java.lang.OutOfMemoryError";
+			"There is insufficient memory for the Java Runtime Environment";
+			"The system is out of physical RAM or swap space";
+			"Too small maximum heap";
+		} };
+		{ "内存参数超出限制"; { "Could not reserve enough space for"; "Invalid maximum heap size" } };
+
+		// 图形
+		{ "显卡或 OpenGL 问题"; {
+			"Pixel format not accelerated";
+			"The driver does not appear to support OpenGL";
+			"GLX: Failed to create context";
+			"Couldn't set pixel format";
+			"EXCEPTION_ACCESS_VIOLATION";
+		} };
+		{ "资源包分辨率过高"; { "Maybe try a lower resolution resourcepack"; "Maybe try a lowerresolution" } };
+
+		// 模组
+		{ "模组 Mixin 注入失败"; { "MixinApplyError"; "Mixin apply failed"; "mixin.injection.throwables." } };
+		{ "OptiFine 与其它模组冲突"; {
+			"Invalid Services found OptiFine";
+			"net.optifine.reflect.Reflector.<clinit>";
+			"net.minecraftforge.client.gui.overlay.ForgeGui.renderSelectedItemName";
+		} };
+		{ "模组依赖冲突"; { "ModResolutionException"; "Missing or unsupported mandatory dependencies" } };
+		{ "存在重复模组"; { "Found a duplicate mod"; "Found duplicate mods" } };
+		{ "模组加载时出错"; { "LoaderExceptionModCrash: Caught exception from ([^%r%n]+)"; "Could not execute entrypoint stage" }; "mod_name" };
+		{ "类或方法缺失（常见于版本与加载器不匹配）"; { "NoClassDefFoundError: ([^%r%n]+)"; "NoSuchMethodError: ([^%r%n]+)" }; "class_name" };
+		{ "访问权限错误（模组不兼容）"; { "IllegalAccessError" } };
+		{ "模组 jar 被解压过"; { "Extracted mod jars found"; "appear to be extracted jar files" } };
+		{ "模组无法解压依赖库（可能被杀毒软件拦截）"; { "Cannot unpack "; "libzstd-jni" } };
+		{ "文件访问被拒绝（权限或杀毒软件）"; { "java.nio.file.AccessDeniedException"; "Access is denied" } };
+		{ "模组文件名不合法"; { "Invalid module name: '' is not a Java identifier" } };
+		{ "模组数量超出上限"; { "maximum id range exceeded" } };
+
+		// 安装 / 文件
+		{ "Forge 安装不完整"; {
+			"Cannot find launch target fmlclient";
+			"Could not find net/minecraft/client/Minecraft.class";
+			"contained no existing paths";
+		} };
+		{ "游戏文件被修改过"; { "SecurityException: SHA1 digest error for" } };
+		{ "配置文件解析失败"; { "Not enough data available"; "Failed loading config file" } };
+		{ "手动触发的调试崩溃"; { "Manually triggered debug crash" } };
+	};
+
+	// 分析日志 / 报告文本，返回 { {title; detail}; ... }
+	function analyze_text(text) {
+		var out = {};
+		if (type(text) != "string" or #text == 0) return out;
+
+		for i, rule in RULES {
+			var title = rule[1];
+			var probes = rule[2];
+			var detail_kind = rule[3];
+
+			for k, p in probes {
+				var cap = string.match(text, p);
+				if (!cap) continue;
+
+				var detail = "";
+
+				if (detail_kind == "java_major" and tonumber(cap)) {
+					// class 文件版本 52 = Java 8，按 HMCL 的换算：major - 44
+					var need = tonumber(cap) - 44;
+					if (need > 0) detail = "游戏需要 Java " ++ need ++ " 或更高版本。";
+				}
+				elseif (detail_kind == "mod_name") {
+					detail = string.trim(cap);
+					if (#detail > 0) detail = "出错的模组：" ++ detail;
+				}
+				elseif (detail_kind == "class_name") {
+					detail = string.trim(cap);
+					if (#detail > 0) detail = "缺少：" ++ detail;
+				}
+
+				table.push(out, { title = title; detail = detail });
+				break;
+			}
+		}
+
+		return out;
+	}
+
+	// 从崩溃报告的堆栈里找可疑的模组包名
+	// （照 HMCL 的做法：取栈帧里的包名前两段，跳过 Minecraft / Java / 加载器的通用包）
+	BLACK_LIST = {};
+	for i, name in {
+		"net"; "minecraft"; "java"; "javax"; "sun"; "com"; "org"; "cn"; "io"; "cpw"; "jdk";
+		"item"; "block"; "entity"; "client"; "server"; "world"; "gui"; "util"; "event";
+		"mods"; "mod"; "impl"; "core"; "config"; "api"; "lib"; "main"; "launch"; "loader";
+		"fabricmc"; "fabric"; "forge"; "minecraftforge"; "modlauncher"; "launchwrapper";
+		"optifine"; "mojang"; "mixin"; "spongepowered"; "objectweb"; "asm"; "log4j";
+		"renderer"; "model"; "texture"; "chunk"; "gen"; "registry"; "nbt"; "network";
+		"integrated"; "dedicated"; "init"; "helper"; "internal"; "runtime"; "reflect";
+	} {
+		BLACK_LIST[name] = true;
+	}
+
+	// 返回可疑包名列表（按出现次数排序，最多 max 个）
+	function suspected_mods(report_text, max) {
+		var out = {};
+		if (type(report_text) != "string" or #report_text == 0) return out;
+		if (!max or max <= 0) max = 3;
+
+		// 只看 Description 到 walkthrough 之间的那段堆栈
+		var block = string.match(report_text, "Description:.-[%r%n]+([%w%W]-)A detailed walkthrough of the error");
+		if (!block) block = report_text;
+
+		var count = {};
+
+		for line in string.gmatch(block, "[^%r%n]+") {
+			// 栈帧形如：at com.seibel.distanthorizons.X.y(File.java:1)
+			//   带模块的：at java.base/java.io.File.createTempFile(...)
+			//   Fabric 的：at knot//com.seibel.X.y(...)
+			// 先抓到 "(" 之前，再去掉模块前缀。
+			// 这里不用模式匹配：`[^(]` 里放 `%(` 会让 aardio 的模式引擎报 unbalanced pattern，
+			// 直接用 indexOf + slice 更稳。
+			var s = string.trim(line);
+			if (!string.startsWith(s, "at ")) continue;
+
+			var p = string.indexOf(s, "(");
+			if (!p or p <= 4) continue;
+
+			var raw = string.slice(s, 4, p - 1);
+			if (!raw) continue;
+
+			var cls = raw;
+			var slashes = string.split(raw, "/");
+			if (#slashes > 1) cls = slashes[#slashes];
+
+			var parts = string.split(cls, ".");
+			var added = 0;
+
+			for i = 1; #parts - 2; 1 {
+				var seg = parts[i];
+				if (#seg < 3) continue;
+				if (BLACK_LIST[seg]) continue;
+
+				count[seg] = (count[seg] or 0) + 1;
+				added = added + 1;
+				if (added >= 2) break;
+			}
+		}
+
+		// 取出现最多的几个
+		var names = {};
+		for name, n in count {
+			table.push(names, name);
+		}
+
+		var sorted = {};
+		for i, name in names {
+			var at = #sorted + 1;
+			for k, v in sorted {
+				var n1 = count[name] or 0;
+				var n2 = count[v] or 0;
+
+				// 次数相同就看长度：包名越长通常越具体（distanthorizons 比 zstd 有用）
+				if (n1 > n2 or (n1 == n2 and #name > #v)) {
+					at = k;
+					break;
+				}
+			}
+			table.insert(sorted, name, at);
+		}
+
+		for i = 1; #sorted; 1 {
+			if (i > max) break;
+			table.push(out, sorted[i]);
+		}
+
+		return out;
+	}
+
+	// 包名候选换成 mod 文件名：命中 jar 名时显示 jar（比包名有用得多）。
+	// 命中 jar 的排前面——那才是准的；纯包名候选只是线索。
+	function display_suspects(segs, work_dir) {
+		var hits = {};
+		var misses = {};
+		if (!segs or #segs == 0) return hits;
+
+		var jars = {};
+		var dir = io.joinpath(work_dir, "mods");
+		if (io.exist(dir)) {
+			var files = fsys.list(dir);
+			if (type(files) == "table") {
+				for i = 1; #files; 1 {
+					var name = files[i];
+					if (!name) continue;
+					if (!string.endsWith(string.lower(name), ".jar")) continue;
+					table.push(jars, name);
+				}
+			}
+		}
+
+		for i, seg in segs {
+			var hit = null;
+			var low = string.lower(seg);
+
+			for k, jar in jars {
+				if (string.indexOf(string.lower(jar), low)) {
+					hit = jar;
+					break;
+				}
+			}
+
+			if (hit) table.push(hits, hit);
+			else table.push(misses, seg);
+		}
+
+		for i, name in misses {
+			table.push(hits, name);
+		}
+
+		return hits;
+	}
+
+	// 一步到位：返回 { reasons; suspects; report_path; report_text }
+	function analyze(work_dir, log_text) {
+		var out = { reasons = {}; suspects = {}; report_path = null; report_text = null };
+
+		var report = read_report(work_dir, log_text);
+		if (report) {
+			out.report_path = report.path;
+			out.report_text = report.text;
+		}
+
+		// 报告正文优先，其次日志最后 200 行
+		var text = "";
+		if (out.report_text) text = out.report_text;
+
+		var latest = io.joinpath(work_dir, "logs", "latest.log");
+		var log_tail = tail(latest, 200);
+		if (#log_tail > 0) text = text ++ "\n" ++ log_tail;
+
+		out.reasons = analyze_text(text);
+		out.suspects = display_suspects(suspected_mods(out.report_text), work_dir);
+
+		return out;
+	}
+
+	// ---------- 诊断文本 ----------
+
+	// 拼一份可以直接贴到聊天窗口/工单里的诊断文本
+	function diagnostics(info, logs) {
+		var out = {};
+
+		table.push(out, "=== M^3 Launcher 崩溃诊断 ===");
+		table.push(out, "");
+		table.push(out, "版本      : " ++ tostring(info.version or ""));
+		table.push(out, "游戏目录  : " ++ tostring(info.game_dir or ""));
+		table.push(out, "运行目录  : " ++ tostring(info.work_dir or ""));
+		table.push(out, "Java      : " ++ tostring(info.java or ""));
+		table.push(out, "内存      : " ++ tostring(info.memory or "") ++ " MB");
+		table.push(out, "退出码    : " ++ tostring(info.exit_code or ""));
+		table.push(out, "运行时长  : " ++ tostring(info.seconds or 0) ++ " 秒");
+		table.push(out, "");
+
+		if (logs and #logs > 0) {
+			table.push(out, "--- 日志位置 ---");
+			for i, item in logs {
+				table.push(out, item.name ++ "：" ++ item.path);
+			}
+			table.push(out, "");
+		}
+
+		if (logs) {
+			for i, item in logs {
+				if (!string.startsWith(item.name, "游戏日志")) continue;
+
+				var t = tail(item.path, 40);
+				if (#t > 0) {
+					table.push(out, "--- latest.log 最后 40 行 ---");
+					table.push(out, t);
+					table.push(out, "");
+				}
+				break;
+			}
+		}
+
+		return table.concat(out, '\r\n');
+	}
+}

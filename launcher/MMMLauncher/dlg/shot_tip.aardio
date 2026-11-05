@@ -1,0 +1,38 @@
+//dlg/shot_tip.aardio
+
+//「请勿直接截图分享此窗口」的提醒。
+//和日志窗口一起弹出，并且是日志窗口的模态子窗口——不关它就没法操作日志窗口。
+//设置里可以关掉（shot_tip），默认开。
+
+import win.ui;
+import m3theme;
+/*DSG{{*/
+var winform = win.form(text="提示";right=560;bottom=210;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+btnOk={cls="plus";text="我知道了";left=428;top=150;right=536;bottom=182;font=LOGFONT(h=-13;name='Microsoft YaHei');z=3};
+lblBig={cls="static";left=24;top=42;right=536;bottom=84;font=LOGFONT(h=-26;name='Microsoft YaHei';weight=700);z=1};
+lblSub={cls="static";left=24;top=92;right=536;bottom=114;font=LOGFONT(name='Microsoft YaHei');z=2}
+)
+/*}}*/
+
+m3theme.ink(winform.lblBig);
+m3theme.note(winform.lblSub);
+m3theme.button(winform.btnOk);
+
+winform.lblBig.text = "请勿直接截图分享此窗口！！！";
+
+winform.lblSub.text = "请使用「打包日志」并发送完整文件。";
+
+winform.btnOk.oncommand = function(id, event) {
+	winform.endModal(true);
+}
+
+winform.onOk = function() {
+	winform.endModal(true);
+}
+
+winform.onCancel = function() {
+	winform.endModal(true);
+}
+
+return winform;

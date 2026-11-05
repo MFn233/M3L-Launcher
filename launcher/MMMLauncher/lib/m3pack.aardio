@@ -1,0 +1,129 @@
+//m3pack.aardio
+
+//把排查崩溃需要的文件打成一个 zip：启动器日志、游戏日志、崩溃报告、
+//JVM 崩溃日志、mods 列表、启动命令、系统信息。
+//聊天窗口里发一个 zip，比截图有用得多，也比逐条复制快。
+
+namespace m3pack {
+	import zlib.zip;
+	import io;
+	import fsys;
+	import string;
+	import table;
+	import math;
+	import time;
+	import sys.mem;
+
+	// 目录里的文件名列表（只取文件，不递归）
+	function list_files(dir) {
+		var out = {};
+		if (!dir) return out;
+		if (!io.exist(dir)) return out;
+
+		var files, folders = fsys.list(dir);
+		if (type(files) == "table") {
+			// fsys.list 的表里每个文件名既有数组项又有哈希项，必须用数字下标遍历
+			for i = 1; #files; 1 {
+				if (files[i]) table.push(out, files[i]);
+			}
+		}
+
+		return out;
+	}
+
+	// 加一个文件进压缩包；文件不在就跳过
+	function add_file(z, path, name) {
+		if (!path or !io.exist(path)) return;
+
+		var ok, err = z.compress({ from = path; to = name });
+		return ok, err;
+	}
+
+	// 系统信息文本
+	function info_text(ctx) {
+		var info = ctx.info or {};
+		var out = {};
+
+		table.push(out, "=== M^3 Launcher 日志打包 ===");
+		table.push(out, "时间      : " ++ tostring(time().format('%Y-%m-%d %H:%M:%S')));
+		table.push(out, "版本      : " ++ tostring(info.version or ""));
+		table.push(out, "游戏目录  : " ++ tostring(info.game_dir or ""));
+		table.push(out, "运行目录  : " ++ tostring(info.work_dir or ""));
+		table.push(out, "Java      : " ++ tostring(info.java or ""));
+		table.push(out, "内存      : " ++ tostring(info.memory or "") ++ " MB");
+		table.push(out, "退出码    : " ++ tostring(info.exit_code or ""));
+		table.push(out, "运行时长  : " ++ tostring(info.seconds or 0) ++ " 秒");
+		table.push(out, "");
+
+		var st = sys.mem.getStatus();
+		table.push(out, "系统      : " ++ tostring(string.getenv("OS")) ++ " " ++ tostring(string.getenv("PROCESSOR_ARCHITECTURE")));
+		table.push(out, "物理内存  : " ++ tostring(math.floor(st.totalPhys / 1048576)) ++ " MB");
+
+		return table.concat(out, '\r\n');
+	}
+
+	// 打包。ctx = { info; session(启动器日志文本); cmdline; work_dir }
+	// 返回 zip 路径；失败返回 null, 错误信息
+	function pack(ctx) {
+		if (!ctx) return null, "没有可打包的内容";
+
+		var work_dir = ctx.work_dir or "";
+
+		var stamp = time().format('%Y%m%d-%H%M%S');
+		var file_name = "m3l-logs-" ++ stamp ++ ".zip";
+
+		var zip_path;
+		if (#work_dir > 0) zip_path = work_dir ++ "\" ++ file_name;
+		else zip_path = io.fullpath("/" ++ file_name);
+
+		var z, err = zlib.zip(zip_path);
+		if (!z) return null, tostring(err);
+
+		// 1. 启动器自己的日志（内存里的会话缓冲）
+		if (ctx.session and #ctx.session > 0) {
+			z.writeData("启动器日志.txt", ctx.session);
+		}
+
+		// 2. 系统信息
+		z.writeData("系统信息.txt", info_text(ctx));
+
+		// 3. 启动命令（有就带上，排查 Java 参数问题时很有用）
+		if (ctx.cmdline and #ctx.cmdline > 0) {
+			z.writeData("启动命令.txt", ctx.cmdline);
+		}
+
+		// 4. 游戏日志
+		add_file(z, work_dir ++ "\logs\latest.log", "游戏日志/latest.log");
+
+		// 5. 崩溃报告（可能有好几份，全带上）
+		var reports = list_files(work_dir ++ "\crash-reports");
+		for i, name in reports {
+			if (string.endsWith(string.lower(name), ".txt")) {
+				add_file(z, work_dir ++ "\crash-reports\" ++ name, "崩溃报告/" ++ name);
+			}
+		}
+
+		// 6. JVM 崩溃日志（hs_err_pid*.log，直接在运行目录里）
+		var root_files = list_files(work_dir);
+		for i, name in root_files {
+			if (string.startsWith(name, "hs_err_pid") and string.endsWith(string.lower(name), ".log")) {
+				add_file(z, work_dir ++ "\" ++ name, "JVM崩溃日志/" ++ name);
+			}
+		}
+
+		// 7. mods 列表（只记文件名，不带 jar，体积小又能看出装了什么）
+		var mods = list_files(work_dir ++ "\mods");
+		if (#mods > 0) {
+			var lines = { "共 " ++ #mods ++ " 个 mod：" };
+			var sorted = mods;
+			for i, name in sorted {
+				table.push(lines, name);
+			}
+			z.writeData("mods列表.txt", table.concat(lines, '\r\n'));
+		}
+
+		z.close();
+
+		return zip_path;
+	}
+}

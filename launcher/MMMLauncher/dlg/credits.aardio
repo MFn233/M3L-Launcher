@@ -1,0 +1,45 @@
+//dlg/credits.aardio
+
+//鸣谢。从关于窗口打开。
+//只写"用了谁的什么"，不写客套话。
+
+import win.ui;
+import m3theme;
+
+/*DSG{{*/
+var winform = win.form(text="鸣谢";right=520;bottom=356;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+lblTitle={cls="static";text="鸣谢";left=24;top=18;right=400;bottom=48;font=LOGFONT(name='Microsoft YaHei';h=-16;weight=700);z=1};
+lblN1={cls="static";text="aardio";left=24;top=62;right=200;bottom=82;font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+lblD1={cls="static";text="开发工具与运行时";left=208;top=62;right=496;bottom=82;font=LOGFONT(name='Microsoft YaHei';h=-11);z=3};
+lblN2={cls="static";text="Mojang";left=24;top=90;right=200;bottom=110;font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
+lblD2={cls="static";text="Minecraft 本体与版本清单格式";left=208;top=90;right=496;bottom=110;font=LOGFONT(name='Microsoft YaHei';h=-11);z=5};
+lblN3={cls="static";text="HMCL";left=24;top=118;right=200;bottom=138;font=LOGFONT(name='Microsoft YaHei';h=-12);z=6};
+lblD3={cls="static";text="崩溃原因分析规则的参考实现（GPL-3.0）";left=208;top=118;right=496;bottom=138;font=LOGFONT(name='Microsoft YaHei';h=-11);z=7};
+lblNote={cls="static";text="";left=24;top=164;right=496;bottom=240;font=LOGFONT(name='Microsoft YaHei';h=-11);z=8};
+btnClose={cls="plus";text="关闭";left=404;top=292;right=496;bottom=324;font=LOGFONT(name='Microsoft YaHei';h=-13);z=9};
+)
+/*}}*/
+
+m3theme.ink(winform.lblTitle);
+m3theme.ink(winform.lblN1);
+m3theme.ink(winform.lblN2);
+m3theme.ink(winform.lblN3);
+m3theme.note(winform.lblD1);
+m3theme.note(winform.lblD2);
+m3theme.note(winform.lblD3);
+m3theme.note(winform.lblNote);
+m3theme.button(winform.btnClose);
+
+winform.lblNote.text = "本项目为个人非营利项目，与上述公司、项目无隶属关系。"
+	++ '\r\n' ++ "「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。";
+
+winform.btnClose.oncommand = function(id, event) {
+	winform.close();
+}
+
+winform.onCancel = function() {
+	winform.close();
+}
+
+return winform;

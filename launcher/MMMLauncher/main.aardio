@@ -1,0 +1,778 @@
+//main.aardio
+
+//MMMLauncher 主页：标题、状态栏、设置 / 启动游戏。
+//日志是独立窗口，每个游戏实例一个；开启多开后可同时跑多个实例。
+
+import win.ui;
+import win.ui.minmax;
+import win.ui.tooltip;
+import m3theme;
+import m3crash;
+import m3version;
+import MMMLC;
+import m3config;
+import m3log;
+import m3java;
+import m3game;
+import crypt;
+import fsys;
+import string;
+import math;
+import time;
+/*DSG{{*/
+var winform = win.form(text="M³ Launcher";right=559;bottom=335;bgcolor=0xF2F2F2)
+winform.add(
+btnLaunch={cls="plus";text="启动游戏";left=432;top=238;right=536;bottom=282;anchors={right=1;bottom=1};font=LOGFONT(h=-14;name='Microsoft YaHei');z=4};
+btnSettings={cls="plus";text="设置";left=344;top=238;right=424;bottom=282;anchors={right=1;bottom=1};font=LOGFONT(h=-14;name='Microsoft YaHei');z=3};
+btnTitle={cls="plus";text="M³ Launcher";left=24;top=16;right=250;bottom=54;anchors={left=1;top=1};font=LOGFONT(h=-20;name='Microsoft YaHei');z=1};
+comboVer={cls="combobox";left=344;top=292;right=536;bottom=318;anchors={right=1;bottom=1};font=LOGFONT(name='Microsoft YaHei');items={};mode="dropdownlist";z=5};
+lblStatus={cls="static";left=24;top=64;right=520;bottom=96;anchors={left=1;top=1};font=LOGFONT(h=-11;name='Microsoft YaHei');z=2}
+)
+/*}}*/
+
+// ---------- 主题 ----------
+
+m3theme.note(winform.lblStatus);
+
+// 状态栏太长时用 ... 截断（SS_ENDELLIPSIS），完整版本名靠 tooltip 补。
+// SS_NOTIFY 是必须的：没有它静态文本对鼠标是透明的（WM_NCHITTEST 返回 HTTRANSPARENT），
+// 鼠标消息进不来，挂在它上面的 tooltip 永远不会触发。
+win.modifyStyle(winform.lblStatus.hwnd, 0, 0x4000/*_SS_ENDELLIPSIS*/ | 0x100/*_SS_NOTIFY*/);
+winform.lblStatus.redraw();
+
+// 标题：无框，左键关于、右键控件样式测试台
+m3theme.plain(winform.btnTitle);
+
+// 启动游戏 / 设置：同一套外观
+m3theme.button(winform.btnLaunch);
+m3theme.button(winform.btnSettings);
+
+// 最小窗口大小，否则缩放后排版会挤在一起
+win.ui.minmax(winform, 480, 260);
+
+// ---------- 运行状态 ----------
+// var 只对声明之后的代码生效，所以统一放在最前面。
+
+var launching = false;    // 正在启动（读 JSON、解 natives、找 Java）
+var instances = {};       // 运行中的实例
+var instance_seq = 0;     // 实例编号
+var poll_timer = null;    // 一个定时器轮询所有实例
+var cur_session = null;   // 当前的日志会话
+var self_hidden = false;
+var debug_mode = false;
+var status_tip = null;    // 状态栏的悬停提示（win.ui.tooltip）
+var shot_tip_shown = false;   // 「不要截图分享日志」这次会话里提醒过没有
+var crash_seq = 0;            // 已经弹过几个崩溃窗口（用来错开位置，避免完全叠在一起）
+
+// ---------- 日志 ----------
+
+function log(text, is_error) {
+	if (cur_session) cur_session.write(text, is_error);
+}
+
+// 调试模式下才输出的内部细节
+function dbg(text) {
+	if (debug_mode) log("[调试] " ++ text);
+}
+
+// 把某个实例缓冲区里的完整行搬进它的日志会话
+function flush_lines(inst) {
+	var chunk = "";
+
+	while (true) {
+		var p = string.indexOf(inst.buffer, '\n');
+		if (!p) break;
+
+		var line = string.slice(inst.buffer, 1, p - 1);
+		if (!line) line = "";
+		line = string.trimRight(line);
+
+		inst.buffer = string.slice(inst.buffer, p + 1);
+		if (!inst.buffer) inst.buffer = "";
+
+		if (string.indexOf(line, "/ERROR]") or string.indexOf(line, "/FATAL]")) {
+			if (#chunk > 0) {
+				inst.session.write(string.trimRight(chunk));
+				chunk = "";
+			}
+			inst.session.write(line, true);
+		}
+		else {
+			chunk = chunk ++ line ++ '\r\n';
+		}
+	}
+
+	if (#chunk > 0) inst.session.write(string.trimRight(chunk));
+}
+
+// ---------- 状态行 / 标题栏 ----------
+
+function refresh_status() {
+	var cfg = m3config.read();
+	var n = #instances;
+
+	if (n == 0) {
+		winform.text = "M³ Launcher";
+	}
+	elseif (n == 1) {
+		winform.text = "M³ Launcher —— 右键「启动游戏」以强制停止当前实例";
+	}
+	else {
+		winform.text = "M³ Launcher —— 运行中 ×" ++ n ++ "，右键「启动游戏」以强制停止全部实例";
+	}
+
+	if (!cfg.status_bar) {
+		winform.lblStatus.visible = false;
+		return;
+	}
+	winform.lblStatus.visible = true;
+
+	var who = cfg.username;
+	if (#who == 0) who = "player";
+
+	var ver = cfg.version;
+	if (#ver == 0) ver = "未选择版本";
+
+	// 状态栏里先截短，完整名字挂在 tooltip 上（见下面的 refresh_tooltip）
+	var ver_short = ver;
+	if (#ver_short > 24) ver_short = string.slice(ver_short, 1, 24) ++ "…";
+
+	var head = "离线登录";
+	if (n > 0) head = "运行中";
+	elseif (launching) head = "启动中";
+
+	winform.lblStatus.text = head ++ " · " ++ who ++ " · " ++ ver_short ++ " · " ++ cfg.memory ++ " MB";
+
+	// 完整版本名挂到悬停提示上
+	refresh_tooltip();
+}
+
+// 状态栏的悬停提示：显示完整版本名。
+// 用 win.ui.tooltip（TTF_SUBCLASS 标准提示），不能用 winex.tooltip.popup——
+// 后者会 capture 鼠标，提示一出现就得点一下才能继续操作窗口。
+function refresh_tooltip() {
+	if (!status_tip) return;
+
+	var cfg = m3config.read();
+	var text = cfg.version;
+	if (#text == 0) text = "未选择版本";
+
+	status_tip.add(winform.lblStatus, text);
+}
+
+function set_launching(on) {
+	launching = on;
+	winform.btnLaunch.disabled = on;
+	winform.btnLaunch.text = on ? "启动中…" : "启动游戏";
+	winform.btnLaunch.redraw();
+	refresh_status();
+}
+
+function notice(text) {
+	// 发布版可能缺窗体资源，这里不能让它把整个操作带崩
+	var frm = null;
+	try { frm = winform.loadForm("/dlg/notice.aardio"); }
+	catch(e) { frm = null; }
+
+	if (!frm) {
+		// 退化成状态栏提示，至少不会什么都不发生
+		winform.lblStatus.text = string.replace(text, '\r\n', " ");
+		winform.lblStatus.visible = true;
+		return;
+	}
+
+	frm.lblMsg.text = text;
+	frm.doModal(winform);
+}
+
+// ---------- 版本下拉框 ----------
+
+// 从当前游戏路径的 versions 目录填下拉框
+function load_version_combo() {
+	var cfg = m3config.read();
+
+	winform.comboVer.clear();
+
+	var vdir = io.joinpath(cfg.game_path, "versions");
+	if (io.exist(vdir)) {
+		var files, folders = fsys.list(vdir);
+		for(i = 1; #folders; 1) {
+			var name = folders[i];
+			if (name) winform.comboVer.add(name);
+		}
+	}
+
+	var items = winform.comboVer.items;
+	if (#items == 0) {
+		winform.comboVer.selIndex = 0;
+		return;
+	}
+
+	// 选中配置里的版本；找不到就落到第一项，并把配置改过去
+	var at = 0;
+	for i, v in items {
+		if (v == cfg.version) {
+			at = i;
+			break;
+		}
+	}
+
+	if (at == 0) at = 1;
+	winform.comboVer.selIndex = at;
+
+	var picked = items[at];
+	if (picked != cfg.version) {
+		cfg.version = picked;
+		m3config.save_keys(cfg, {"version"});
+		refresh_status();
+	}
+}
+
+winform.comboVer.onSelChange = function() {
+	var name = winform.comboVer.selText;
+	if (#name == 0) return;
+
+	var cfg = m3config.read();
+	if (cfg.version == name) return;
+
+	cfg.version = name;
+	m3config.save_keys(cfg, {"version"});
+	refresh_status();
+}
+
+// 鼠标停在状态栏上时的 full 版本名由 refresh_tooltip() 维护（win.ui.tooltip）
+
+// ---------- 实例 ----------
+
+function open_log_window(inst) {
+	// 缺日志窗体时不能让启动流程中断，返回 null 当作「没有日志窗口」
+	var frm = null;
+	try { frm = winform.loadForm("/dlg/log.aardio"); }
+	catch(e) { return null; }
+
+	if (!frm) return null;
+
+	frm.text = "日志 - " ++ inst.session.tag;
+	frm.bind(inst.session, inst);   // 把实例也传进去，日志窗口的「打包日志」要用路径
+	return frm;
+}
+
+// 一个实例结束：收尾、写日志、从列表里摘掉
+function finish_instance(inst) {
+	var o2, e2 = inst.prcs.peek(0);
+	if (o2 or e2) {
+		inst.buffer = inst.buffer ++ (o2 or "") ++ (e2 or "");
+		flush_lines(inst);
+	}
+
+	if (#inst.buffer > 0) {
+		inst.session.write(string.trimRight(inst.buffer));
+		inst.buffer = "";
+	}
+
+	var code = inst.prcs.getExitCode();
+	inst.prcs.close();
+	inst.prcs = null;
+
+	// 运行时长（秒），崩溃窗口里会显示
+	var seconds = 0;
+	if (inst.started) {
+		seconds = math.floor((time.tick() - inst.started) / 1000);
+		if (seconds < 0) seconds = 0;
+	}
+
+	// 用户主动结束的不算崩溃
+	var crashed = (code != 0) and (!inst.stopped_by_user);
+
+	inst.session.write("--------------------------------------------------");
+	inst.session.write("游戏已退出，退出码 " ++ tostring(code), code != 0);
+
+	for i, v in instances {
+		if (v === inst) {
+			table.remove(instances, i);
+			break;
+		}
+	}
+
+	refresh_status();
+
+	if (#instances == 0) {
+		if (poll_timer) {
+			winform.clearInterval(poll_timer);
+			poll_timer = null;
+		}
+
+		// 启动后自动隐藏过的，全部退出就把窗口还回来
+		if (self_hidden) {
+			self_hidden = false;
+			winform.show(1);
+		}
+	}
+
+	// 异常退出：弹崩溃窗口（放最后，主窗口已经恢复显示了，弹窗才有正确的父窗口）
+	if (crashed) open_crash_window(inst, code, seconds);
+}
+
+// 游戏异常退出时弹的窗口：列出关键信息 + 日志位置 + 复制诊断
+function open_crash_window(inst, code, seconds) {
+	var info = {
+		version = inst.version;
+		game_dir = inst.game_dir;
+		work_dir = inst.work_dir;
+		java = inst.java;
+		memory = inst.memory;
+		exit_code = code;
+		seconds = seconds;
+	};
+
+	var logs = m3crash.collect(inst.work_dir);
+
+	var frm = null;
+	var load_err = null;
+	try { frm = winform.loadForm("/dlg/crash.aardio"); }
+	catch(e) { load_err = tostring(e); }
+
+	// 窗体缺失（比如发布版忘了同步）或窗体脚本出错时不能静默：
+	// 一定要把原始错误写进日志，否则只剩一句「打不开」，没法查。
+	if (!frm) {
+		log("[错误] 游戏异常退出（退出码 " ++ tostring(code) ++ "），但崩溃窗口打不开：" ++ tostring(load_err), true);
+		return;
+	}
+
+	// 崩溃窗口前面还要叠一个「请勿直接截图分享此窗口」的提醒（设置里能关，默认开）。
+	// 提醒由崩溃窗口自己在显示出来之后弹出，这样它一定压在崩溃窗口上面。
+	var cfg = m3config.read();   // main 里的 cfg 都是各函数自己读的，这里也要读一份
+	var want_tip = false;
+	if (cfg.shot_tip and !shot_tip_shown) {
+		want_tip = true;
+		shot_tip_shown = true;
+	}
+
+	frm.bind({
+		info = info;
+		logs = logs;
+		session = (inst.session ? inst.session.text() : "");
+		cmdline = inst.cmdline or "";
+		show_tip = want_tip;
+	});
+
+	// 非模态显示：多开时可能同时有好几个实例崩溃，一个窗口挡住别的不合适。
+	// 归属主窗口，主窗口关掉时它们跟着关；每多一个就错开一点，避免完全叠在一起看不出来。
+	win.setOwner(frm.hwnd, winform.hwnd);
+	frm.center(winform);
+
+	if (crash_seq > 0) {
+		var rc = frm.getRect(true);
+		var off = (crash_seq % 4) * 28;
+		frm.setPos(rc.left + off, rc.top + off);
+	}
+
+	crash_seq = crash_seq + 1;
+
+	frm.show();
+}
+
+// 60ms 轮询所有实例：搬日志、看谁退出了
+function poll() {
+	if (#instances == 0) {
+		if (poll_timer) {
+			winform.clearInterval(poll_timer);
+			poll_timer = null;
+		}
+		return;
+	}
+
+	var done = {};
+
+	for i, inst in instances {
+		var out, errout = inst.prcs.peek(0);
+		if (out or errout) {
+			inst.buffer = inst.buffer ++ (out or "") ++ (errout or "");
+			flush_lines(inst);
+		}
+
+		if (!inst.prcs.stillActive()) table.push(done, inst);
+	}
+
+	for i, inst in done {
+		finish_instance(inst);
+	}
+}
+
+// 右键「启动游戏」：强制结束全部实例
+function stop_all() {
+	if (#instances == 0) return;
+
+	var list = instances;
+	instances = {};
+
+	if (poll_timer) {
+		winform.clearInterval(poll_timer);
+		poll_timer = null;
+	}
+
+	for i, inst in list {
+		inst.stopped_by_user = true;
+		inst.session.write("[提示] 强制结束该实例。", true);
+
+		if (inst.prcs) {
+			if (inst.prcs.stillActive()) {
+				inst.prcs.terminate();
+			}
+			else {
+				inst.prcs.close();
+			}
+			inst.prcs = null;
+		}
+	}
+
+	refresh_status();
+
+	if (self_hidden) {
+		self_hidden = false;
+		winform.show(1);
+	}
+}
+
+// ---------- 启动 ----------
+
+// 设置游戏进程优先级（launch 之后立刻调用）
+function apply_priority(prcs, name) {
+	var classes = {
+		idle = 0x40;      // _IDLE_PRIORITY_CLASS
+		below = 0x4000;   // _BELOW_NORMAL_PRIORITY_CLASS
+		normal = 0x20;    // _NORMAL_PRIORITY_CLASS
+		above = 0x8000;   // _ABOVE_NORMAL_PRIORITY_CLASS
+		high = 0x80;      // _HIGH_PRIORITY_CLASS
+	};
+
+	var cls = classes[name];
+	if (!cls or !prcs) return;
+	if (!prcs.process) return;
+
+	prcs.process.setPriorityClass(cls);
+}
+
+function start_game(retried, inst) {
+	if (launching) return;
+
+	var cfg = m3config.read();
+	debug_mode = (cfg.debug ? true : false);
+
+	// 第一次进来才检查多开
+	if (!inst) {
+		if (#instances > 0 and !cfg.allow_multi) {
+			notice("多开模式未开启，当前仅允许一个实例。" ++ '\r\n' ++ "可以在「设置 → 启动器」里打开多开。");
+			return;
+		}
+	}
+
+	set_launching(true);
+
+	// 没设用户名就用 player 顶上，稍后提示用户
+	var username = cfg.username;
+	var use_player = false;
+	if (#username == 0) {
+		username = "player";
+		use_player = true;
+	}
+
+	// 参数先校验完，再建日志窗口——这样标题里就能直接带上版本名
+	if (#cfg.game_path == 0 or !io.exist(cfg.game_path)) {
+		notice("[错误] 游戏目录不存在。");
+		set_launching(false);
+		return;
+	}
+	if (#cfg.version == 0) {
+		notice("[错误] 未选择版本。");
+		set_launching(false);
+		return;
+	}
+
+	// 版本隔离：默认每个版本用自己的目录（versions\<版本>）；
+	// shared 里记着「关掉隔离」的版本，它们改用 .minecraft 根目录
+	var isolated = true;
+	if (cfg.shared and cfg.shared[cfg.version]) isolated = false;
+
+	var work_dir = isolated
+		? io.joinpath(cfg.game_path, "versions", cfg.version)
+		: cfg.game_path;
+
+	if (!io.exist(io.joinpath(cfg.game_path, "versions", cfg.version))) {
+		notice("[错误] 找不到版本：" ++ '\r\n' ++ cfg.version);
+		set_launching(false);
+		return;
+	}
+
+	// 参数齐了，建会话 + 日志窗口
+	if (!inst) {
+		// 没有实例在跑时从头编号，避免编号一直往上飘
+		if (#instances == 0) instance_seq = 0;
+		instance_seq = instance_seq + 1;
+
+		inst = {
+			id = instance_seq;
+			buffer = "";
+			prcs = null;
+			log_form = null;
+			session = m3log.create("实例 " ++ instance_seq ++ " · " ++ cfg.version);
+		};
+
+		cur_session = inst.session;
+
+		if (cfg.log) inst.log_form = open_log_window(inst);
+	}
+
+	if (use_player) {
+		log("[提示] 还未设置用户名，将使用 player 作为临时用户名。", true);
+		notice("还未设置用户名，将使用 player 作为临时用户名。" ++ '\r\n' ++ "可以在「设置 → 游戏设置」里改。");
+	}
+
+	dbg("实例 " ++ inst.id ++ "：游戏目录 " ++ cfg.game_path);
+	dbg("版本：" ++ cfg.version);
+	dbg("工作目录：" ++ work_dir);
+	dbg("内存：" ++ cfg.memory ++ " MB");
+	dbg("窗口模式：" ++ cfg.window_mode);
+	dbg("配置的 Java：" ++ tostring(cfg.java));
+
+	if (debug_mode) {
+		var cands = m3java.scan_paths(work_dir);
+		dbg("扫描到 " ++ #cands ++ " 个 Java：");
+		for i, p in cands {
+			dbg("    " ++ p);
+		}
+	}
+
+	// 游戏窗口大小三种规则
+	var game_w = cfg.width;
+	var game_h = cfg.height;
+
+	if (cfg.window_mode == "fullscreen") {
+		m3game.set_fullscreen(work_dir, true);
+	}
+	elseif (cfg.window_mode == "match") {
+		m3game.set_fullscreen(work_dir, false);
+		game_w = winform.width;
+		game_h = winform.height;
+	}
+	else {
+		m3game.set_fullscreen(work_dir, false);
+	}
+
+	// 离线 UUID：账号里填过就用填的，否则按用户名生成
+	var uuid = crypt.md5("OfflinePlayer:" ++ username);
+	var acc = m3config.find_account(cfg, username);
+	if (acc) {
+		var custom = string.trim(acc.uuid or "");
+		if (#custom > 0) uuid = custom;
+	}
+
+	var opts = {
+		minecraft_dir = cfg.game_path;
+		version = cfg.version;
+		username = username;
+		uuid = uuid;
+		access_token = "0";
+		user_type = "msa";
+		version_type = "M3LC";
+		memory = cfg.memory;
+		work_dir = work_dir;
+		java_hint = cfg.java;
+		width = game_w;
+		height = game_h;
+		no_wait = false;
+	};
+
+	log("--------------------------------------------------");
+	log("启动 " ++ cfg.version ++ "   玩家 " ++ username ++ "   内存 " ++ cfg.memory ++ " MB");
+
+	// 启动前先把版本目录的 JSON 归位（文件名、id 与目录名对齐）。
+	// 用户在资源管理器里改过文件夹名时，不做这一步 --version 会指到不存在的目录。
+	var fixed, why = m3version.repair(opts.minecraft_dir, cfg.version);
+	if (fixed) log("[提示] 已修正版本目录里的 JSON 文件名或 id。", true);
+	elseif (why) dbg("版本目录自愈：" ++ why);
+
+	var info, err = MMMLC.read_json(opts.minecraft_dir, cfg.version);
+
+	// 再给一次机会：万一刚才没修成，读失败后再试一次
+	if (!info) {
+		var fixed2 = m3version.repair(opts.minecraft_dir, cfg.version);
+		if (fixed2) {
+			log("[提示] 已修正版本目录里的 JSON 文件名，重试读取。", true);
+			info, err = MMMLC.read_json(opts.minecraft_dir, cfg.version);
+		}
+	}
+
+	if (!info) {
+		log("[错误] " ++ err, true);
+		if (!cfg.log) notice("[错误] " ++ err);
+		set_launching(false);
+		return;
+	}
+
+	if (#info.missing > 0) {
+		log("[警告] 缺少 " ++ #info.missing ++ " 个库文件，可能导致游戏无法正常启动：", true);
+		for i, p in info.missing {
+			if (i > 6) {
+				log("        ……还有 " ++ (#info.missing - 6) ++ " 个", true);
+				break;
+			}
+			log("        " ++ p, true);
+		}
+		log("        请补齐这些文件后再启动游戏。", true);
+	}
+
+	var ok, nerr = MMMLC.prepare_natives(info);
+	if (!ok) { log("[错误] " ++ nerr, true); set_launching(false); return; }
+
+	var java, jerr = MMMLC.find_java(opts.java_hint);
+	if (!java) { log("[错误] " ++ jerr, true); set_launching(false); return; }
+
+	var major, verr, fatal = MMMLC.get_java_version(java);
+	if (fatal) { log("[错误] " ++ verr, true); set_launching(false); return; }
+	if (!major) log("[警告] " ++ verr, true);
+
+	opts.java = java;
+	opts.java_major = major;
+
+	// 记下这次启动的关键信息，崩溃时直接拿给 crash 窗口用
+	if (inst) {
+		inst.version = cfg.version;
+		inst.game_dir = cfg.game_path;
+		inst.work_dir = work_dir;
+		inst.java = java;
+		inst.memory = cfg.memory;
+		inst.started = time.tick();
+
+		// 打包日志时把启动命令行也带上，排查 Java 参数问题很有用
+		try {
+			var cmd_args = MMMLC.build_args(info, opts);
+			inst.cmdline = java ++ " " ++ table.concat(cmd_args, " ");
+		}
+		catch(e) {
+			inst.cmdline = java;
+		}
+	}
+
+	log("Java " ++ tostring(major) ++ "   类路径 " ++ #info.classpath ++ " 个 jar");
+	log("        " ++ java);
+
+	if (debug_mode) {
+		var args, aerr = MMMLC.build_args(info, opts);
+		if (args) {
+			dbg("启动命令：");
+			dbg("    " ++ java ++ " " ++ process.joinArguments(args));
+		}
+		else {
+			dbg("无法生成命令：" ++ tostring(aerr));
+		}
+	}
+
+	// Java 版本不匹配：弹窗让用户选
+	if (!retried and major and info.java_version and (major != info.java_version)) {
+		var frm = winform.loadForm("/dlg/java_warn.aardio");
+		frm.lblMsg.text = "需要 Java ：" ++ info.java_version ++ "，当前 Java ：" ++ major ++ "。";
+		var choice = frm.doModal(winform);
+
+		if (choice == 1) {
+			// 直接从已经检测过的列表里挑，不用再起一堆进程问版本
+			var p, m2 = m3java.pick_cfg(cfg, info.java_version);
+
+			if (p) {
+				cfg.java = p;
+				m3config.save_keys(cfg, {"java"});
+				log("已换用 Java " ++ m2 ++ "：" ++ p);
+			}
+			else {
+				log("[警告] 没有可用的 Java " ++ info.java_version ++ "（可能都被加入了黑名单）。", true);
+				log("        本次仍然使用 Java ：" ++ tostring(major) ++ "：" ++ java, true);
+				log("        可在「设置 → Java 管理」里调整。", true);
+			}
+
+			set_launching(false);
+			start_game(true, inst);
+			return;
+		}
+		elseif (choice == 2) {
+			winform.loadForm("/dlg/java.aardio").doModal(winform);
+			set_launching(false);
+			start_game(true, inst);
+			return;
+		}
+	}
+
+	var newPrcs, pid, lerr = MMMLC.launch(info, opts);
+	if (!newPrcs) { log("[错误] " ++ lerr, true); set_launching(false); return; }
+
+	inst.prcs = newPrcs;
+	inst.buffer = "";
+	table.push(instances, inst);
+
+	// 进程优先级（在游戏起来之后设，设不上也不影响启动）
+	apply_priority(inst.prcs, cfg.priority);
+
+	log("已启动，PID = " ++ tostring(pid));
+	log("游戏运行期间，右键「启动游戏」可强制结束。");
+
+	set_launching(false);
+
+	if (cfg.hide_after_launch) {
+		self_hidden = true;
+		winform.show(0);
+	}
+
+	if (!poll_timer) poll_timer = winform.setInterval(poll, 60);
+}
+
+winform.btnLaunch.oncommand = function(id, event) {
+	start_game(false, null);
+}
+
+// 右键 = 强制停止全部实例
+winform.btnLaunch.onRightMouseUp = function(wParam, lParam) {
+	stop_all();
+}
+
+// ---------- 设置 / 关于 ----------
+
+winform.btnSettings.oncommand = function(id, event) {
+	var frm = winform.loadForm("/dlg/settings.aardio");
+	if (frm.doModal(winform)) {
+		// 设置里可能换了游戏路径，版本下拉框要跟着刷新
+		load_version_combo();
+		refresh_status();
+	}
+}
+
+winform.btnTitle.oncommand = function(id, event) {
+	winform.loadForm("/dlg/about.aardio").doModal(winform);
+}
+
+// 右键标题 = 控件样式测试台（改主题时用来对照）
+// Ctrl + 右键 = 崩溃窗口测试台（崩溃场景不好人为制造，用它验证分析逻辑）
+// 两个都是开发工具：只有开了「调试模式」才响应，正式用户点不出来
+winform.btnTitle.onRightMouseUp = function(wParam, lParam) {
+	var cfg = m3config.read();
+	if (!cfg.debug) return;
+
+	var ctrl = ::GetKeyState(0x11/*_VK_CONTROL*/) & 0x8000;
+
+	if (ctrl) {
+		winform.loadForm("/dlg/crash_test.aardio").doModal(winform);
+		return;
+	}
+
+	winform.loadForm("/dlg/theme_test.aardio").doModal(winform);
+}
+
+// ---------- 初始化 ----------
+
+refresh_status();
+load_version_combo();
+
+// 状态栏的悬停提示：标准 tooltip 控件，自动显示/隐藏，不抢鼠标
+status_tip = win.ui.tooltip(winform);
+refresh_tooltip();
+
+winform.show();
+return win.loopMessage();

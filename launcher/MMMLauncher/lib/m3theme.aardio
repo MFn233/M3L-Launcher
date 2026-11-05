@@ -1,0 +1,152 @@
+//m3theme.aardio
+
+//控件主题：黑/白/灰三色的唯一定义处，外加 plus 控件的 skin 套用函数。
+//窗口里不要再写死颜色，统一 m3theme.button(...) / m3theme.note(...) 这样调用。
+
+namespace m3theme {
+
+	// ---------- 颜色 ----------
+
+	// plus 的 skin、argbColor 用 ARGB（0xAARRGGBB）
+	INK   = 0xFF1A1A1A;   // 近黑，主文字/边框
+	WHITE = 0xFFFFFFFF;
+	BG    = 0xFFF2F2F2;   // 窗口背景
+	MUTED = 0xFF8C8C8C;   // 次要文字
+	LINE  = 0xFFD8D8D8;   // 分隔线
+	TRACK = 0xFFE2E2E2;   // 滑条轨道
+	DIS   = 0xFFEDEDED;   // 禁用底
+	DISFG = 0xFF9C9C9C;   // 禁用字
+	RED   = 0xFFD03030;   // 错误
+
+	// static / edit 的 color 属性用 COLORREF（0xBBGGRR，和 ARGB 分量顺序相反）
+	C_INK   = 0x1A1A1A;
+	C_MUTED = 0x8C8C8C;
+	C_BG    = 0xF2F2F2;   // 窗口背景的 COLORREF：静态文本要和它一致，否则会露出一块浅灰
+	C_RED   = 0x3030D0;   // #D03030 的 COLORREF
+
+	// ARGB → COLORREF
+	// ARGB 是 0xAARRGGBB（低字节是 BB），COLORREF 是 0x00BBGGRR（低字节是 RR），
+	// 所以 R 和 B 要互换。另外不要对大于 2^31 的值做 >>，这里用除法逐字节取。
+	function toRef(argb) {
+		var r = ..math.floor(argb / 0x10000) % 0x100;   // 0xAARRGGBB 里的 RR
+		var g = ..math.floor(argb / 0x100) % 0x100;
+		var b = argb % 0x100;                            // 0xAARRGGBB 里的 BB
+		return r | (g << 8) | (b << 16);
+	}
+
+	// ---------- skin ----------
+
+	// 主要按钮：白底、1px 黑框，悬停整块反色
+	function button(ctrl) {
+		if (!ctrl) return;
+
+		ctrl.skin({
+			background = { default = WHITE; hover = INK; disabled = DIS };
+			color = { default = INK; hover = WHITE; disabled = DISFG };
+			border = { color = INK; width = 1; radius = 0 };
+		});
+	}
+
+	// 次要按钮：无框灰字，悬停变黑（关闭 / 取消那种）
+	function ghost(ctrl) {
+		if (!ctrl) return;
+
+		ctrl.skin({
+			background = { default = BG; hover = BG };
+			color = { default = MUTED; hover = INK };
+		});
+	}
+
+	// 无框无底：主页标题那种
+	function plain(ctrl) {
+		if (!ctrl) return;
+
+		ctrl.skin({
+			background = { default = BG; hover = BG };
+			color = { default = INK; hover = INK };
+		});
+	}
+
+	// 分隔线：1px 高的 plus，只填色
+	function rule(ctrl) {
+		if (!ctrl) return;
+
+		ctrl.skin({
+			background = { default = LINE };
+		});
+	}
+
+	// 滑条。plus 的滑块形状只看 border.radius：
+	//   <0 画正圆、>0 画圆角矩形、没有就画方块。
+	// 三个状态必须都写死，否则鼠标移入移出后形状会变不回来。
+	function slider(ctrl) {
+		if (!ctrl) return;
+
+		ctrl.skin({
+			background = { default = TRACK };
+			foreground = { default = INK };
+			color = { default = INK; hover = INK; active = INK };
+			border = {
+				default = { radius = -1 };
+				hover = { radius = -1 };
+				active = { radius = -1 };
+			};
+		});
+	}
+
+	// ---------- 文字颜色 ----------
+
+	// 输入框：只改文字颜色，白底保持不变
+	function field(ctrl) {
+		if (!ctrl) return;
+		ctrl.color = C_INK;
+	}
+
+	// 静态文本：主要文字
+	function ink(ctrl) {
+		if (!ctrl) return;
+		ctrl.color = C_INK;
+		ctrl.bgcolor = C_BG;
+	}
+
+	// 静态文本：说明 / 标签
+	function note(ctrl) {
+		if (!ctrl) return;
+		ctrl.color = C_MUTED;
+		ctrl.bgcolor = C_BG;
+	}
+
+	// 静态文本：错误（不能叫 error：那是 aardio 的内置保留函数，会报
+	// Can't modify the constant: 'error'）
+	function danger(ctrl) {
+		if (!ctrl) return;
+		ctrl.color = C_RED;
+		ctrl.bgcolor = C_BG;
+	}
+}
+
+/**intellisense(m3theme)
+INK = 近黑 #1A1A1A（ARGB，plus 的 skin 用）
+WHITE = 纯白
+BG = 窗口背景 #F2F2F2
+MUTED = 次要文字 #8C8C8C
+LINE = 分隔线 #D8D8D8
+TRACK = 滑条轨道 #E2E2E2
+DIS = 禁用状态底色
+DISFG = 禁用状态文字
+RED = 错误红 #D03030
+C_INK = 近黑 COLORREF（static / edit 的 color 属性用）
+C_MUTED = 次要文字 COLORREF
+C_BG = 窗口背景 COLORREF（静态文本的 bgcolor 用，避免露出一块浅灰）
+C_RED = 错误红 COLORREF
+toRef(__/*argb*/) = ARGB 转 COLORREF
+button(__/*控件*/) = 主要按钮：白底、1px 黑框，悬停整块反色
+ghost(__/*控件*/) = 次要按钮：无框灰字，悬停变黑
+plain(__/*控件*/) = 无框无底，主页标题那种
+rule(__/*控件*/) = 分隔线：1px 高的 plus，只填色
+slider(__/*控件*/) = 滑条：圆形滑块，三个状态形状一致
+field(__/*控件*/) = 输入框文字颜色（不动背景）
+ink(__/*控件*/) = 静态文本：主要文字
+note(__/*控件*/) = 静态文本：说明 / 标签
+danger(__/*控件*/) = 静态文本：错误红（不能叫 error，和内置函数冲突）
+end intellisense**/

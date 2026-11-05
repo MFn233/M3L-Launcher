@@ -1,0 +1,100 @@
+//dlg/log.aardio
+
+//日志窗口：一个窗口显示一个会话（一个游戏实例）。
+//主窗口 loadForm 之后调 bind(会话)，这里不自己挂。
+
+import win.ui;
+import m3theme;
+import m3pack;
+import process;
+
+/*DSG{{*/
+var winform = win.form(text="日志";right=640;bottom=420;bgcolor=0xF2F2F2;border="resizable")
+winform.add(
+editLog={cls="richedit";left=16;top=16;right=624;bottom=364;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;autohscroll=false;anchors={left=1;top=1;right=1;bottom=1};font=LOGFONT(name='Consolas';h=-12);z=1};
+btnClear={cls="plus";text="清空";left=16;top=374;right=88;bottom=404;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+btnPack={cls="plus";text="打包日志";left=96;top=374;right=216;bottom=404;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
+btnClose={cls="plus";text="关闭";left=536;top=374;right=624;bottom=404;anchors={right=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=3};
+)
+/*}}*/
+
+// 日志正文用近黑灰；错误行用红色（richedit 的 textColor 是 COLORREF）
+var C_LOG_FG = 0x333333;
+var C_RED = 0x0000FF;
+
+winform.editLog.color = C_LOG_FG;
+
+m3theme.button(winform.btnClear);
+m3theme.button(winform.btnPack);
+m3theme.button(winform.btnClose);
+
+// 给 m3log 会话用的两个接口
+winform.append = function(text, is_error) {
+	winform.editLog.readonly = false;
+	if (is_error) {
+		winform.editLog.appendText({ textColor = C_RED }, text ++ '\r\n');
+	}
+	else {
+		winform.editLog.appendText(text ++ '\r\n');
+	}
+	winform.editLog.readonly = true;
+}
+
+winform.clear_all = function() {
+	winform.editLog.text = "";
+}
+
+var session = null;
+var inst = null;
+
+// 主窗口把会话交给这个窗口；inst 是实例表（打包日志时读路径用）
+winform.bind = function(sess, owner_inst) {
+	if (session) session.detach(winform);
+
+	session = sess;
+	inst = owner_inst;
+
+	if (sess) sess.attach(winform);
+}
+
+winform.btnClear.oncommand = function(id, event) {
+	if (session) session.clear();
+}
+
+// 把排查用的文件打成一个 zip（游戏日志、崩溃报告、mods 列表、启动命令…）
+winform.btnPack.oncommand = function(id, event) {
+	var ctx = {
+		info = {
+			version = (inst ? inst.version : "");
+			game_dir = (inst ? inst.game_dir : "");
+			work_dir = (inst ? inst.work_dir : "");
+			java = (inst ? inst.java : "");
+			memory = (inst ? inst.memory : "");
+			exit_code = "";
+			seconds = 0;
+		};
+		session = (session ? session.text() : "");
+		cmdline = (inst ? inst.cmdline : "");
+		work_dir = (inst ? inst.work_dir : "");
+	};
+
+	var zip_path, err = m3pack.pack(ctx);
+	if (!zip_path) {
+		winform.append("打包失败：" ++ tostring(err), true);
+		return;
+	}
+
+	winform.append("已打包：" ++ zip_path, false);
+	process.exploreSelect(zip_path);
+}
+
+winform.btnClose.oncommand = function(id, event) {
+	winform.close();
+}
+
+winform.onClose = function(hwnd, message, wParam, lParam) {
+	if (session) session.detach(winform);
+}
+
+winform.show();
+return winform;

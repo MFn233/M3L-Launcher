@@ -1,0 +1,238 @@
+//dlg/crash.aardio
+
+//游戏崩溃后的提示窗口。
+//主窗口用 bind(data) 把信息传进来：
+//  data.info = { version; game_dir; work_dir; java; memory; exit_code; seconds }
+//  data.logs = { {name; path}; ... }   —— 由 m3crash.collect 收集
+//  data.session / data.cmdline         —— 打包日志要用
+//
+//崩溃原因由 m3crash.analyze() 从崩溃报告和日志里推断（规则移植自 HMCL）。
+
+import win.ui;
+import m3theme;
+import m3list;
+import m3crash;
+import m3pack;
+import m3capture;
+import process;
+import win.clip;
+/*DSG{{*/
+var winform = win.form(text="游戏崩溃了";right=640;bottom=540;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+btnClose={cls="plus";text="关闭";left=532;top=478;right=616;bottom=510;font=LOGFONT(h=-13;name='Microsoft YaHei');z=23};
+btnCopy={cls="plus";text="复制诊断信息";left=404;top=478;right=524;bottom=510;font=LOGFONT(name='Microsoft YaHei');z=22};
+btnOpen={cls="plus";text="打开日志";left=24;top=478;right=132;bottom=510;font=LOGFONT(name='Microsoft YaHei');z=19};
+btnOpenDir={cls="plus";text="打开所在目录";left=140;top=478;right=268;bottom=510;font=LOGFONT(name='Microsoft YaHei');z=20};
+btnPack={cls="plus";text="打包日志";left=276;top=478;right=396;bottom=510;font=LOGFONT(name='Microsoft YaHei');z=21};
+lblHint={cls="static";left=24;top=134;right=616;bottom=186;font=LOGFONT(h=-11;name='Microsoft YaHei');z=4};
+lblK1={cls="static";text="版本";left=24;top=192;right=110;bottom=212;font=LOGFONT(name='Microsoft YaHei');z=5};
+lblK2={cls="static";text="游戏目录";left=24;top=216;right=110;bottom=236;font=LOGFONT(name='Microsoft YaHei');z=7};
+lblK3={cls="static";text="Java";left=24;top=240;right=110;bottom=260;font=LOGFONT(name='Microsoft YaHei');z=9};
+lblK4={cls="static";text="内存";left=24;top=264;right=110;bottom=284;font=LOGFONT(name='Microsoft YaHei');z=11};
+lblK5={cls="static";text="退出码";left=24;top=288;right=110;bottom=308;font=LOGFONT(name='Microsoft YaHei');z=13};
+lblK6={cls="static";text="运行时长";left=24;top=312;right=110;bottom=332;font=LOGFONT(name='Microsoft YaHei');z=15};
+lblLogs={cls="static";text="日志";left=24;top=340;right=300;bottom=360;font=LOGFONT(h=-11;name='Microsoft YaHei');z=17};
+lblReason={cls="static";left=24;top=50;right=616;bottom=104;font=LOGFONT(h=-13;name='Microsoft YaHei');z=2};
+lblSuspect={cls="static";left=24;top=108;right=616;bottom=130;font=LOGFONT(h=-11;name='Microsoft YaHei');z=3};
+lblTitle={cls="static";text="游戏崩溃了";left=24;top=14;right=600;bottom=44;font=LOGFONT(h=-16;name='Microsoft YaHei';weight=700);z=1};
+lblV1={cls="static";left=116;top=192;right=616;bottom=212;font=LOGFONT(name='Microsoft YaHei');z=6};
+lblV2={cls="static";left=116;top=216;right=616;bottom=236;font=LOGFONT(name='Microsoft YaHei');z=8};
+lblV3={cls="static";left=116;top=240;right=616;bottom=260;font=LOGFONT(name='Microsoft YaHei');z=10};
+lblV4={cls="static";left=116;top=264;right=616;bottom=284;font=LOGFONT(name='Microsoft YaHei');z=12};
+lblV5={cls="static";left=116;top=288;right=616;bottom=308;font=LOGFONT(name='Microsoft YaHei');z=14};
+lblV6={cls="static";left=116;top=312;right=616;bottom=332;font=LOGFONT(name='Microsoft YaHei');z=16};
+listLogs={cls="listview";left=24;top=362;right=616;bottom=466;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=18}
+)
+/*}}*/
+
+m3theme.ink(winform.lblTitle);
+m3theme.ink(winform.lblReason);
+m3theme.note(winform.lblSuspect);
+m3theme.note(winform.lblHint);
+
+m3theme.note(winform.lblK1);
+m3theme.note(winform.lblK2);
+m3theme.note(winform.lblK3);
+m3theme.note(winform.lblK4);
+m3theme.note(winform.lblK5);
+m3theme.note(winform.lblK6);
+m3theme.note(winform.lblLogs);
+
+m3theme.ink(winform.lblV1);
+m3theme.ink(winform.lblV2);
+m3theme.ink(winform.lblV3);
+m3theme.ink(winform.lblV4);
+m3theme.ink(winform.lblV5);
+m3theme.ink(winform.lblV6);
+
+m3theme.button(winform.btnOpen);
+m3theme.button(winform.btnOpenDir);
+m3theme.button(winform.btnPack);
+m3theme.button(winform.btnCopy);
+m3theme.button(winform.btnClose);
+
+var info = {};
+var logs = {};
+var session_text = "";
+var cmdline = "";
+var report_path = null;
+
+// 主窗口把崩溃信息传进来
+winform.bind = function(data) {
+	if (!data) return;
+
+	info = data.info or {};
+	logs = data.logs or {};
+	session_text = data.session or "";
+	cmdline = data.cmdline or "";
+
+	winform.lblV1.text = info.version or "";
+	winform.lblV2.text = info.work_dir or info.game_dir or "";
+	winform.lblV3.text = info.java or "";
+	winform.lblV4.text = tostring(info.memory or "") ++ " MB";
+	winform.lblV5.text = tostring(info.exit_code or "");
+
+	var seconds = info.seconds or 0;
+	var mm = math.floor(seconds / 60);
+	var ss = seconds % 60;
+	winform.lblV6.text = mm ++ " 分 " ++ ss ++ " 秒";
+
+	// 「请勿截图」的引导
+	winform.lblHint.text = "请先看下方的日志，里面有崩溃原因和最后几行输出。" ++ '\r\n'
+		++ "请不要直接截图分享此界面！！！" ++ '\r\n'
+		++ "需要发出去时用「打包日志」，并将完整的日志文件发给别人。";
+
+	winform.listLogs.clear();
+	for i, item in logs {
+		winform.listLogs.addItem({ item.name; item.path });
+	}
+
+	if (#logs == 0) {
+		winform.lblHint.text = winform.lblHint.text ++ '\r\n' ++ "（没有找到日志文件，游戏可能未及时写出日志。）";
+		winform.listLogs.selIndex = 0;
+	}
+	else {
+		winform.listLogs.selIndex = 1;
+	}
+
+	// 分析崩溃原因
+	var result = m3crash.analyze(info.work_dir or info.game_dir or "", session_text);
+	report_path = result.report_path;
+
+	var lines = {};
+	for i, r in result.reasons {
+		if (i > 3) break;
+
+		var line = "· " ++ r.title;
+		if (#r.detail > 0) line = line ++ "　" ++ r.detail;
+		table.push(lines, line);
+	}
+
+	if (#lines == 0) {
+		winform.lblReason.text = "未能定位具体原因。请查看下面的日志，或用「打包日志」导出完整文件。";
+	}
+	else {
+		winform.lblReason.text = table.concat(lines, '\r\n');
+	}
+
+	if (#result.suspects > 0) {
+		winform.lblSuspect.text = "疑似相关模组：" ++ table.concat(result.suspects, "、");
+	}
+	else {
+		winform.lblSuspect.text = "";
+	}
+
+	// 「请勿截图」的提醒：等崩溃窗口真正显示出来之后再叠上去
+	// （延后一拍，保证它压在崩溃窗口前面；以崩溃窗口为 owner 做模态，
+	//  不关掉它就点不动崩溃窗口）。主窗口通过 show_tip 决定要不要弹。
+	if (data.show_tip) {
+		winform.setTimeout(function() {
+			winform.loadForm("/dlg/shot_tip.aardio").doModal(winform);
+		}, 80);
+	}
+}
+
+// 当前选中的日志
+function selected_log() {
+	var i = winform.listLogs.selIndex;
+	if (i <= 0 or i > #logs) return null;
+	return logs[i];
+}
+
+winform.btnOpen.oncommand = function(id, event) {
+	var item = selected_log();
+	if (!item) {
+		winform.lblHint.text = "请先选择一个日志。";
+		return;
+	}
+
+	if (!io.exist(item.path)) {
+		winform.lblHint.text = "日志文件不存在：" ++ item.path;
+		return;
+	}
+
+	// 用默认程序打开；没有关联时退回资源管理器
+	if (!process.execute(item.path)) process.exploreSelect(item.path);
+}
+
+winform.btnOpenDir.oncommand = function(id, event) {
+	var item = selected_log();
+	if (!item) {
+		winform.lblHint.text = "请先选择一个日志。";
+		return;
+	}
+
+	if (io.exist(item.path)) process.exploreSelect(item.path);
+	else process.explore(info.work_dir or info.game_dir or "");
+}
+
+winform.btnCopy.oncommand = function(id, event) {
+	var text = m3crash.diagnostics(info, logs);
+	win.clip.write(text);
+	winform.lblHint.text = "诊断信息已复制到剪贴板。";
+}
+
+// 把排查用的文件打成一个 zip：启动器日志 / 游戏日志 / 崩溃报告 /
+// JVM 崩溃日志 / mods 列表 / 启动命令 / 系统信息
+winform.btnPack.oncommand = function(id, event) {
+	var ctx = {
+		info = info;
+		session = session_text;
+		cmdline = cmdline;
+		work_dir = info.work_dir or info.game_dir or "";
+	};
+
+	var zip_path, err = m3pack.pack(ctx);
+	if (!zip_path) {
+		winform.lblHint.text = "打包失败：" ++ tostring(err);
+		return;
+	}
+
+	winform.lblHint.text = "已打包：" ++ zip_path ++ "（可以直接将该文件发送给别人）";
+	process.exploreSelect(zip_path);
+}
+
+// 关闭用 close() 而不是 endModal()：多开时可以有好几个崩溃窗口同时开着，
+// 它们是非模态的；模态调用（崩溃测试台）时 close() 同样会让 doModal 返回。
+winform.btnClose.oncommand = function(id, event) {
+	winform.close();
+}
+
+winform.onCancel = function() {
+	winform.close();
+}
+
+// ---------- 初始化 ----------
+
+winform.listLogs.fullRow = true;
+winform.listLogs.columns = {
+	{ "日志"; 200 };
+	{ "路径"; 330 };
+};
+m3list.fit(winform.listLogs, 80);
+
+// 让这个窗口在截图 / 录屏里不可见（SetWindowDisplayAffinity）。
+// 目的：逼用户走「打包日志」而不是截图——截图没法复制、也看不清。
+m3capture.protect(winform.hwnd);
+
+return winform;

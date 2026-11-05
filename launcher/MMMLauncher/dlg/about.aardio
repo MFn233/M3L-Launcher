@@ -1,0 +1,58 @@
+//dlg/about.aardio
+
+//关于。点主页标题打开。
+
+import win.ui;
+import m3theme;
+import fsys.version;
+/*DSG{{*/
+var winform = win.form(text="关于";right=420;bottom=250;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+btnOk={cls="plus";text="确定";left=316;top=184;right=396;bottom=216;font=LOGFONT(name='Microsoft YaHei');z=5};
+btnCredits={cls="plus";text="鸣谢";left=232;top=184;right=308;bottom=216;font=LOGFONT(name='Microsoft YaHei');z=7};
+lblBody={cls="static";text="MFn's Minimalism Mclauncher。";left=24;top=60;right=396;bottom=84;font=LOGFONT(name='Microsoft YaHei');z=2};
+lblBody2={cls="static";text="作者：MFn、Deepseek。本项目遵循 GPL-3.0 协议开源。";left=24;top=90;right=396;bottom=114;font=LOGFONT(name='Microsoft YaHei');z=3};
+lblBody3={cls="static";text="—— 一个妄图写出完美代码的程序爱好者。";left=24;top=120;right=396;bottom=144;font=LOGFONT(name='Microsoft YaHei');z=4};
+lblTitle={cls="static";text="M³ Launcher";left=24;top=20;right=300;bottom=48;font=LOGFONT(h=-18;name='Microsoft YaHei');z=1};
+lblVer={cls="static";text="版本 0.1.2";left=24;top=150;right=396;bottom=170;font=LOGFONT(h=-11;name='Microsoft YaHei');z=6}
+)
+/*}}*/
+
+m3theme.ink(winform.lblTitle);
+m3theme.note(winform.lblBody);
+m3theme.note(winform.lblBody2);
+m3theme.note(winform.lblBody3);
+m3theme.note(winform.lblVer);
+m3theme.button(winform.btnOk);
+m3theme.ghost(winform.btnCredits);
+
+// 版本号规则：x.x.x.x，最后一段是 aardio 自增的内部构建号，关于界面只显示前三位。
+// 读 exe 的版本信息可以和工程属性永远一致；但要先认产品名——
+// F5 调试时跑的是 aardio 自己的宿主 exe，版本资源不是我们的，直接读会显示成工具套件的版本。
+var ver = "";
+
+var vi = fsys.version.getInfo(io._exepath);
+if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
+	var fv = vi.fileVersion;
+	if (fv.valid()) {
+		ver = tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
+	}
+}
+
+// 认不出是我们的 exe（F5 调试）→ 保留窗体里写的那行，也就是下面 lblVer 的初始文字。
+// 所以改版本时：工程属性改 x.x.x.x，这里同步前三位。
+if (#ver > 0) winform.lblVer.text = "版本 " ++ ver;
+
+winform.btnOk.oncommand = function(id, event) {
+	winform.endModal(true);
+}
+
+winform.btnCredits.oncommand = function(id, event) {
+	winform.loadForm("/dlg/credits.aardio").doModal(winform);
+}
+
+winform.onOk = function() {
+	winform.btnOk.oncommand();
+}
+
+return winform;

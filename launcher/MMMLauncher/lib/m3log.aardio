@@ -1,0 +1,61 @@
+//m3log.aardio
+
+//日志会话：每个游戏实例一份，互不干扰。
+//窗口关掉时照样缓存最近 400 行，重新挂上窗口能补回来。
+
+namespace m3log{
+	import table;
+
+	// 建一个会话。tag 只用于区分，比如「实例 1」
+	function create(tag) {
+		var lines = {};
+		var max_lines = 400;
+		var sink = null;
+
+		var s = { tag = tag or "" };
+
+		// 存一行（不带换行），窗口那边负责加
+		s.write = function(text, is_error) {
+			var item = { text = tostring(text); error = (is_error ? true : false) };
+
+			table.push(lines, item);
+			while (#lines > max_lines) {
+				table.remove(lines, 1);
+			}
+
+			if (sink) sink.append(item.text, item.error);
+		};
+
+		// 日志窗口打开时挂上来，并把历史补上
+		s.attach = function(form) {
+			if (!form) return;
+
+			sink = form;
+			form.clear_all();
+
+			for i, item in lines {
+				form.append(item.text, item.error);
+			}
+		};
+
+		s.detach = function(form) {
+			if (sink === form) sink = null;
+		};
+
+		// 把当前缓冲的日志拼成一段文本（打包日志、复制诊断时用）
+		s.text = function() {
+			var out = {};
+			for i, item in lines {
+				table.push(out, item.text);
+			}
+			return table.concat(out, '\r\n');
+		};
+
+		s.clear = function() {
+			lines = {};
+			if (sink) sink.clear_all();
+		};
+
+		return s;
+	}
+}

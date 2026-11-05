@@ -1,0 +1,222 @@
+//m3java.aardio
+
+//找 Java、问版本。设置页和 Java 管理页都用这套。
+//
+//注意：aardio 默认是 32 位进程，getenv("ProgramFiles") 会返回
+//"C:\Program Files (x86)"，必须用 ProgramW6432 才能拿到真正的 64 位目录。
+
+namespace m3java{
+	import io;
+	import fsys;
+	import string;
+	import table;
+	import MMMLC;
+
+	function add_path(list, seen, p) {
+		if (!p) return;
+
+		var key = string.lower(p);
+		if (seen[key]) return;
+
+		seen[key] = true;
+		if (io.exist(p)) table.push(list, p);
+	}
+
+	// base\<子目录>\bin\java.exe（一层）
+	function scan_one_level(list, seen, base) {
+		if (!base) return;
+		if (!io.exist(base)) return;
+
+		var files, folders = fsys.list(base);
+		for(i = 1; #folders; 1) {
+			var name = folders[i];
+			if (!name) continue;
+			add_path(list, seen, io.joinpath(base, name, "bin", "java.exe"));
+		}
+	}
+
+	// 递归找，给 MC 的 runtime 这种多层结构用（runtime\组件\平台\架构\组件\bin）
+	function scan_deep(list, seen, base, depth) {
+		if (!base or depth <= 0) return;
+		if (!io.exist(base)) return;
+
+		var files, folders = fsys.list(base);
+		for(i = 1; #folders; 1) {
+			var name = folders[i];
+			if (!name) continue;
+
+			var dir = io.joinpath(base, name);
+			add_path(list, seen, io.joinpath(dir, "bin", "java.exe"));
+			scan_deep(list, seen, dir, depth - 1);
+		}
+	}
+
+	// 扫描常见的 Java 安装位置，返回路径数组（不问版本，很快）
+	function scan_paths(game_dir) {
+		var list = {};
+		var seen = {};
+
+		// 1. JAVA_HOME
+		var home = string.getenv("JAVA_HOME");
+		if (home) add_path(list, seen, io.joinpath(home, "bin", "java.exe"));
+
+		// 2. 官方启动器的 runtime
+		if (game_dir) scan_deep(list, seen, io.joinpath(game_dir, "runtime"), 4);
+
+		var appdata = string.getenv("APPDATA");
+		if (appdata) scan_deep(list, seen, io.joinpath(appdata, ".minecraft", "runtime"), 4);
+
+		// 3. 常见 JDK 安装目录（64 位 + 32 位）
+		var pf64 = string.getenv("ProgramW6432");
+		if (!pf64) pf64 = "C:\Program Files";
+
+		var pf32 = string.getenv("ProgramFiles(x86)");
+
+		var vendors = {
+			"Java";
+			"Eclipse Adoptium";
+			"Eclipse Foundation";
+			"AdoptOpenJDK";
+			"Microsoft";
+			"Amazon Corretto";
+			"Zulu";
+			"BellSoft";
+			"Semeru";
+			"OpenJDK";
+			"JetBrains";
+			"Temurin";
+		};
+
+		var bases = { pf64; pf32 };
+		for i, base in bases {
+			if (!base) continue;
+			for k, vendor in vendors {
+				scan_one_level(list, seen, io.joinpath(base, vendor));
+			}
+		}
+
+		// 4. 用户目录下的常见位置
+		var local = string.getenv("LOCALAPPDATA");
+		if (local) scan_one_level(list, seen, io.joinpath(local, "Programs"));
+
+		var profile = string.getenv("USERPROFILE");
+		if (profile) {
+			scan_one_level(list, seen, io.joinpath(profile, ".jdks"));
+			scan_one_level(list, seen, io.joinpath(profile, "scoop", "apps"));
+		}
+
+		// 5. PATH 里的 java.exe（解析成真实路径，不要留裸文件名）
+		var path = string.getenv("PATH");
+		if (path) {
+			var dirs = string.split(path, ";");
+			for i, dir in dirs {
+				dir = string.trim(dir);
+				if (#dir == 0) continue;
+				if (string.startsWith(dir, '"')) continue;
+
+				add_path(list, seen, io.joinpath(dir, "java.exe"));
+			}
+		}
+
+		return list;
+	}
+
+	// 从路径（和版本号）猜是哪个厂家的发行版。
+	// 只按路径关键字判断，不起进程，快。
+	function vendor_of(path, version) {
+		if (!path) return "未知";
+
+		var p = string.lower(path);
+
+		// 官方启动器自带的运行时
+		if (string.indexOf(p, "\runtime\") or string.indexOf(p, "jre-legacy")
+			or string.indexOf(p, "java-runtime")) return "Mojang 运行时";
+
+		if (string.indexOf(p, "azul") or string.indexOf(p, "zulu")) return "Azul Zulu";
+		if (string.indexOf(p, "dragonwell")) return "阿里 Dragonwell";
+		if (string.indexOf(p, "microsoft") or string.indexOf(p, "\ms-")) return "Microsoft";
+		if (string.indexOf(p, "adoptium") or string.indexOf(p, "temurin")) return "Eclipse Temurin";
+		if (string.indexOf(p, "adoptopenjdk")) return "AdoptOpenJDK";
+		if (string.indexOf(p, "corretto")) return "Amazon Corretto";
+		if (string.indexOf(p, "liberica") or string.indexOf(p, "bellsoft")) return "BellSoft Liberica";
+		if (string.indexOf(p, "semeru") or string.indexOf(p, "\ibm")) return "IBM Semeru";
+		if (string.indexOf(p, "graalvm")) return "GraalVM";
+		if (string.indexOf(p, "sapmachine")) return "SAP SapMachine";
+		if (string.indexOf(p, "jetbrains")) return "JetBrains";
+		if (string.indexOf(p, "openjdk")) return "OpenJDK";
+		if (string.indexOf(p, "oracle") or string.indexOf(p, "\java\jdk")
+			or string.indexOf(p, "\java\jre") or string.indexOf(p, "java-se")) return "Oracle";
+
+		return "未知";
+	}
+
+	// 扫一遍并逐个问版本（会起进程，第一次比较慢）
+	function probe_all(game_dir) {
+		var result = {};
+		var paths = scan_paths(game_dir);
+
+		for i, p in paths {
+			var major, err, fatal, ver = MMMLC.get_java_version(p);
+			table.push(result, {
+				path = p;
+				major = major or 0;
+				version = ver or "";
+				vendor = vendor_of(p, ver);
+			});
+		}
+
+		return result;
+	}
+
+	// 从检测结果里挑一个：优先 want 指定的大版本，否则选最高的
+	// black 是 { [路径] = true } 的黑名单
+	function pick(result, black, want) {
+		var best, best_major;
+
+		for i, j in result {
+			if (!j.major) continue;
+			if (black and black[j.path]) continue;
+
+			if (want and (j.major == want)) {
+				return j.path, j.major;
+			}
+
+			if (!best_major or (j.major > best_major)) {
+				best = j.path;
+				best_major = j.major;
+			}
+		}
+
+		return best, best_major;
+	}
+
+	// 直接在配置里挑（已经存了 major，不用再起进程问）
+	function pick_cfg(cfg, want) {
+		var best, best_major;
+
+		for i, j in cfg.javas {
+			if (!j.path or j.black) continue;
+
+			var major = j.major or 0;
+			if (major <= 0) continue;
+
+			if (want and (major == want)) return j.path, major;
+
+			if (!best_major or (major > best_major)) {
+				best = j.path;
+				best_major = major;
+			}
+		}
+
+		return best, best_major;
+	}
+
+	// 把配置里的黑名单转成 { [路径] = true }
+	function black_map(cfg) {
+		var map = {};
+		for i, j in cfg.javas {
+			if (j.black and j.path) map[j.path] = true;
+		}
+		return map;
+	}
+}

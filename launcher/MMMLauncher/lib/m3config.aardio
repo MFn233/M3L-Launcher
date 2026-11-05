@@ -1,0 +1,241 @@
+//m3config.aardio
+
+//启动器配置：单文件 config.json，跟程序放一起（portable）。
+//core 不读这个文件，只接收参数。
+
+namespace m3config{
+	import io;
+	import json;
+	import string;
+	import table;
+
+	function file_path() {
+		return io.fullpath("/config.json");
+	}
+
+	function old_file_path() {
+		return io.fullpath("/config.txt");
+	}
+
+	// 官方 .minecraft 目录（不允许删除的那一个）
+	function official_dir() {
+		var appdata = string.getenv("APPDATA");
+		if (appdata) {
+			var p = appdata ++ "\.minecraft";
+			if (io.exist(p)) return p;
+		}
+		return null;
+	}
+
+	function defaults() {
+		var cfg = {
+			username = "";
+			memory = 4096;
+			java = "";
+			version = "";
+			game_path = "";
+			game_paths = {};
+			javas = {};
+			width = 854;
+			height = 480;
+			window_mode = "manual";
+			log = true;
+			hide_after_launch = false;
+			status_bar = true;
+			debug = false;
+			allow_multi = false;
+			shot_tip = true;      // 弹日志窗口时提醒「不要截图分享」，新用户默认开
+			priority = "normal";
+			shared = {};
+			accounts = {};
+			account = "";
+		};
+
+		var official = official_dir();
+		if (official) {
+			table.push(cfg.game_paths, { name = "官方目录"; dir = official; official = true });
+			cfg.game_path = official;
+		}
+
+		return cfg;
+	}
+
+	// 官方目录必须在列表里，且标记成 official（界面里禁止删除）
+	function ensure_official(cfg) {
+		var official = official_dir();
+		if (!official) return;
+
+		var exists = false;
+		for i, p in cfg.game_paths {
+			if (p.dir == official) {
+				p.official = true;
+				exists = true;
+			}
+		}
+
+		if (!exists) {
+			// 注意 aardio 的签名是 table.insert(表, 值, 位置)
+			table.insert(cfg.game_paths, { name = "官方目录"; dir = official; official = true }, 1);
+		}
+	}
+
+	// 从旧的 config.txt 迁移一次
+	function migrate_from_txt(cfg) {
+		var file = old_file_path();
+		if (!io.exist(file)) return cfg;
+
+		var text = string.load(file);
+		if (!text) return cfg;
+
+		var lines = string.split(text, '\n');
+		for i, line in lines {
+			line = string.trim(line);
+			if (#line == 0) continue;
+
+			var pos = string.indexOf(line, "=");
+			if (!pos) continue;
+
+			var k = string.trim(string.slice(line, 1, pos - 1));
+			var v = string.trim(string.slice(line, pos + 1));
+
+			if (k == "username") cfg.username = v;
+			elseif (k == "memory") cfg.memory = tonumber(v) or cfg.memory;
+			elseif (k == "version") cfg.version = v;
+			elseif (k == "java") cfg.java = v;
+			elseif (k == "width") cfg.width = tonumber(v) or cfg.width;
+			elseif (k == "height") cfg.height = tonumber(v) or cfg.height;
+			elseif (k == "game_dir") {
+				if (#v > 0) {
+					cfg.game_path = v;
+					var has = false;
+					for j, p in cfg.game_paths {
+						if (p.dir == v) has = true;
+					}
+					if (!has) table.push(cfg.game_paths, { name = "原有目录"; dir = v; official = false });
+				}
+			}
+		}
+
+		return cfg;
+	}
+
+	function read() {
+		var cfg = defaults();
+		var file = file_path();
+
+		if (!io.exist(file)) {
+			cfg = migrate_from_txt(cfg);
+			ensure_official(cfg);
+			normalize_accounts(cfg);
+			save(cfg);
+			return cfg;
+		}
+
+		var data = json.load(file);
+		if (data) {
+			if (data.username !== null) cfg.username = data.username;
+			if (data.memory !== null) cfg.memory = data.memory;
+			if (data.java !== null) cfg.java = data.java;
+			if (data.version !== null) cfg.version = data.version;
+			if (data.game_path !== null) cfg.game_path = data.game_path;
+			if (data.window_mode !== null) cfg.window_mode = data.window_mode;
+			if (data.log !== null) cfg.log = data.log;
+			if (data.hide_after_launch !== null) cfg.hide_after_launch = data.hide_after_launch;
+			if (data.status_bar !== null) cfg.status_bar = data.status_bar;
+			if (data.debug !== null) cfg.debug = data.debug;
+			if (data.allow_multi !== null) cfg.allow_multi = data.allow_multi;
+			if (data.shot_tip !== null) cfg.shot_tip = data.shot_tip;
+			if (data.priority !== null) cfg.priority = data.priority;
+			if (data.shared) cfg.shared = data.shared;
+			if (data.accounts) cfg.accounts = data.accounts;
+			if (data.account !== null) cfg.account = data.account;
+			if (data.width !== null) cfg.width = data.width;
+			if (data.height !== null) cfg.height = data.height;
+			if (data.game_paths and #data.game_paths > 0) cfg.game_paths = compact(data.game_paths);
+			if (data.javas) cfg.javas = compact(data.javas);
+		}
+
+		ensure_official(cfg);
+
+		if (#cfg.game_path == 0 and #cfg.game_paths > 0) {
+			cfg.game_path = cfg.game_paths[1].dir;
+		}
+
+		normalize_accounts(cfg);
+		return cfg;
+	}
+
+	// 账号列表是权威来源，cfg.username 只是「当前账号名」的缓存。
+	// 老配置里只有 username，这里顺手迁移成一个离线账号。
+	function normalize_accounts(cfg) {
+		if (!cfg.accounts) cfg.accounts = {};
+
+		if (#cfg.accounts == 0 and #cfg.username > 0) {
+			table.push(cfg.accounts, { name = cfg.username; type = "offline"; uuid = "" });
+		}
+
+		if (#cfg.accounts == 0) {
+			cfg.account = "";
+			cfg.username = "";
+			return;
+		}
+
+		var want = cfg.account;
+		if (#want == 0) want = cfg.username;
+
+		var found = null;
+		for i, a in cfg.accounts {
+			if (a.name == want) {
+				found = a;
+				break;
+			}
+		}
+
+		if (!found) found = cfg.accounts[1];
+
+		cfg.account = found.name;
+		cfg.username = found.name;
+	}
+
+	// 按名字找账号
+	function find_account(cfg, name) {
+		if (!cfg.accounts) return null;
+
+		for i, a in cfg.accounts {
+			if (a.name == name) return a;
+		}
+
+		return null;
+	}
+
+	function save(cfg) {
+		// username 跟着当前账号走，避免两个字段各说各话
+		if (#(cfg.account or "") > 0) cfg.username = cfg.account;
+		json.save(file_path(), cfg);
+	}
+
+	// 只回写几个字段：各窗口手里的 cfg 是打开时的快照，
+	// 整份写回会把别处刚改的内容（比如 Java 列表）覆盖掉。
+	function save_keys(cfg, keys) {
+		var fresh = read();
+
+		for i, k in keys {
+			fresh[k] = cfg[k];
+		}
+
+		save(fresh);
+	}
+
+	// 数组里可能留 null（删过条目），读出来先清一遍
+	function compact(t) {
+		if (!t) return {};
+
+		var out = {};
+		for(i = 1; #t; 1) {
+			var v = t[i];
+			if (v) table.push(out, v);
+		}
+
+		return out;
+	}
+}

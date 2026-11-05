@@ -1,0 +1,32 @@
+//m3capture.aardio
+
+//让窗口在截图 / 录屏里不可见：SetWindowDisplayAffinity。
+//崩溃窗口用——不希望用户直接截图分享，而是走「打包日志」。
+//
+//取值：
+//  0x11 WDA_EXCLUDEFROMCAPTURE  Win10 2004(19041) 起，窗口在捕获里完全不出现
+//  0x01 WDA_MONITOR             老系统，窗口区域在捕获里变成黑色
+//
+//这两个 API 不在 aardio 的 win.api 声明表里，这里自己加载。
+
+namespace m3capture {
+	// 注意：命名空间里访问全局对象要加 .. 前缀，否则 raw 会被当成命名空间成员（null）
+	var user32 = ..raw.loadDll("user32.dll");
+	var set_affinity = user32.api("SetWindowDisplayAffinity", "int(addr hwnd, INT affinity)");
+
+	// 把窗口排除在截图/录屏之外。返回 true 表示成功。
+	function protect(hwnd) {
+		if (!hwnd) return false;
+
+		if (set_affinity(hwnd, 0x11)) return true;
+		if (set_affinity(hwnd, 0x01)) return true;
+
+		return false;
+	}
+
+	// 取消保护（正常流程用不到，留着以备调试）
+	function unprotect(hwnd) {
+		if (!hwnd) return false;
+		return set_affinity(hwnd, 0x00);
+	}
+}

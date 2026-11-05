@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<project ver="10" name="MMMLauncher" libEmbed="true" icon="C:\Users\DELL\Desktop\MMML\launcher\ICON design\MMMLauncher.ico" ui="win" output="MMMLauncher.exe" CompanyName="MFn" FileDescription="MFn's Minimalism Minecraft Launcher" LegalCopyright="Copyright (C) MFn 2026" ProductName="M^3 Launcher" InternalName="MMMLauncher" FileVersion="0.1.2.3" ProductVersion="0.1.2.3" publishDir="/dist/" dstrip="false" local="false" ignored="false">
+	<file name="main.aardio" path="main.aardio" comment="main.aardio"/>
+	<folder name="资源文件" path="res" embed="true" local="false" ignored="false"/>
+	<folder name="窗体文件" path="dlg" comment="目录" embed="true" local="false" ignored="false">
+		<file name="about.aardio" path="dlg\about.aardio" comment="dlg\about.aardio"/>
+		<file name="accounts.aardio" path="dlg\accounts.aardio" comment="dlg\accounts.aardio"/>
+		<file name="confirm.aardio" path="dlg\confirm.aardio" comment="dlg\confirm.aardio"/>
+		<file name="crash.aardio" path="dlg\crash.aardio" comment="dlg\crash.aardio"/>
+		<file name="crash_test.aardio" path="dlg\crash_test.aardio" comment="dlg\crash_test.aardio"/>
+		<file name="credits.aardio" path="dlg\credits.aardio" comment="dlg\credits.aardio"/>
+		<file name="java.aardio" path="dlg\java.aardio" comment="dlg\java.aardio"/>
+		<file name="java_warn.aardio" path="dlg\java_warn.aardio" comment="dlg\java_warn.aardio"/>
+		<file name="log.aardio" path="dlg\log.aardio" comment="dlg\log.aardio"/>
+		<file name="notice.aardio" path="dlg\notice.aardio" comment="dlg\notice.aardio"/>
+		<file name="paths.aardio" path="dlg\paths.aardio" comment="dlg\paths.aardio"/>
+		<file name="settings.aardio" path="dlg\settings.aardio" comment="dlg\settings.aardio"/>
+		<file name="shot_tip.aardio" path="dlg\shot_tip.aardio" comment="dlg\shot_tip.aardio"/>
+		<file name="theme_test.aardio" path="dlg\theme_test.aardio" comment="dlg\theme_test.aardio"/>
+		<file name="versions.aardio" path="dlg\versions.aardio" comment="dlg\versions.aardio"/>
+	</folder>
+</project>

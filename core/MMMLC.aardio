@@ -1,0 +1,643 @@
+//MMMLC.aardio
+
+//MFn's Minimalist Mclauncher Core Lib
+//Code by MFn.
+
+/*
+	核心只做四件事：读版本 JSON、拼启动参数、解压 natives、启动进程。
+	不下载、不存配置、不管界面。
+
+	调用顺序（main.aardio 里就是这么写的）：
+		var info,err = MMMLC.read_json(游戏目录, 版本名);
+		var ok,err   = MMMLC.prepare_natives(info);
+		var args     = MMMLC.build_args(info, opts);
+		var prcs,pid = MMMLC.launch(info, opts);
+*/
+
+namespace MMMLC{
+	import console;
+	import process;
+	import process.popen;
+	import string;
+	import table;
+	import io;
+	import json;
+	import fsys;
+
+	var LAUNCHER_NAME = "M3LC";
+	var LAUNCHER_VERSION = "0.2";
+
+	/* ---------- 路径小工具 ---------- */
+
+	//Maven 坐标 group:artifact:version[:classifier] → 相对路径
+	function maven_relative_path(parted) {
+		var group = table.concat(string.split(parted[1], "."), "/");
+		var artifact = parted[2];
+		var version = parted[3];
+		var file = artifact ++ "-" ++ version;
+		if (parted[4]) file = file ++ "-" ++ parted[4];
+		return group ++ "/" ++ artifact ++ "/" ++ version ++ "/" ++ file ++ ".jar";
+	}
+
+	//JSON 里的库路径用 / 分隔，转成本地 libraries 下的真实路径
+	function library_path(minecraft_dir, relative) {
+		var local = table.concat(string.split(relative, "/"), '\\');
+		return io.joinpath(minecraft_dir, "libraries") ++ '\\' ++ local;
+	}
+
+	//取文件名（含扩展名）。不用模式匹配，避免转义问题。
+	function file_name_of(path) {
+		var p = string.lastIndexOf(path, "/");
+		var q = string.lastIndexOf(path, '\\');
+		if (!p) p = 0;
+		if (!q) q = 0;
+		if (q > p) p = q;
+		if (p) return string.slice(path, p + 1);
+		return path;
+	}
+
+	/* ---------- 读版本 JSON ---------- */
+
+	function read_json(minecraft_dir, version_name, depth) {
+		depth = depth or 0;
+		if (depth > 8) return null, "版本继承层级过深，可能出现了循环 inheritsFrom";
+
+		minecraft_dir = io.fullpath(minecraft_dir);
+		var version_dir = io.joinpath(minecraft_dir, "versions", version_name);
+		var json_path = io.joinpath(version_dir, version_name + ".json");
+
+		if (!io.exist(json_path)) return null, "找不到版本文件: " + json_path;
+
+		var data, json_err = json.load(json_path);
+		if (!data) return null, "版本 JSON 解析失败: " + tostring(json_err);
+
+		var info = parse_version(data, minecraft_dir, version_name, version_dir);
+
+		//inheritsFrom：Forge / NeoForge / 部分整合包的 JSON 只写差异，
+		//库和参数要沿父版本一路继承下来。
+		if (data.inheritsFrom) {
+			var parent, err = read_json(minecraft_dir, data.inheritsFrom, depth + 1);
+			if (!parent) return null, err;
+			info = merge_version(parent, info);
+		}
+
+		//主 jar。Forge 之类会用 "jar" 字段指向父版本的客户端 jar。
+		//Fabric / Quilt 的版本可能压根没有自己的 jar，只靠 inheritsFrom 用父版本的，
+		//这种情况不算缺失，不用报警。
+		var main_jar = io.joinpath(minecraft_dir, "versions", info.jar_id, info.jar_id + ".jar");
+		if (io.exist(main_jar)) table.push(info.classpath, main_jar);
+		elseif (!data.inheritsFrom) table.push(info.missing, main_jar);
+
+		info.minecraft_dir = minecraft_dir;
+		info.version_dir = version_dir;
+		info.java_version = info.java_version or 8;
+		info.classpath = dedupe(info.classpath);
+
+		return info;
+	}
+
+	//同一个 jar 可能在 JSON 里出现两次（比如 text2speech 的普通条目和 natives 条目），
+	//去重一下，classpath 干净些。
+	function dedupe(list) {
+		var out = {};
+		var seen = {};
+		for i, v in list {
+			if (seen[v]) continue;
+			seen[v] = true;
+			table.push(out, v);
+		}
+		return out;
+	}
+
+	//解析单个版本的 JSON，不做继承
+	function parse_version(data, minecraft_dir, version_name, version_dir) {
+		var info = {
+			id = data.id or version_name;
+			main_class = data.mainClass or "";
+			asset_index = "";
+			assets_dir = io.joinpath(minecraft_dir, "assets");
+			java_version = null;
+			version_type = data.type or "release";
+			game_args = {};
+			jvm_args = {};
+			classpath = {};      //放进 -cp 的 jar
+			missing = {};        //磁盘上找不到的 jar（只警告，不中断）
+			native_jars = {};    //需要解压的 natives 压缩包
+			natives = io.joinpath(version_dir, version_name + "-natives");
+			version_dir = version_dir;
+			jar_id = data.jar or version_name;
+		};
+
+		//资源索引：新版本写在 assetIndex.id，老版本只有一个 assets 字段
+		if (data.assetIndex and data.assetIndex.id) info.asset_index = data.assetIndex.id;
+		elseif (data.assets) info.asset_index = data.assets;
+
+		if (data.javaVersion and data.javaVersion.majorVersion) {
+			info.java_version = data.javaVersion.majorVersion;
+		}
+
+		//启动参数：优先新格式 arguments，其次旧格式 minecraftArguments
+		if (data.arguments and data.arguments.game) {
+			info.game_args = parse_arguments(data.arguments.game);
+		}
+		elseif (data.minecraftArguments) {
+			info.game_args = parse_minecraft_arguments(data.minecraftArguments);
+		}
+
+		if (data.arguments and data.arguments.jvm) {
+			info.jvm_args = parse_arguments(data.arguments.jvm);
+		}
+
+		//库
+		if (data.libraries) {
+			for i, lib in data.libraries {
+				if (!match_rules(lib.rules)) continue;
+				parse_library(lib, minecraft_dir, info);
+			}
+		}
+
+		return info;
+	}
+
+	//坐标里的 natives-windows 只是平台，不包括 CPU 架构：
+	//还有 natives-windows-arm64、natives-windows-x86 这些同名不同架构的包，
+	//它们的 rules 同样是 allow:windows，只能靠名字区分。我们只要 x86_64 的那份。
+	function is_our_native(classifier) {
+		if (!string.startsWith(classifier, "natives-windows")) return false;
+		if (string.indexOf(classifier, "arm64")) return false;
+
+		var i = string.indexOf(classifier, "x86");
+		if (i and !string.indexOf(classifier, "x86_64")) return false; // 32 位
+
+		return true;
+	}
+
+	function parse_library(lib, minecraft_dir, info) {
+		var name = lib.name;
+		if (!name) return;
+
+		var parted = string.split(name, ":");
+		var classifier = parted[4];
+
+		//只提供别家平台本地库的条目，整个跳过（否则解压时会互相覆盖）。
+		if (classifier and string.startsWith(classifier, "natives-")) {
+			if (!is_our_native(classifier)) return;
+		}
+
+		var downloads = lib.downloads;
+
+		//natives 分类名：老格式写在 natives.windows，新格式就是坐标的第四段。
+		var native_classifier = null;
+		if (lib.natives and lib.natives.windows) native_classifier = lib.natives.windows;
+		elseif (classifier and string.startsWith(classifier, "natives-windows")) native_classifier = classifier;
+		//少数老库里会写成 natives-windows-${arch}
+		if (native_classifier) native_classifier = string.replace(native_classifier, "@${arch}", "64");
+
+		var jar = null;
+		var native_jar = null;
+
+		if (downloads) {
+			if (downloads.artifact and downloads.artifact.path) {
+				jar = library_path(minecraft_dir, downloads.artifact.path);
+			}
+
+			if (native_classifier and downloads.classifiers) {
+				var entry = downloads.classifiers[native_classifier];
+				if (entry and entry.path) native_jar = library_path(minecraft_dir, entry.path);
+			}
+			elseif (native_classifier and jar) {
+				//1.19 之后 natives 不再放 classifiers，而是直接作为普通库出现：
+				//这个 jar 既要进 classpath，也要解压到 natives 目录。
+				native_jar = jar;
+			}
+		}
+		elseif (#parted >= 3) {
+			//个别 JSON 不写 downloads，只能按坐标推路径
+			jar = library_path(minecraft_dir, maven_relative_path(parted));
+		}
+
+		if (jar) {
+			if (io.exist(jar)) table.push(info.classpath, jar);
+			//老格式（natives 写在 classifiers 里）的库，artifact 常常只是个占位空包，
+			//缺了也不影响，不用报警。
+			elseif (!lib.natives) table.push(info.missing, jar);
+		}
+
+		if (native_jar) {
+			if (io.exist(native_jar)) {
+				table.push(info.native_jars, {
+					path = native_jar;
+					excludes = lib.extract and lib.extract.exclude;
+				});
+			}
+			else {
+				table.push(info.missing, native_jar);
+			}
+		}
+	}
+
+	//父版本 + 子版本。子版本覆盖自己的字段，参数与库按顺序拼接。
+	function merge_version(parent, child) {
+		var info = {
+			id = child.id;
+			main_class = child.main_class;
+			asset_index = child.asset_index;
+			assets_dir = child.assets_dir;
+			java_version = child.java_version;
+			version_type = child.version_type;
+			game_args = {};
+			jvm_args = {};
+			classpath = {};
+			missing = {};
+			native_jars = {};
+			natives = child.natives;
+			version_dir = child.version_dir;
+			jar_id = child.jar_id;
+		};
+
+		if (#info.main_class == 0) info.main_class = parent.main_class;
+		if (#info.asset_index == 0) info.asset_index = parent.asset_index;
+		if (info.java_version === null) info.java_version = parent.java_version;
+
+		for i, v in parent.game_args { table.push(info.game_args, v); }
+		for i, v in child.game_args { table.push(info.game_args, v); }
+		for i, v in parent.jvm_args { table.push(info.jvm_args, v); }
+		for i, v in child.jvm_args { table.push(info.jvm_args, v); }
+		for i, v in parent.classpath { table.push(info.classpath, v); }
+		for i, v in child.classpath { table.push(info.classpath, v); }
+		for i, v in parent.missing { table.push(info.missing, v); }
+		for i, v in child.missing { table.push(info.missing, v); }
+		for i, v in parent.native_jars { table.push(info.native_jars, v); }
+		for i, v in child.native_jars { table.push(info.native_jars, v); }
+
+		return info;
+	}
+
+	/* ---------- natives ---------- */
+
+	//把 natives 压缩包里的 dll 平铺到 natives 目录。
+	//目录已经存在就认为解压过了（PCL、官方启动器、我们的上次运行都会解压到这里）。
+	function prepare_natives(info, log) {
+		var dir = info.natives;
+
+		if (io.exist(dir)) return true;
+		if (#info.native_jars == 0) return true;
+
+		if (!fsys.createDir(dir)) return null, "无法创建 natives 目录: " + dir;
+
+		import zlib.unzip;
+
+		for i, item in info.native_jars {
+			var fileName_only = file_name_of(item.path);
+			if (log) log("解压 " + fileName_only);
+
+			var zip, err = zlib.unzip(item.path, false);
+			if (!zip) return null, "无法读取 natives 压缩包: " + tostring(err);
+
+			for pos, dirName, fileName, extractPath, fileInfo in zip.eachFile() {
+				if (dirName) continue;
+				if (!fileName) continue;
+				if (string.indexOf(fileName, "META-INF")) continue;
+
+				//1.19 之后的 jar 里文件在 windows/x64/org/... 下面，
+				//必须按文件名平铺，否则 java.library.path 找不到。
+				var target = io.joinpath(dir, file_name_of(fileName));
+				var data = zip.readCurrentFile();
+				if (!data) continue;
+
+				if (!string.save(target, data)) {
+					zip.close();
+					return null, "写 natives 文件失败: " + target;
+				}
+			}
+			zip.close();
+		}
+
+		return true;
+	}
+
+	/* ---------- Java ---------- */
+
+	//找 java.exe：明确指定 > JAVA_HOME > 系统 PATH
+	function find_java(hint) {
+		if (hint) {
+			if (!io.exist(hint)) return null, "找不到指定的 Java: " + hint;
+			return hint;
+		}
+
+		var home = string.getenv("JAVA_HOME");
+		if (home) {
+			var p = io.joinpath(home, "bin", "java.exe");
+			if (io.exist(p)) return p;
+		}
+
+		//交给 Windows 按 PATH 查找
+		return "java.exe";
+	}
+
+	//运行 java -version 取主版本号。
+	//返回 major, err, fatal, version：
+	//  fatal 为真表示 Java 根本起不来，调用方应该直接报错退出；
+	//  version 是完整版本号（1.8.0_511 / 21.0.3），不需要可以忽略。
+	function get_java_version(java) {
+		var prcs, err = process.popen(java, {"-version"});
+		if (!prcs) return null, "无法启动 Java: " + tostring(err), true;
+
+		var text = prcs.readAll();
+		if (!text) return null, "java -version 没有输出", false;
+
+		//Java 8: version "1.8.0_51"；Java 9 以后: version "21.0.3"
+		//注意：aardio 的模式匹配没有 Lua 的 .- 懒匹配，非贪婪要写成 *? / +?
+		var v = string.match(text, 'version "([^"]+)"');
+		if (!v) return null, "无法识别 Java 版本输出", false;
+
+		var parts = string.split(v, ".");
+		var major = tonumber(parts[1]);
+		if (major == 1) major = tonumber(parts[2]);
+		if (!major) return null, "无法识别 Java 版本号: " + v, false;
+
+		return major, null, false, v;
+	}
+
+	/* ---------- 拼参数 ---------- */
+
+	//把参数里的首尾空格去掉；-Dkey= value 这种等号后带空格的写法也一并修正。
+	function normalize_jvm_arg(a) {
+		a = string.trim(a);
+		if (!string.startsWith(a, "-D")) return a;
+
+		var p = string.indexOf(a, "=");
+		if (!p) return a;
+
+		return string.left(a, p) ++ string.trim(string.slice(a, p + 1));
+	}
+
+	function has_token(args, name) {
+		for i, v in args {
+			if (v == name) return true;
+		}
+		return false;
+	}
+
+	function has_token_prefix(args, prefix) {
+		for i, v in args {
+			if (string.startsWith(v, prefix)) return true;
+		}
+		return false;
+	}
+
+	function build_args(info, opts) {
+		if (#info.main_class == 0) return null, "版本 JSON 里没有 mainClass";
+		if (#info.classpath == 0) return null, "classpath 为空，库文件可能一个都没下载";
+
+		var classpath = table.concat(info.classpath, ";");
+
+		//JSON 参数里的占位符 → 真实值
+		var vars = {
+			auth_player_name = opts.username;
+			version_name = info.id;
+			game_directory = opts.work_dir;
+			assets_root = info.assets_dir;
+			assets_index_name = info.asset_index;
+			auth_uuid = opts.uuid;
+			auth_access_token = opts.access_token;
+			user_type = opts.user_type;
+			version_type = opts.version_type or "M3LC";
+			natives_directory = info.natives;
+			launcher_name = LAUNCHER_NAME;
+			launcher_version = LAUNCHER_VERSION;
+			classpath = classpath;
+			library_directory = io.joinpath(info.minecraft_dir, "libraries");
+			classpath_separator = ";";
+			user_properties = "{}";
+			game_assets = io.joinpath(info.assets_dir, "virtual", "legacy");
+			auth_session = "token:" ++ tostring(opts.access_token) ++ ":" ++ tostring(opts.uuid);
+		};
+
+		var args = {};
+
+		//1. JSON 自带的 JVM 参数
+		for i, a in info.jvm_args {
+			table.push(args, normalize_jvm_arg(substitute(a, vars)));
+		}
+
+		//2. JSON 里没有的才补上：内存、natives 路径、classpath
+		if (!has_token_prefix(args, "-Xmx")) {
+			table.push(args, "-Xmx" ++ tostring(opts.memory) ++ "M");
+		}
+
+		//Java 19 以后可以指定控制台编码。统一成 UTF-8，日志里的中文才不会时好时坏。
+		if (opts.java_major and opts.java_major >= 19) {
+			if (!has_token_prefix(args, "-Dstdout.encoding=")) {
+				table.push(args, "-Dstdout.encoding=UTF-8");
+			}
+			if (!has_token_prefix(args, "-Dstderr.encoding=")) {
+				table.push(args, "-Dstderr.encoding=UTF-8");
+			}
+		}
+
+		if (!has_token_prefix(args, "-Djava.library.path=")) {
+			table.push(args, "-Djava.library.path=" + info.natives);
+		}
+		if (!has_token(args, "-cp") and !has_token(args, "-classpath")) {
+			table.push(args, "-cp");
+			table.push(args, classpath);
+		}
+
+		//3. 主类
+		table.push(args, info.main_class);
+
+		//4. 游戏参数
+		var game_args = {};
+		for i, a in info.game_args {
+			table.push(game_args, string.trim(substitute(a, vars)));
+		}
+
+		//窗口尺寸。JSON 里已经有的就不再重复加。
+		if (!has_token(game_args, "--width")) {
+			table.push(game_args, "--width");
+			table.push(game_args, tostring(opts.width));
+			table.push(game_args, "--height");
+			table.push(game_args, tostring(opts.height));
+		}
+
+		for i, a in game_args { table.push(args, a); }
+
+		return args;
+	}
+
+	//找出参数里没被替换掉的占位符，用于提示
+	function unresolved(args) {
+		var list = {};
+		var seen = {};
+
+		for i, a in args {
+			var found = find_placeholders(a);
+			for j, tag in found {
+				if (seen[tag]) continue;
+				seen[tag] = true;
+				table.push(list, tag);
+			}
+		}
+		return list;
+	}
+
+	/* ---------- 启动 ---------- */
+
+	//启动游戏，成功返回进程对象和 PID，失败返回 null,null,错误信息。
+	//这里不用 .bat：直接把参数数组交给 process.popen，由它负责转义，
+	//既不会有空格/引号的问题，也拿得到真正的 java 进程 PID。
+	function launch(info, opts) {
+		var args, err = build_args(info, opts);
+		if (!args) return null, null, err;
+
+		var prcs, perr = process.popen(opts.java, args, {
+			workDir = opts.work_dir;
+
+			//必须显式指定！process.popen 内部强制打开了 STARTF_USESHOWWINDOW，
+			//而 showWindow 默认是 _SW_HIDE，于是游戏的第一个窗口会被创建成隐藏的：
+			//OpenGL 上下文、声音都正常，就是窗口不出现。
+			showWindow = 1/*_SW_NORMAL*/;
+		});
+		if (!prcs) {
+			return null, null, "无法创建游戏进程" + (perr ? ("：" + tostring(perr)) : "");
+		}
+
+		//Java 19 以后我们强制了 UTF-8 输出；更老的版本跟随系统代码页（中文是 GBK）
+		var major = opts.java_major or info.java_version or 8;
+		if (major >= 19) prcs.codepage = 65001;
+		elseif (::Kernel32.GetACP() == 65001) prcs.codepage = 65001;
+		else prcs.codepage = 0;
+
+		return prcs, prcs.process.id;
+	}
+	/* ---------- 版本 JSON 参数解析（原 version_parser 库，合并进来） ---------- */
+
+	//一条 rule 是否匹配当前系统。
+	function match_rule(rule) {
+		if (type(rule) != "table") return false;
+
+		if (rule.os) {
+			//只做 Windows。os.name 省略表示不限制平台。
+			if (rule.os.name && rule.os.name != "windows") return false;
+
+			//默认按 64 位 JVM 判断：x86 专用的参数直接跳过。
+			if (rule.os.arch == "x86") return false;
+
+			//os.version 是正则表达式，一般只用于极少数库，这里不判断。
+		}
+
+		//features 表示"仅当某个可选特性被启用时才使用"。
+		//启动器默认不启用任何可选特性（演示模式、快捷进入等），所以一律不匹配。
+		if (rule.features) return false;
+
+		return true;
+	}
+
+	//整组 rules 是否允许。没有 rules 就是允许。
+	//规则按顺序生效：最后一条匹配的规则说了算，默认不允许。
+	function match_rules(rules) {
+		if (type(rules) != "table" || #rules == 0) return true;
+
+		var allowed = false;
+		for i, rule in rules {
+			if (match_rule(rule)) {
+				allowed = (rule.action == "allow");
+			}
+		}
+		return allowed;
+	}
+
+	//把 arguments.game / arguments.jvm 数组变成原始参数数组。
+	//元素有两种：纯字符串，或者带 rules 的对象。
+	function parse_arguments(list) {
+		var args = {};
+		if (type(list) != "table") return args;
+
+		for i, item in list {
+			if (type(item) == "string") {
+				table.push(args, item);
+			}
+			elseif (type(item) == "table") {
+				if (!match_rules(item.rules)) continue;
+
+				var value = item.value;
+				if (type(value) == "string") {
+					table.push(args, value);
+				}
+				elseif (type(value) == "table") {
+					for k, v in value {
+						if (type(v) == "string") table.push(args, v);
+					}
+				}
+			}
+		}
+		return args;
+	}
+
+	//旧格式 minecraftArguments：一整串用空格分开的参数。
+	function parse_minecraft_arguments(text) {
+		var args = {};
+		if (type(text) != "string") return args;
+
+		//注意：for in 后面必须是函数或表变量，不能直接接返回表的函数调用
+		var parts = string.split(text, " ");
+		for i, part in parts {
+			if (#part > 0) table.push(args, part);
+		}
+		return args;
+	}
+
+	//把 ${name} 换成 vars 里的值。
+	//
+	//不要用 string.split 来做替换：它的分隔符如果是多字符，会按"字符集"拆
+	//（string.split("${a}", "${a}") 会把 $ { a } 每个字符都当成分隔符），
+	//结果就是值被重复拼接很多遍。这里用 indexOf + slice 手动拼。
+	function substitute(text, vars) {
+		if (type(text) != "string") return text;
+		if (type(vars) != "table") return text;
+
+		for name, value in vars {
+			if (value === null) continue;
+
+			var tag = "${" ++ name ++ "}";
+			if (!string.indexOf(text, tag)) continue;
+
+			var out = "";
+			var pos = 1;
+			var len = #text;
+
+			while (true) {
+				var i = string.indexOf(text, tag, pos);
+				if (!i) break;
+
+				if (i > pos) out = out ++ string.slice(text, pos, i - 1);
+				out = out ++ tostring(value);
+				pos = i + #tag;
+			}
+
+			if (pos <= len) out = out ++ string.slice(text, pos);
+			text = out;
+		}
+		return text;
+	}
+
+	//找出一段文本里所有 ${...} 占位符，用于提示"没替换掉的参数"。
+	function find_placeholders(text) {
+		var list = {};
+		if (type(text) != "string") return list;
+
+		var pos = 1;
+		while (true) {
+			var i, j = string.indexOf(text, "${", pos);
+			if (!i) break;
+
+			var k = string.indexOf(text, "}", j + 1);
+			if (!k) break;
+
+			table.push(list, string.slice(text, i, k));
+			pos = k + 1;
+		}
+		return list;
+	}
+}

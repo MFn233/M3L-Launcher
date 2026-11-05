@@ -1,0 +1,472 @@
+//m3version.aardio
+
+//读版本 JSON，判断这个版本「实际上是什么」：真正的游戏版本 + 装了什么加载器。
+//版本文件夹名可能被改过（比如叫 "1.12.2" 其实是 1.7.10），所以不能只看名字。
+
+namespace m3version {
+	import io;
+	import json;
+	import fsys;
+	import string;
+	import table;
+
+	// 沿 inheritsFrom 往上读，返回从子到父的链条
+	function read_chain(minecraft_dir, name) {
+		var chain = {};
+		var cur = name;
+		var depth = 0;
+
+		while (cur and depth < 8) {
+			// 这里不用 io.joinpath：它会把超过 MAX_PATH 的路径**截断**，
+			// 版本名很长时就会指向一个不存在的文件。直接用字符串拼。
+			var file = minecraft_dir ++ "\versions\" ++ cur ++ "\" ++ cur ++ ".json";
+
+			if (!io.exist(file) and #file >= 240) {
+				// 超长路径改用 Win32 扩展路径前缀
+				var long_file = "\\?\" ++ file;
+				if (io.exist(long_file)) file = long_file;
+			}
+
+			if (!io.exist(file)) break;
+
+			var data = json.load(file);
+			if (!data) break;
+
+			table.push(chain, { name = cur; data = data });
+			cur = data.inheritsFrom;
+			depth = depth + 1;
+		}
+
+		return chain;
+	}
+
+	// Maven 坐标 group:artifact:version[:classifier] 里取版本号
+	function lib_version(maven) {
+		var parts = string.split(maven, ":");
+		return parts[3] or "";
+	}
+
+	// 加载器本体坐标：精确到 artifact，不能用 group 关键字。
+	// 同一个 group 下还有一堆辅助库——Forge 的版本 JSON 里就有
+	//   net.minecraftforge:forgespi:7.0.1
+	//   net.minecraftforge:coremods:5.2.4
+	//   net.minecraftforge:unsafe:0.9.2
+	// 按 group 匹配会把它们当成第二个「Forge 7.0.1」，必须写死 artifact。
+	EXACT = {
+		{ "net.minecraftforge:forge:"; "Forge" };
+		{ "net.minecraftforge:fmlloader:"; "Forge" };
+		{ "net.neoforged:neoforge:"; "NeoForge" };
+		{ "net.fabricmc:fabric-loader:"; "Fabric" };
+		{ "org.quiltmc:quilt-loader:"; "Quilt" };
+		{ "com.mumfrey:liteloader:"; "LiteLoader" };
+		{ "optifine:optifine:"; "OptiFine" };
+		{ "org.dimdev:rift:"; "Rift" };
+		{ "com.cleanroommc:cleanroom-loader:"; "Cleanroom" };
+		{ "com.cleanroommc:cleanroom:"; "Cleanroom" };
+	};
+
+	// 上一个都认不出时的兜底：只看 group 关键字，拿不到版本号（标签不带版本）。
+	// 只在整条链上一个本体都没找到才用，避免把辅助库当成加载器。
+	FALLBACK = {
+		{ "neoforged"; "NeoForge" };
+		{ "cleanroommc"; "Cleanroom" };
+		{ "dimdev"; "Rift" };
+		{ "quiltmc"; "Quilt" };
+		{ "fabricmc"; "Fabric" };
+		{ "minecraftforge"; "Forge" };
+	};
+
+	// 判断一个 Maven 坐标是不是某个加载器的本体；认不出返回空串
+	function loader_of(maven) {
+		if (#maven == 0) return "", "";
+
+		var m = string.lower(maven);
+
+		for i, rule in EXACT {
+			if (string.startsWith(m, rule[1])) {
+				return rule[2], lib_version(maven);
+			}
+		}
+
+		return "", "";
+	}
+
+	// 兜底：按 group 关键字猜，不带版本号
+	function loader_fallback(maven) {
+		if (#maven == 0) return "";
+
+		var m = string.lower(maven);
+
+		for i, rule in FALLBACK {
+			if (string.indexOf(m, rule[1])) return rule[2];
+		}
+
+		return "";
+	}
+
+	// libraries 里没有线索时，再按 mainClass 里的关键字猜一次
+	function loader_of_class(main_class) {
+		if (type(main_class) != "string") return "";
+
+		var m = string.lower(main_class);
+
+		if (string.indexOf(m, "cleanroom")) return "Cleanroom";
+		if (string.indexOf(m, "rift")) return "Rift";
+		if (string.indexOf(m, "quilt")) return "Quilt";
+		if (string.indexOf(m, "fabric")) return "Fabric";
+		if (string.indexOf(m, "neoforge")) return "NeoForge";
+		if (string.indexOf(m, "forge")) return "Forge";
+
+		return "";
+	}
+
+	// 返回 { game, loader, text, ok }
+	// 从一段文本里截出开头的版本号：1.12.2-OptiFine_G5 → 1.12.2
+	// 注意：这里全用 [0-9] / [.] 这种字符类写法，不用 %d / %.，
+	// 免得在字符类里出现转义歧义；也不要写捕获组（string.match 会返回捕获而不是整段匹配）。
+	// 从一段文本里认出游戏版本号。除了 1.12.2 这种正式版，还要认：
+	//   快照   24w33a / 13w41b
+	//   远古   b1.7.3 / a1.2.6
+	// 注意：全用 [0-9] / [.] 字符类，不用 %d / %.；也不要写捕获组
+	//（string.match 有捕获组时返回捕获而不是整段匹配）。
+	function game_of(text) {
+		if (type(text) != "string") return null;
+
+		var s = string.trim(text);
+		if (#s == 0) return null;
+
+		// 快照：24w33a
+		var v = string.match(s, "^[0-9][0-9]w[0-9][0-9][a-z]");
+		if (v) return v;
+
+		// 远古 alpha / beta：b1.7.3、a1.2.6
+		v = string.match(s, "^[ab][0-9]+[.][0-9]+[.0-9]*");
+		if (v) return v;
+
+		// 正式版 / 预发布：1.20.1、1.12.2、1.7.10
+		return string.match(s, "^[0-9]+[.][0-9]+[.0-9]*");
+	}
+
+	// 整段就是一个版本号时原样返回（含快照 / 预发布 / 远古 beta）
+	function version_token(text) {
+		if (type(text) != "string") return null;
+
+		var s = string.trim(text);
+		if (#s == 0) return null;
+
+		if (string.match(s, "^[0-9]+[.][0-9]+[.0-9]*$")) return s;
+		if (string.match(s, "^[0-9][0-9]w[0-9][0-9][a-z]$")) return s;
+		if (string.match(s, "^[ab][0-9]+[.][0-9]+[.0-9]*$")) return s;
+		// 预发布 / 快照命名：26.2-pre-4、1.20.1-pre2、1.20.1-rc1、26.1-snapshot-4
+		// 注意版本号可能是三段（1.20.1），所以前缀用 [.0-9]* 吃住后面的小数段
+		if (string.match(s, "^[0-9]+[.][0-9]+[.0-9]*%-snapshot%-?[0-9]+$")) return s;
+		if (string.match(s, "^[0-9]+[.][0-9]+[.0-9]*%-pre%-?[0-9]+$")) return s;
+		if (string.match(s, "^[0-9]+[.][0-9]+[.0-9]*%-rc%-?[0-9]+$")) return s;
+
+		return null;
+	}
+
+	// 加载器版本号里如果带着游戏版本前缀，去掉：1.12.2-14.23.5.2860 → 14.23.5.2860
+	function strip_game(ver, game) {
+		if (#ver == 0 or #game == 0) return ver;
+		if (!string.startsWith(ver, game)) return ver;
+
+		var rest = string.slice(ver, #game + 1);
+		while (#rest > 0) {
+			var c = string.slice(rest, 1, 1);
+			if (c == "-" or c == "_") rest = string.slice(rest, 2);
+			else break;
+		}
+		if (#rest == 0) return ver;
+		return rest;
+	}
+
+	// 下载器（MMM-DL）在版本目录里写的边车文件：<版本目录>\.m3l.json
+	// 例：{"game":"1.20.1","loader":"Fabric","loader_version":"0.19.3","source":"mmmd"}
+	// 有这个文件就说明版本是下载器装的，里面的信息比任何推断都可靠。
+	function read_sidecar(minecraft_dir, name) {
+		if (!minecraft_dir or !name) return null;
+
+		var file = minecraft_dir ++ "\versions\" ++ name ++ "\.m3l.json";
+		if (!io.exist(file)) return null;
+
+		var data = json.load(file);
+		if (type(data) != "table") return null;
+
+		return data;
+	}
+
+	// 自愈：把版本目录里的 JSON 文件名和 id 归位（做法同 HMCL）。
+	// 场景：用户在资源管理器里改了文件夹名，或目录里只有一个名字不对的 json。
+	// 返回 changed, detail —— detail 是修不了时的原因，给调试日志用。
+	function repair(minecraft_dir, name) {
+		if (!minecraft_dir or !name) return false, "参数为空";
+
+		var dir = minecraft_dir ++ "\versions\" ++ name;
+		if (!io.exist(dir)) return false, "版本目录不存在：" ++ dir;
+
+		var file = dir ++ "\" ++ name ++ ".json";
+		var changed = false;
+		var detail = null;
+
+		// 1) <名字>.json 不存在：从目录里挑一个版本 JSON 改名过来
+		if (!io.exist(file)) {
+			var files = fsys.list(dir);
+			var cands = {};
+
+			// 注意：fsys.list 返回的表里，每个文件名既在数组部分又在哈希部分
+			// （files[1]=名字，files[名字]=完整路径）。必须用数字下标遍历，否则会数两遍。
+			if (type(files) == "table") {
+				for i = 1; #files; 1 {
+					var fname = files[i];
+					if (!fname) continue;
+					if (string.startsWith(fname, ".")) continue;   // 跳过边车文件 .m3l.json
+					if (!string.endsWith(string.lower(fname), ".json")) continue;
+
+					table.push(cands, fname);
+				}
+			}
+
+			var pick = null;
+
+			if (#cands == 1) {
+				pick = cands[1];
+			}
+			elseif (#cands > 1) {
+				// 多个候选：优先选「以目录名开头」的那个（目录 1.12.2-OptiFine_G5 → 文件 1.12.2-OptiFine_G5-1111.json）
+				for i, fname in cands {
+					if (!string.startsWith(fname, name)) continue;
+
+					if (pick) {
+						pick = null;   // 有两个都像，不猜
+						break;
+					}
+
+					pick = fname;
+				}
+			}
+
+			if (pick) {
+				if (fsys.rename(dir ++ "\" ++ pick, file)) {
+					changed = true;
+				}
+				else {
+					detail = "改名失败：" ++ pick;
+				}
+			}
+			else {
+				detail = "目录里有 " ++ #cands ++ " 个 json，判断不出该用哪个";
+			}
+		}
+
+		if (!io.exist(file)) return changed, detail;
+
+		// 2) JSON 里的 id 归一化，并让客户端 jar 也跟着目录名走
+		var data = json.load(file);
+		if (type(data) == "table") {
+			var need_save = false;
+
+			if (data.id != name) {
+				data.id = name;
+				need_save = true;
+			}
+
+			// jar 字段指向旧名字：把文件改名过来，字段也改掉
+			var jar = data.jar;
+			if (type(jar) == "string" and #jar > 0 and jar != name) {
+				var from = dir ++ "\" ++ jar ++ ".jar";
+				var to = dir ++ "\" ++ name ++ ".jar";
+
+				if (io.exist(from) and !io.exist(to)) {
+					if (fsys.rename(from, to)) {
+						data.jar = name;
+						need_save = true;
+					}
+				}
+			}
+			elseif (type(jar) != "string" or #jar == 0) {
+				// 没有 jar 字段时，MC 按 id 找 <名字>.jar：目录里唯一的 jar 就改名过来
+				var to = dir ++ "\" ++ name ++ ".jar";
+				if (!io.exist(to)) {
+					var files = fsys.list(dir);
+					var cands = {};
+
+					if (type(files) == "table") {
+						for i = 1; #files; 1 {
+							var f = files[i];
+							if (!f) continue;
+							if (!string.endsWith(string.lower(f), ".jar")) continue;
+
+							table.push(cands, f);
+						}
+					}
+
+					if (#cands == 1) {
+						if (fsys.rename(dir ++ "\" ++ cands[1], to)) need_save = true;
+					}
+				}
+			}
+
+			if (need_save) {
+				json.save(file, data);
+				changed = true;
+			}
+		}
+
+		return changed, detail;
+	}
+
+	// 游戏版本：边车 → clientVersion → inheritsFrom → id → 文件夹名
+	function detect_game(chain, side, name) {
+		// 0) 边车文件
+		if (side and type(side.game) == "string") {
+			var t = string.trim(side.game);
+			if (#t > 0) return t;
+		}
+
+		// 1) clientVersion —— Forge / Fabric / OptiFine 的 JSON 里有，原版没有。
+		//    它可能是 24w33a、b1.7.3，所以原样使用，不用正则校验。
+		var found = null;
+		for i, item in chain {
+			var cv = item.data.clientVersion;
+			if (type(cv) != "string") continue;
+
+			var t = string.trim(cv);
+			if (#t > 0) found = t;
+		}
+		if (found) return found;
+
+		// 2) inheritsFrom（父版本名通常就是纯版本号）
+		for i, item in chain {
+			var v = game_of(item.data.inheritsFrom);
+			if (v) found = v;
+		}
+		if (found) return found;
+
+		// 3) id —— 原版没有 clientVersion，就是靠它认版本。
+		//    id 整段是版本号时原样用（26.1-snapshot-4、26.2-pre-4 这类快照命名，
+		//    用正则截会丢后半段）；否则截前缀（1.12.2-OptiFine_G5 → 1.12.2）。
+		for i, item in chain {
+			var id = item.data.id;
+			if (type(id) != "string") continue;
+
+			var t = version_token(id);
+			if (!t) t = game_of(id);
+			if (t) found = t;
+		}
+		if (found) return found;
+
+		// 4) 最后才退到文件夹名：先看开头，再在整段里找一次
+		//    （LabyMod-4-1.12.2-xxx 这种名字，版本号在中间）
+		var v = game_of(name);
+		if (!v) v = string.match(name, "[0-9]+[.][0-9]+[.0-9]*");
+		if (v) return v;
+
+		return "未知";
+	}
+
+	// 加载器标签：边车优先，其次才是库列表里的本体、group 关键字、主类
+	function detect_loaders(chain, side, game) {
+		var tags = {};
+		var seen = {};
+
+		// 0) 边车文件：下载器写的一定准，直接用
+		if (side and type(side.loader) == "string" and #string.trim(side.loader) > 0) {
+			var tag = string.trim(side.loader);
+			if (type(side.loader_version) == "string" and #string.trim(side.loader_version) > 0) {
+				tag = tag ++ " " ++ string.trim(side.loader_version);
+			}
+
+			table.push(tags, tag);
+			return tags;
+		}
+
+		// 1) 只在库列表里找「本体」，同一个加载器只记一次
+		//    （Forge 的 JSON 还会带 forgespi / coremods 之类的辅助库，不能算进去）
+		for i, item in chain {
+			var libs = item.data.libraries;
+			if (type(libs) != "table") continue;
+
+			for k, lib in libs {
+				var maven = lib.name or "";
+
+				var loader, ver = loader_of(maven);
+				if (#loader == 0) continue;
+				if (seen[loader]) continue;
+
+				seen[loader] = true;
+
+				ver = strip_game(ver, game);
+
+				var tag = loader;
+				if (#ver > 0) tag = loader ++ " " ++ ver;
+				table.push(tags, tag);
+			}
+		}
+
+		// 2) 一个本体都没找到：按 group 关键字兜底，**只取第一个**。
+		//    兜底本来就只是猜，猜出「NeoForge + Forge」这种两串更误导人。
+		if (#tags == 0) {
+			for i, item in chain {
+				var libs = item.data.libraries;
+				if (type(libs) != "table") continue;
+
+				for k, lib in libs {
+					var guess = loader_fallback(lib.name or "");
+					if (#guess == 0) continue;
+
+					seen[guess] = true;
+					table.push(tags, guess);
+					break;
+				}
+
+				if (#tags > 0) break;
+			}
+		}
+
+		// 3) 还找不到：按主类名猜
+		if (#tags == 0) {
+			for i, item in chain {
+				var guess = loader_of_class(item.data.mainClass);
+				if (#guess > 0 and !seen[guess]) {
+					seen[guess] = true;
+					table.push(tags, guess);
+				}
+			}
+		}
+
+		return tags;
+	}
+
+	// 返回 { game, loader, text, ok }
+	//   game  : 真正的游戏版本（1.12.2 / 1.7.10 / 24w33a …）
+	//   loader: Forge 14.23.5.2860 + OptiFine HD_U_G5 / 原版
+	//   text  : "1.12.2（Forge …）"
+	function describe(minecraft_dir, name) {
+		var out = { game = name; loader = ""; text = ""; ok = false };
+
+		var side = read_sidecar(minecraft_dir, name);
+		var chain = read_chain(minecraft_dir, name);
+
+		// JSON 和边车都没有：只能从文件夹名里抠
+		if (#chain == 0 and !side) {
+			var v = game_of(name);
+			if (v) out.game = v;
+			else out.game = "未知";
+
+			out.loader = "读不到 JSON";
+			out.text = out.game ++ "（读不到 JSON）";
+			return out;
+		}
+
+		out.ok = true;
+		out.game = detect_game(chain, side, name);
+
+		var tags = detect_loaders(chain, side, out.game);
+		if (#tags == 0) out.loader = "原版";
+		else out.loader = table.concat(tags, " + ");
+
+		out.text = out.game ++ "（" ++ out.loader ++ "）";
+		return out;
+	}
+}

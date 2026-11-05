@@ -1,0 +1,101 @@
+//m3list.aardio
+
+//列表小工具：所有管理窗口共用。
+//
+//目前只做一件事：打开窗口时把列宽调成「都能看见」——
+//太窄的列拉回最小宽度，总宽超过可视区域的等比压缩，
+//这样列数一多也不会把最后一列挤出屏幕。
+//
+//（不做「拖动时限制最小宽度」：系统资源管理器是在拖动过程中由表头自己卡住的，
+//  aardio 里收不到表头通知，只能用定时器事后纠正，手感和系统完全不一致，故放弃。）
+
+namespace m3list {
+	import math;
+	import table;
+
+	// 每列最小宽度（参数没传时用这个）
+	function min_width_of(min_width) {
+		if (min_width and min_width > 0) return min_width;
+		return 56;
+	}
+
+	// 打开窗口时用：先保证最小宽度，再把总宽压进可视区域。
+	// 用 setColumnWidth（底层 LVM_SETCOLUMNWIDTH）逐列改，
+	// 不要整体赋值 columns —— 那个 setter 是「删掉所有列再重建」，又重又不刷新。
+	function fit(ctrl, min_width) {
+		if (!ctrl) return;
+
+		var cols = ctrl.columns;
+		if (type(cols) != "table" or #cols == 0) return;
+
+		var minw = min_width_of(min_width);
+
+		// 列宽是按「逻辑像素」填的（DSG 里的数字），而 getRect 返回的是**设备像素**。
+		// 150% 缩放下两者差 1.5 倍，不换算会把「放不下」误判成「放得下」。
+		var dpi = ctrl.dpiScaleX or 1;
+		if (dpi <= 0) dpi = 1;
+
+		var rc = ctrl.getRect();
+		// 留出竖向滚动条和边框的位置
+		var avail = (rc.right - rc.left) / dpi - 22;
+		if (avail <= 80) return;
+
+		var out = {};
+		var changed = false;
+
+		for i, c in cols {
+			var w = c[2] or 100;
+			if (w < minw) {
+				w = minw;
+				changed = true;
+			}
+			table.push(out, { c[1]; w });
+		}
+
+		var total = 0;
+		for i, c in out {
+			total = total + c[2];
+		}
+
+		if (total > avail) {
+			var scale = avail / total;
+			for i, c in out {
+				var w = math.floor(c[2] * scale);
+				if (w < minw) w = minw;
+				c[2] = w;
+			}
+
+			// 保底宽度加起来可能还超，从最宽的列里扣
+			var guard = 0;
+			while (guard < 20) {
+				var sum = 0;
+				for i, c in out {
+					sum = sum + c[2];
+				}
+
+				if (sum <= avail) break;
+
+				var widest = 1;
+				for i, c in out {
+					if (c[2] > out[widest][2]) widest = i;
+				}
+
+				if (out[widest][2] <= minw) break;
+
+				var target = out[widest][2] - (sum - avail);
+				if (target < minw) target = minw;
+				out[widest][2] = target;
+
+				guard = guard + 1;
+			}
+
+			changed = true;
+		}
+
+		if (changed) {
+			for i, c in out {
+				ctrl.setColumnWidth(c[2], i);
+			}
+		}
+	}
+}

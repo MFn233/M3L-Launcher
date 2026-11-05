@@ -1,0 +1,268 @@
+//dlg/accounts.aardio
+
+//用户配置：管理多个账号（目前只支持离线），可以改离线 UUID。
+
+import win.ui;
+import m3theme;
+import m3list;
+import m3config;
+import crypt;
+import string;
+/*DSG{{*/
+var winform = win.form(text="用户配置";right=600;bottom=400;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+btnAdd={cls="plus";text="添加离线账号";left=16;top=340;right=136;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=7};
+btnApply={cls="plus";text="应用修改";left=240;top=340;right=376;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=9};
+btnClose={cls="plus";text="关闭";left=512;top=340;right=584;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=11};
+btnCurrent={cls="plus";text="设为当前";left=384;top=340;right=504;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=10};
+btnDelete={cls="plus";text="删除";left=144;top=340;right=232;bottom=372;font=LOGFONT(name='Microsoft YaHei');z=8};
+editName={cls="edit";left=72;top=300;right=272;bottom=324;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=4};
+editUuid={cls="edit";left=324;top=300;right=584;bottom=324;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=6};
+lblHint={cls="static";left=16;top=12;right=584;bottom=32;font=LOGFONT(h=-11;name='Microsoft YaHei');z=1};
+lblName={cls="static";text="用户名";left=16;top=304;right=68;bottom=324;font=LOGFONT(name='Microsoft YaHei');z=3};
+lblUuid={cls="static";text="UUID";left=280;top=304;right=320;bottom=324;font=LOGFONT(name='Microsoft YaHei');z=5};
+listAcc={cls="listview";left=16;top=38;right=584;bottom=290;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei');z=2}
+)
+/*}}*/
+
+m3theme.note(winform.lblHint);
+m3theme.note(winform.lblName);
+m3theme.note(winform.lblUuid);
+m3theme.field(winform.editName);
+m3theme.field(winform.editUuid);
+
+m3theme.button(winform.btnAdd);
+m3theme.button(winform.btnDelete);
+m3theme.button(winform.btnApply);
+m3theme.button(winform.btnCurrent);
+m3theme.ghost(winform.btnClose);
+
+var cfg = null;
+var rows = {};
+var selected = null;
+
+function render() {
+	winform.listAcc.clear();
+	rows = {};
+
+	for i, a in cfg.accounts {
+		var mark = "";
+		if (a.name == cfg.account) mark = "[当前] ";
+
+		var type_text = "离线";
+		if (a.type == "msa" or a.type == "mojang") type_text = "正版";
+
+		var uuid_text = a.uuid or "";
+		if (#uuid_text == 0) {
+			// 留空 = 按用户名自动生成，这里直接算出实际会用的值
+			uuid_text = crypt.md5("OfflinePlayer:" ++ (a.name or ""));
+		}
+
+		winform.listAcc.addItem({ mark ++ a.name; type_text; uuid_text });
+		table.push(rows, i);
+	}
+
+	// 按名字找回选中项
+	if (selected) {
+		var at = 0;
+		for i, idx in rows {
+			var a = cfg.accounts[idx];
+			if (a and a.name == selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) {
+			winform.listAcc.selIndex = at;
+		}
+		else {
+			selected = null;
+		}
+	}
+
+	if (#rows == 0) {
+		winform.lblHint.text = "请点击「添加离线账号」创建一个账号。";
+	}
+	else {
+		winform.lblHint.text = "共 " ++ #rows ++ " 个账号。UUID 留空 = 按用户名自动生成。";
+	}
+}
+
+function current_index() {
+	var i = winform.listAcc.selIndex;
+	if (i > 0 and i <= #rows) return rows[i];
+
+	if (!selected) return 0;
+
+	for i, a in cfg.accounts {
+		if (a.name == selected) return i;
+	}
+
+	return 0;
+}
+
+winform.listAcc.onSelChanged = function(sel, item, subItem, nm) {
+	var i = winform.listAcc.selIndex;
+	if (i <= 0 or i > #rows) return;
+
+	var a = cfg.accounts[rows[i]];
+	if (!a) return;
+
+	selected = a.name;
+	winform.editName.text = a.name or "";
+	winform.editUuid.text = a.uuid or "";
+}
+
+// 32 位十六进制
+function is_hex32(s) {
+	if (#s != 32) return false;
+
+	for i = 1; 32; 1 {
+		var c = string.slice(s, i, i);
+		if (!string.indexOf('0123456789abcdefABCDEF', c)) return false;
+	}
+
+	return true;
+}
+
+winform.btnAdd.oncommand = function(id, event) {
+	cfg.accounts = cfg.accounts or {};
+
+	// 起一个不重名的默认名字：player / player2 / player3 ...
+	var name = "player";
+	var n = 1;
+	while (m3config.find_account(cfg, name)) {
+		n = n + 1;
+		name = "player" ++ n;
+	}
+
+	table.push(cfg.accounts, { name = name; type = "offline"; uuid = "" });
+
+	selected = name;
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	render();
+	winform.lblHint.text = "已添加离线账号：" ++ name ++ "，可以在下方修改离线用户名。";
+}
+
+winform.btnDelete.oncommand = function(id, event) {
+	var i = current_index();
+	if (i == 0) {
+		winform.lblHint.text = "请先选择一个账号。";
+		return;
+	}
+
+	var name = cfg.accounts[i].name;
+
+	// 先确认，避免误删（自定义的 UUID 删掉就没了）
+	var show_name = name;
+	if (#show_name > 20) show_name = string.slice(show_name, 1, 20) ++ "…";
+
+	var frm = winform.loadForm("/dlg/confirm.aardio");
+	frm.lblMsg.text = "确定删除账号「" ++ show_name ++ "」吗？" ++ '\r\n\r\n' ++ "自定义的 UUID 也会删除，不可恢复。";
+	if (!frm.doModal(winform)) return;
+
+	// 重建数组，避免 table.remove 之后留下空洞
+	var list = {};
+	for k, a in cfg.accounts {
+		if (k != i) table.push(list, a);
+	}
+	cfg.accounts = list;
+
+	if (cfg.account == name) {
+		if (#cfg.accounts > 0) cfg.account = cfg.accounts[1].name;
+		else cfg.account = "";
+	}
+
+	selected = null;
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	render();
+	winform.lblHint.text = "已删除账号：" ++ name;
+}
+
+winform.btnApply.oncommand = function(id, event) {
+	var i = current_index();
+	if (i == 0) {
+		winform.lblHint.text = "请先选择一个账号。";
+		return;
+	}
+
+	var name = string.trim(winform.editName.text);
+	if (#name == 0) {
+		winform.lblHint.text = "用户名不能为空。";
+		return;
+	}
+
+	// 重名检查（跳过自己）
+	for k, a in cfg.accounts {
+		if (k != i and a.name == name) {
+			winform.lblHint.text = "已有同名账号。";
+			return;
+		}
+	}
+
+	// UUID：留空 = 按用户名自动生成；填了就必须是 32 位十六进制
+	var uuid = string.trim(winform.editUuid.text);
+	uuid = string.replace(uuid, "-", "");
+	if (#uuid > 0 and !is_hex32(uuid)) {
+		winform.lblHint.text = "UUID 必须是 32 位十六进制（可以带横线），留空则自动生成。";
+		return;
+	}
+
+	var old_name = cfg.accounts[i].name;
+
+	cfg.accounts[i].name = name;
+	cfg.accounts[i].uuid = uuid;
+
+	if (cfg.account == old_name) cfg.account = name;
+
+	selected = name;
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	render();
+	winform.lblHint.text = "已保存账号：" ++ name;
+}
+
+winform.btnCurrent.oncommand = function(id, event) {
+	var i = current_index();
+	if (i == 0) {
+		winform.lblHint.text = "请先选择一个账号。";
+		return;
+	}
+
+	cfg.account = cfg.accounts[i].name;
+	selected = cfg.account;
+
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	render();
+	winform.lblHint.text = "当前账号：" ++ cfg.account;
+}
+
+winform.btnClose.oncommand = function(id, event) {
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	winform.endModal(true);
+}
+
+winform.onCancel = function() {
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	winform.endModal(true);
+}
+
+// ---------- 初始化 ----------
+
+cfg = m3config.read();
+
+winform.listAcc.fullRow = true;
+winform.listAcc.columns = {
+	{ "用户名"; 160 };
+	{ "登录方式"; 100 };
+	{ "UUID"; 280 };
+};
+
+// UUID 很长，按比例压缩后靠省略号截断，保证三列都在视野内
+m3list.fit(winform.listAcc);
+
+// 列宽只在打开窗口时规整一次；拖动不干预
+
+render();
+
+return winform;
