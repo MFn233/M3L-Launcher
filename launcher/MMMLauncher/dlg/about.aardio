@@ -23,7 +23,7 @@ m3theme.note(winform.lblBody);
 m3theme.note(winform.lblBody2);
 m3theme.note(winform.lblBody3);
 m3theme.note(winform.lblVer);
-m3theme.button(winform.btnOk);
+m3theme.primary(winform.btnOk);
 m3theme.ghost(winform.btnCredits);
 
 // 版本号规则：x.x.x.x，最后一段是 aardio 自增的内部构建号，关于界面只显示前三位。

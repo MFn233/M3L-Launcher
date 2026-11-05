@@ -17,7 +17,7 @@ lblSub={cls="static";left=24;top=92;right=536;bottom=114;font=LOGFONT(name='Micr
 
 m3theme.ink(winform.lblBig);
 m3theme.note(winform.lblSub);
-m3theme.button(winform.btnOk);
+m3theme.primary(winform.btnOk);
 
 winform.lblBig.text = "请勿直接截图分享此窗口！！！";
 

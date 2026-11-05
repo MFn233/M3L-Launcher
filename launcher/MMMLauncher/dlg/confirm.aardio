@@ -16,8 +16,8 @@ btnOk={cls="plus";text="确定";left=356;top=126;right=436;bottom=158;font=LOGFO
 /*}}*/
 
 // 主题从 m3theme 取，不再各窗口各写一套
-m3theme.button(winform.btnOk);
-m3theme.button(winform.btnCancel);
+m3theme.primary(winform.btnOk);
+m3theme.ghost(winform.btnCancel);
 
 winform.btnOk.oncommand = function(id, event) {
 	winform.endModal(true);

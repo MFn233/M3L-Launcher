@@ -14,7 +14,7 @@ btnOk={cls="plus";text="确定";left=356;top=116;right=436;bottom=148;font=LOGFO
 )
 /*}}*/
 
-m3theme.button(winform.btnOk);
+m3theme.primary(winform.btnOk);
 m3theme.ink(winform.lblMsg);
 
 winform.btnOk.oncommand = function(id, event) {

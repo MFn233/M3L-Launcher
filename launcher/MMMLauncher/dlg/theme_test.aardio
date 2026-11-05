@@ -16,6 +16,7 @@ lblSec1={cls="static";text="按钮";left=24;top=90;right=200;bottom=110;font=LOG
 btnPrimary={cls="plus";text="主要按钮";left=24;top=116;right=164;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
 btnGhost={cls="plus";text="次要按钮";left=172;top=116;right=312;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=6};
 btnDisabled={cls="plus";text="禁用按钮";left=320;top=116;right=460;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=7};
+btnDanger={cls="plus";text="危险按钮";left=468;top=116;right=596;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=29};
 lblSec2={cls="static";text="分隔线 / 文字";left=24;top=162;right=300;bottom=182;font=LOGFONT(name='Microsoft YaHei';h=-11);z=8};
 line2={cls="plus";text="";left=24;top=188;right=596;bottom=189;z=9};
 lblInk={cls="static";text="主要文字";left=24;top=196;right=200;bottom=216;font=LOGFONT(name='Microsoft YaHei';h=-12);z=10};
@@ -41,11 +42,12 @@ lblDpi={cls="static";text="";left=204;top=566;right=488;bottom=598;font=LOGFONT(
 /*}}*/
 
 // 全部样式从主题库来，这里同时也是 m3theme 的展示页
-m3theme.button(winform.btnPrimary);
+m3theme.primary(winform.btnPrimary);
 m3theme.ghost(winform.btnGhost);
 m3theme.button(winform.btnDisabled);
+m3theme.danger(winform.btnDanger);
 m3theme.button(winform.btnCrashTest);
-m3theme.button(winform.btnClose);
+m3theme.ghost(winform.btnClose);
 
 m3theme.rule(winform.line1);
 m3theme.rule(winform.line2);
@@ -59,7 +61,7 @@ m3theme.note(winform.lblSec2);
 m3theme.note(winform.lblSec3);
 m3theme.note(winform.lblSec4);
 m3theme.note(winform.lblSec5);
-m3theme.danger(winform.lblErr);
+m3theme.alert(winform.lblErr);
 
 m3theme.field(winform.edit1);
 m3theme.field(winform.edit2);
