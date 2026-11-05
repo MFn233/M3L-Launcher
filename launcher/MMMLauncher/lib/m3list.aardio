@@ -10,8 +10,30 @@
 namespace m3list {
 	import math;
 	import table;
+	import fsys;
+	import fsys.file;
 	import win.api;
 	import win.subclass;
+
+	// ---------- 诊断 ----------
+
+	// 把调试信息写进 %TEMP%\m3list-msg.log。
+	// 列宽限制不生效时，靠这个文件判断「消息到底有没有到」：
+	//   有 HDN_* 行 = 子类化生效，问题在否决逻辑
+	//   只有 open 行  = 子类化没生效，要换方案
+	var debug_lines = 0;
+
+	function trace(text) {
+		if (debug_lines > 400) return;
+		debug_lines = debug_lines + 1;
+
+		var path = ..string.getenv("TEMP") ++ "\m3list-msg.log";
+		var f = ..fsys.file(path, "a");   // a = 只写追加，保留原内容
+		if (!f) return;
+
+		f.write(tostring(text) ++ "\r\n");
+		f.close();
+	}
 
 	// 每列最小宽度（参数没传时用这个）
 	function min_width_of(min_width) {
@@ -32,7 +54,12 @@ namespace m3list {
 		var minw = min_width_of(min_width);
 
 		var header = ::SendMessageInt(ctrl.hwnd, 0x101F /*_LVM_GETHEADER*/, 0, 0);
-		if (!header) return false;
+		if (!header) {
+			trace("open: LVM_GETHEADER 拿不到表头");
+			return false;
+		}
+
+		trace("open: listview=" ++ tostring(ctrl.hwnd) ++ " header=" ++ tostring(header) ++ " min=" ++ minw);
 
 		// 结构体就是「带类型标注的表」：raw.convert(指针, 这张表) 返回读出来的结构体。
 		// 注意没有 raw.define 这种东西。
@@ -48,15 +75,29 @@ namespace m3list {
 		// HDITEM 只取前两个字段：mask、cxy
 		var hd_type = { INT mask; int cxy };
 
+		var seen = 0;
+
 		var obj = win.subclass(ctrl, function(hwnd, message, wParam, lParam) {
 			if (message != 0x4E /*_WM_NOTIFY*/) return;
 			if (!lParam) return;
 
 			var nm = ..raw.convert(..topointer(lParam), nm_type);
-			if (!nm) return;
+			if (!nm) {
+				trace("notify: raw.convert 返回空");
+				return;
+			}
 
 			// 结构体里的指针字段读出来是 pointer 类型，和 SendMessageInt 返回的数字比较前先转成数字
 			if (tonumber(nm.hwndFrom) != tonumber(header)) return;
+
+			// 前 20 条通知记下来，用来判断表头到底发了什么
+			if (seen < 20) {
+				seen = seen + 1;
+				var hd_now = nm.pitem ? ..raw.convert(nm.pitem, hd_type) : null;
+				trace("notify#" ++ seen ++ ": code=" ++ tostring(nm.code)
+					++ " mask=" ++ tostring(hd_now ? hd_now.mask : -1)
+					++ " cxy=" ++ tostring(hd_now ? hd_now.cxy : -1));
+			}
 
 			// 只处理 HDN_ITEMCHANGING：否决比改宽度可靠（raw.convert 读出来的是副本，
 			// 写回去不会影响原内存）
@@ -69,6 +110,7 @@ namespace m3list {
 			if ((hd.mask & 0x1 /*_HDI_WIDTH*/) == 0) return;
 			if (hd.cxy >= minw) return;
 
+			trace("veto: cxy=" ++ tostring(hd.cxy));
 			return 1;   // 否决这次变化 → 表头保持原宽度，拖到下限就停
 		});
 
