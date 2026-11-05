@@ -230,6 +230,7 @@ winform.listLogs.columns = {
 	{ "路径"; 330 };
 };
 m3list.fit(winform.listLogs, 80);
+m3list.limit_width(winform.listLogs, 80);
 
 // 让这个窗口在截图 / 录屏里不可见（SetWindowDisplayAffinity）。
 // 目的：逼用户走「打包日志」而不是截图——截图没法复制、也看不清。

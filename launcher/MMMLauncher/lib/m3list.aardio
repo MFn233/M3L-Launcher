@@ -2,21 +2,79 @@
 
 //列表小工具：所有管理窗口共用。
 //
-//目前只做一件事：打开窗口时把列宽调成「都能看见」——
-//太窄的列拉回最小宽度，总宽超过可视区域的等比压缩，
-//这样列数一多也不会把最后一列挤出屏幕。
-//
-//（不做「拖动时限制最小宽度」：系统资源管理器是在拖动过程中由表头自己卡住的，
-//  aardio 里收不到表头通知，只能用定时器事后纠正，手感和系统完全不一致，故放弃。）
+//   fit(ctrl)        打开窗口时把列宽调成「都能看见」：太窄的拉回下限，
+//                    总宽超过可视区域的等比压缩，列数多也不会把最后一列挤出屏幕。
+//   limit_width(ctrl) 用**子类化**给表头列宽设下限：拖动时表头一到下限就停住，
+//                    手感和资源管理器一致（这是系统没有提供的能力，只能拦消息）。
 
 namespace m3list {
 	import math;
 	import table;
+	import win.api;
+	import win.subclass;
 
 	// 每列最小宽度（参数没传时用这个）
 	function min_width_of(min_width) {
 		if (min_width and min_width > 0) return min_width;
 		return 56;
+	}
+
+	// 拖动时限制列宽下限。
+	//
+	// 关键点：表头（header）是 listview 的子窗口，它把 WM_NOTIFY 发给 listview。
+	// 子类化 listview 就能在 aardio 自己的分发之前拦到这些通知：
+	//   HDN_ITEMCHANGING(-320) 否决「宽度小于下限」的变化 → 拖动到下限就停
+	//   HDN_TRACK(-328)        把建议宽度改成下限（双保险）
+	// 之前试过的 onnotify / translateCommand 都不行，因为通知的 hwndFrom 是表头，
+	// aardio 按控件句柄找不到就丢了；子类化是直接拿到原始消息。
+	function limit_width(ctrl, min_width) {
+		if (!ctrl) return false;
+
+		var minw = min_width_of(min_width);
+
+		var header = ::SendMessageInt(ctrl.hwnd, 0x101F /*_LVM_GETHEADER*/, 0, 0);
+		if (!header) return false;
+
+		var NMHEADER = ..raw.define({
+			addr hwndFrom;
+			INT idFrom;
+			INT code;
+			INT iItem;
+			INT iButton;
+			pointer pitem;
+		});
+
+		// HDITEM 的前两个字段：mask、cxy（其余用不到，这里只按偏移读）
+		var HDITEM = ..raw.define({
+			INT mask;
+			int cxy;
+		});
+
+		var obj = win.subclass(ctrl, function(hwnd, message, wParam, lParam) {
+			if (message != 0x4E /*_WM_NOTIFY*/) return;
+			if (!lParam) return;
+
+			var nm = ..raw.convert(..topointer(lParam), NMHEADER());
+			if (!nm) return;
+			if (nm.hwndFrom != header) return;
+
+			if (nm.code != -320 and nm.code != -328) return;
+			if (!nm.pitem) return;
+
+			var hd = ..raw.convert(nm.pitem, HDITEM());
+			if (!hd) return;
+
+			if ((hd.mask & 0x1 /*_HDI_WIDTH*/) == 0) return;
+			if (hd.cxy >= minw) return;
+
+			if (nm.code == -320) return 1;   // 否决这次变化
+			hd.cxy = minw;                    // 改建议宽度
+		});
+
+		// 挂在控件上，避免被回收
+		ctrl._width_limit = obj;
+
+		return true;
 	}
 
 	// 打开窗口时用：先保证最小宽度，再把总宽压进可视区域。

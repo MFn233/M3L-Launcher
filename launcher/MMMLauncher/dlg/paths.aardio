@@ -252,6 +252,7 @@ else {
 
 // 列宽按列表宽度自适应，路径太长就截断显示，不留横向滚动
 m3list.fit(winform.listPaths);
+m3list.limit_width(winform.listPaths, 56);
 
 // 列宽只在打开窗口时规整一次；拖动不干预
 

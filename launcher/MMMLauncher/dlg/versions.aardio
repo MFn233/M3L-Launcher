@@ -411,6 +411,9 @@ else {
 // 四列加起来会比列表宽，按比例压一下，「隔离」才不会被挤出屏幕
 m3list.fit(winform.listVers);
 
+// 拖动时列宽不低于 56px（子类化表头消息，手感和资源管理器一致）
+m3list.limit_width(winform.listVers, 56);
+
 // 列宽只在打开窗口时规整一次；拖动不干预（见工作日志：定时器纠正的手感和系统不一致，已撤）
 
 render();
