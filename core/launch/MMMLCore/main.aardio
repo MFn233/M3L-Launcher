@@ -11,7 +11,7 @@ import table;
 import crypt;
 import fsys;
 
-var VERSION = "0.2";
+var VERSION = "0.1.2";
 
 //退出码（与设计文档里的接口契约一致）
 var E_OK = 0;       //成功

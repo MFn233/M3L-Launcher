@@ -8,13 +8,13 @@ import fsys.version;
 /*DSG{{*/
 var winform = win.form(text="关于";right=420;bottom=250;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-btnOk={cls="plus";text="确定";left=316;top=184;right=396;bottom=216;font=LOGFONT(name='Microsoft YaHei');z=5};
 btnCredits={cls="plus";text="鸣谢";left=232;top=184;right=308;bottom=216;font=LOGFONT(name='Microsoft YaHei');z=7};
+btnOk={cls="plus";text="确定";left=316;top=184;right=396;bottom=216;font=LOGFONT(name='Microsoft YaHei');z=5};
 lblBody={cls="static";text="MFn's Minimalism Mclauncher。";left=24;top=60;right=396;bottom=84;font=LOGFONT(name='Microsoft YaHei');z=2};
-lblBody2={cls="static";text="作者：MFn、Deepseek。本项目遵循 GPL-3.0 协议开源。";left=24;top=90;right=396;bottom=114;font=LOGFONT(name='Microsoft YaHei');z=3};
+lblBody2={cls="static";text="作者：MFn。本项目遵循 GPL-3.0 协议开源。";left=24;top=90;right=396;bottom=114;font=LOGFONT(name='Microsoft YaHei');z=3};
 lblBody3={cls="static";text="—— 一个妄图写出完美代码的程序爱好者。";left=24;top=120;right=396;bottom=144;font=LOGFONT(name='Microsoft YaHei');z=4};
 lblTitle={cls="static";text="M³ Launcher";left=24;top=20;right=300;bottom=48;font=LOGFONT(h=-18;name='Microsoft YaHei');z=1};
-lblVer={cls="static";text="版本 0.1.2";left=24;top=150;right=396;bottom=170;font=LOGFONT(h=-11;name='Microsoft YaHei');z=6}
+lblVer={cls="static";text="版本 0.1.3";left=24;top=150;right=396;bottom=170;font=LOGFONT(h=-11;name='Microsoft YaHei');z=6}
 )
 /*}}*/
 

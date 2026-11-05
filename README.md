@@ -18,8 +18,6 @@
 | **MMM-L** (launcher) | 图形界面。让用户舒服地调用 core。 | `launcher/` |
 | **MMM-DL** (downloader) | 下载工具。下载并校验游戏本体、模组、整合包。与启动器相互独立。 | `downloader/`（未开始） |
 
-三者可以各自被替换：core 也能被别人的 GUI 调用，launcher 也能调用别人的 core。
-
 ## 当前状态
 
 版本 **0.1.2**（第四段是 aardio 自增的内部构建号，界面上不显示）。
@@ -102,9 +100,19 @@ tools\deploy-core-lib.bat
 
 ## 鸣谢
 
+**第三方**
+
 - **aardio** —— 开发工具与运行时
 - **Mojang** —— Minecraft 本体与版本清单格式
 - **HMCL** —— 崩溃原因分析规则的参考实现（GPL-3.0）
+
+**实现协作**
+
+- **DeepSeek** —— 代码实现、文档整理与测试
+
+**参与测试**
+
+- 见程序内「关于 → 鸣谢」
 
 本项目为个人非营利项目，与上述公司、项目无隶属关系。
 「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。

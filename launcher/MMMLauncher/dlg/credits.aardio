@@ -1,38 +1,58 @@
 //dlg/credits.aardio
 
 //鸣谢。从关于窗口打开。
-//只写"用了谁的什么"，不写客套话。
+//只写「用了谁的什么」和「谁帮着测过」，不写客套话。
+//正文用 richedit：内容会随测试者名单变长，必须能滚动。
 
 import win.ui;
 import m3theme;
 
 /*DSG{{*/
-var winform = win.form(text="鸣谢";right=520;bottom=356;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+var winform = win.form(text="鸣谢";right=520;bottom=420;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
 lblTitle={cls="static";text="鸣谢";left=24;top=18;right=400;bottom=48;font=LOGFONT(name='Microsoft YaHei';h=-16;weight=700);z=1};
-lblN1={cls="static";text="aardio";left=24;top=62;right=200;bottom=82;font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
-lblD1={cls="static";text="开发工具与运行时";left=208;top=62;right=496;bottom=82;font=LOGFONT(name='Microsoft YaHei';h=-11);z=3};
-lblN2={cls="static";text="Mojang";left=24;top=90;right=200;bottom=110;font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
-lblD2={cls="static";text="Minecraft 本体与版本清单格式";left=208;top=90;right=496;bottom=110;font=LOGFONT(name='Microsoft YaHei';h=-11);z=5};
-lblN3={cls="static";text="HMCL";left=24;top=118;right=200;bottom=138;font=LOGFONT(name='Microsoft YaHei';h=-12);z=6};
-lblD3={cls="static";text="崩溃原因分析规则的参考实现（GPL-3.0）";left=208;top=118;right=496;bottom=138;font=LOGFONT(name='Microsoft YaHei';h=-11);z=7};
-lblNote={cls="static";text="";left=24;top=164;right=496;bottom=240;font=LOGFONT(name='Microsoft YaHei';h=-11);z=8};
-btnClose={cls="plus";text="关闭";left=404;top=292;right=496;bottom=324;font=LOGFONT(name='Microsoft YaHei';h=-13);z=9};
+editCredits={cls="richedit";left=24;top=56;right=496;bottom=352;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;autohscroll=false;font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+btnClose={cls="plus";text="关闭";left=404;top=366;right=496;bottom=398;font=LOGFONT(name='Microsoft YaHei';h=-13);z=3};
 )
 /*}}*/
 
 m3theme.ink(winform.lblTitle);
-m3theme.ink(winform.lblN1);
-m3theme.ink(winform.lblN2);
-m3theme.ink(winform.lblN3);
-m3theme.note(winform.lblD1);
-m3theme.note(winform.lblD2);
-m3theme.note(winform.lblD3);
-m3theme.note(winform.lblNote);
 m3theme.button(winform.btnClose);
 
-winform.lblNote.text = "本项目为个人非营利项目，与上述公司、项目无隶属关系。"
-	++ '\r\n' ++ "「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。";
+winform.editCredits.color = m3theme.C_INK;
+
+// 往正文里追加一行：小标题用近黑，条目用次要灰
+function line(text, is_heading) {
+	winform.editCredits.readonly = false;
+
+	if (is_heading) {
+		winform.editCredits.appendText({ textColor = m3theme.C_INK }, text ++ '\r\n');
+	}
+	else {
+		winform.editCredits.appendText({ textColor = m3theme.C_MUTED }, text ++ '\r\n');
+	}
+
+	winform.editCredits.readonly = true;
+}
+
+// ---------- 正文 ----------
+
+line("第三方", true);
+line("aardio · 开发工具与运行时");
+line("Mojang · Minecraft 本体与版本清单格式");
+line("HMCL · 崩溃原因分析规则的参考实现（GPL-3.0）");
+line("");
+
+line("实现协作", true);
+line("DeepSeek · 代码实现、文档整理与测试");
+line("");
+
+line("参与测试", true);
+line("（名单待补充）");
+line("");
+
+line("本项目为个人非营利项目，与上述公司、项目无隶属关系。", true);
+line("「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。", true);
 
 winform.btnClose.oncommand = function(id, event) {
 	winform.close();
