@@ -15,6 +15,7 @@
 		<file name="notice.aardio" path="dlg\notice.aardio" comment="dlg\notice.aardio"/>
 		<file name="paths.aardio" path="dlg\paths.aardio" comment="dlg\paths.aardio"/>
 		<file name="settings.aardio" path="dlg\settings.aardio" comment="dlg\settings.aardio"/>
+		<file name="settings2.aardio" path="dlg\settings2.aardio" comment="dlg\settings2.aardio"/>
 		<file name="shot_tip.aardio" path="dlg\shot_tip.aardio" comment="dlg\shot_tip.aardio"/>
 		<file name="theme_test.aardio" path="dlg\theme_test.aardio" comment="dlg\theme_test.aardio"/>
 		<file name="versions.aardio" path="dlg\versions.aardio" comment="dlg\versions.aardio"/>
