@@ -20,20 +20,20 @@ var winform = win.form(text="设置";right=800;bottom=580;bgcolor=0xF2F2F2;borde
 winform.add(
 listNav={cls="listbox";left=16;top=16;right=216;bottom=516;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei';h=-13);z=1};
 
-frameAcc={cls="plus";left=232;top=16;right=784;bottom=80;z=2};
+frameAcc={cls="bkplus";left=232;top=16;right=784;bottom=80;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=2};
 capAcc={cls="static";text="账号";left=244;top=8;right=340;bottom=28;font=LOGFONT(name='Microsoft YaHei';h=-12);z=3};
 lblUser={cls="static";text="用户";left=248;top=40;right=300;bottom=60;font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
 btnUser={cls="plus";text="用户配置";left=308;top=34;right=428;bottom=64;font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
 lblLogin={cls="static";left=440;top=40;right=772;bottom=60;font=LOGFONT(name='Microsoft YaHei';h=-12);z=6};
 
-frameMem={cls="plus";left=232;top=92;right=784;bottom=168;z=7};
+frameMem={cls="bkplus";left=232;top=92;right=784;bottom=168;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=7};
 capMem={cls="static";text="分配内存";left=244;top=84;right=360;bottom=104;font=LOGFONT(name='Microsoft YaHei';h=-12);z=8};
 slider={cls="plus";left=248;top=122;right=520;bottom=144;z=9};
 editMem={cls="edit";text="4096";left=528;top=118;right=596;bottom=144;bgcolor=0xFFFFFF;num=1;font=LOGFONT(name='Microsoft YaHei';h=-13);z=10};
 lblMB={cls="static";text="MB";left=602;top=122;right=632;bottom=142;font=LOGFONT(name='Microsoft YaHei';h=-12);z=11};
 btnAuto={cls="plus";text="自动配置";left=656;top=118;right=768;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=12};
 
-frameWin={cls="plus";left=232;top=180;right=784;bottom=244;z=13};
+frameWin={cls="bkplus";left=232;top=180;right=784;bottom=244;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=13};
 capWin={cls="static";text="游戏窗口";left=244;top=172;right=360;bottom=192;font=LOGFONT(name='Microsoft YaHei';h=-12);z=14};
 lblWin={cls="static";text="大小";left=248;top=202;right=300;bottom=222;font=LOGFONT(name='Microsoft YaHei';h=-12);z=15};
 comboMode={cls="combobox";left=308;top=198;right=452;bottom=224;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=16};
@@ -42,17 +42,17 @@ lblX={cls="static";text="×";left=534;top=202;right=550;bottom=222;font=LOGFONT(
 editH={cls="edit";text="480";left=554;top=198;right=614;bottom=224;bgcolor=0xFFFFFF;num=1;font=LOGFONT(name='Microsoft YaHei';h=-12);z=19};
 btnDefault={cls="plus";text="默认大小";left=656;top=198;right=768;bottom=228;font=LOGFONT(name='Microsoft YaHei';h=-12);z=20};
 
-frameJava={cls="plus";left=232;top=256;right=784;bottom=320;z=21};
+frameJava={cls="bkplus";left=232;top=256;right=784;bottom=320;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=21};
 capJava={cls="static";text="Java";left=244;top=248;right=320;bottom=268;font=LOGFONT(name='Microsoft YaHei';h=-12);z=22};
 lblJava={cls="static";text="路径";left=248;top=278;right=300;bottom=298;font=LOGFONT(name='Microsoft YaHei';h=-12);z=23};
 editJava={cls="edit";left=308;top=274;right=768;bottom=300;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei';h=-12);z=24};
 
-framePath={cls="plus";left=232;top=332;right=784;bottom=396;z=25};
+framePath={cls="bkplus";left=232;top=332;right=784;bottom=396;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=25};
 capPath={cls="static";text="游戏路径";left=244;top=324;right=340;bottom=344;font=LOGFONT(name='Microsoft YaHei';h=-12);z=26};
 lblPath={cls="static";text="当前";left=248;top=354;right=300;bottom=374;font=LOGFONT(name='Microsoft YaHei';h=-12);z=27};
 comboPath={cls="combobox";left=308;top=350;right=768;bottom=376;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=28};
 
-frameBehave={cls="plus";left=232;top=16;right=784;bottom=220;z=29};
+frameBehave={cls="bkplus";left=232;top=16;right=784;bottom=220;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=29};
 capBehave={cls="static";text="启动器行为";left=244;top=8;right=360;bottom=28;font=LOGFONT(name='Microsoft YaHei';h=-12);z=30};
 chkLog={cls="checkbox";text="启动时弹出日志窗口";left=248;top=38;right=520;bottom=60;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=31};
 chkHide={cls="checkbox";text="启动后隐藏启动器";left=248;top=70;right=520;bottom=92;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=32};
@@ -61,12 +61,12 @@ chkDebug={cls="checkbox";text="调试模式";left=248;top=134;right=520;bottom=1
 chkMulti={cls="checkbox";text="允许同时运行多个实例";left=248;top=166;right=560;bottom=188;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=35};
 chkShot={cls="checkbox";text="崩溃时提醒「请勿直接截图分享此窗口」";left=248;top=194;right=768;bottom=212;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=36};
 
-framePri={cls="plus";left=232;top=232;right=784;bottom=288;z=37};
+framePri={cls="bkplus";left=232;top=232;right=784;bottom=288;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=37};
 capPri={cls="static";text="进程优先级";left=244;top=224;right=360;bottom=244;font=LOGFONT(name='Microsoft YaHei';h=-12);z=38};
 lblPri={cls="static";text="优先级";left=248;top=254;right=300;bottom=274;font=LOGFONT(name='Microsoft YaHei';h=-12);z=39};
 comboPri={cls="combobox";left=308;top=250;right=452;bottom=276;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=40};
 
-frameManage={cls="plus";left=232;top=16;right=784;bottom=300;z=41};
+frameManage={cls="bkplus";left=232;top=16;right=784;bottom=300;bgcolor=0xF2F2F2;border={color=0xDCDCDC;width=1};z=41};
 capManage={cls="static";text="管理入口";left=244;top=8;right=360;bottom=28;font=LOGFONT(name='Microsoft YaHei';h=-12);z=42};
 btnJavaM={cls="plus";text="Java 管理";left=248;top=44;right=500;bottom=84;font=LOGFONT(name='Microsoft YaHei';h=-13);z=43};
 btnPathsM={cls="plus";text="路径管理";left=516;top=44;right=768;bottom=84;font=LOGFONT(name='Microsoft YaHei';h=-13);z=44};
@@ -82,17 +82,10 @@ btnSave={cls="plus";text="保存";left=684;top=528;right=784;bottom=560;font=LOG
 
 // ---------- 主题 ----------
 
-// 分组框：1px 边框 + 窗口底色，标题压在框线上
-function frame(ctrl) {
-	ctrl.skin({
-		background = { default = m3theme.BG };
-		border = { color = 0xFFDCDCDC; width = 1; radius = 0 };
-	});
-}
-
-var frames = { winform.frameAcc; winform.frameMem; winform.frameWin; winform.frameJava; winform.framePath;
-	winform.frameBehave; winform.framePri; winform.frameManage };
-for i, c in frames { frame(c); }
+// 分组框用 bkplus（无句柄背景控件），不是 plus：
+// plus 是交互控件，鼠标一进去就会抢到 Z 序顶端把内容盖住（文档 system-prompt.md:1674）。
+// bkplus 直接把边框画在窗体背景上，抢不了 Z 序。边框在创建时用 border 参数给，没有 skin 方法。
+// 它是无句柄的，显隐走它自己定义的 visible（内部 $hidden + redraw），所以分页切换照常可用。
 
 var caps = { winform.capAcc; winform.capMem; winform.capWin; winform.capJava; winform.capPath;
 	winform.capBehave; winform.capPri; winform.capManage };
