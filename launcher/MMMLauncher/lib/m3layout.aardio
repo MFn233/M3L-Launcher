@@ -6,24 +6,31 @@
 //（HTML 有 flex / gap 自动算，这里没有），十几个控件叠起来就"看着歪但说不上哪歪"。
 //这层把行高、行距、标签列宽度都变成常量，调用方只说「放什么」，不再算坐标。
 //
-//坐标全部按逻辑像素算，再交给 winform.add —— 它接受逻辑坐标，DPI 缩放由 aardio 处理。
+//分组线框：section() 会记录这一节内容占的纵向范围，等这一节结束时用 bkplus
+//（无句柄背景控件）在内容外面画一圈 1px 边框，标题压在框线上。
+//bkplus 是在窗体背景上绘图的，创建顺序无所谓，所以可以"先排内容、后补框"。
 
 namespace m3layout {
 	import table;
 	import m3theme;
 
-	// ---------- 尺寸常量：整体松紧只改这里 ----------
-	LABEL_W = 88;        // 左侧标签列宽度
-	ROW_H = 28;          // 行内控件高度
-	ROW_STEP = 36;       // 行距（控件高 + 8）
-	BTN_H = 32;          // 按钮高度
-	BTN_W = 88;          // 行内按钮宽度
+	// ---------- 尺寸常量：默认值 = 用户选定的"紧凑"密度 ----------
+	LABEL_W = 64;        // 左侧标签列宽度
+	ROW_H = 24;          // 行内控件高度
+	ROW_STEP = 30;       // 行距（控件高 + 6）
+	BTN_H = 30;          // 按钮高度
+	BTN_W = 76;          // 行内按钮宽度
 	BTN_GAP = 8;         // 控件与行内按钮之间
-	SECTION_H = 22;      // 分组标题高度
-	SECTION_GAP = 12;    // 标题与第一行之间
-	SECTION_SPACE = 16;  // 上一节内容与本节标题之间
-	NOTE_STEP = 24;      // 说明行步进
-	TEXT_DY = 5;         // 单行文字相对控件顶部的下移量（让标签与控件视觉居中）
+	SECTION_H = 20;      // 分组标题高度
+	SECTION_GAP = 8;     // 标题与第一行之间
+	SECTION_SPACE = 14;  // 上一节内容与本节标题之间
+	NOTE_STEP = 18;      // 说明行步进
+	TEXT_DY = 3;         // 单行文字相对控件顶部的下移量（让标签与控件视觉居中）
+
+	// 分组线框的内缩
+	GROUP_PAD_X = 12;    // 框比内容左右各宽出的部分
+	GROUP_PAD_BOTTOM = 8;// 框比最后一行低出的部分
+	GROUP_TOP_ON = 10;   // 框线相对标题顶部的下移量（让标题压住线）
 
 	function create(form, left, top, width, opt) {
 		var L = {};
@@ -35,7 +42,7 @@ namespace m3layout {
 		L.right = left + width;
 		L.y = top;
 
-		// 允许调用方覆盖尺寸（同一个窗体里并排放"紧凑 / 宽松"两版）
+		// 允许调用方覆盖尺寸（同一个窗体里可以并排比较两种密度）
 		L.label_w = (opt and opt.label_w) or LABEL_W;
 		L.row_h = (opt and opt.row_h) or ROW_H;
 		L.row_step = (opt and opt.row_step) or ROW_STEP;
@@ -47,19 +54,25 @@ namespace m3layout {
 		L.note_step = (opt and opt.note_step) or NOTE_STEP;
 		L.text_dy = (opt and opt.text_dy) or TEXT_DY;
 		L.font = (opt and opt.font) or -12;
+		L.framed = (opt and opt.framed) or false;   // 要不要画分组线框
 
-		L.first_section = true;
+		L.controls = {};   // 本页建出来的所有控件，供分页显隐
+		L.sections = {};   // 已记录的小节范围
+		L.open_section = null;
 
-		// 建控件：坐标由调用方给，字体没给就统一用正文号
+		// 建控件：字体没给就统一用正文号；坐标由调用方补齐
 		L.make = function(o) {
 			var t = table.assign({}, o);
 
 			if (t.font == null) t.font = LOGFONT(name='Microsoft YaHei'; h=L.font);
 
-			return form.add(t);
+			var c = form.add(t);
+			table.push(L.controls, c);
+
+			return c;
 		};
 
-		// 同一类控件套同一套主题，保证各页面长得一样
+		// 同一类控件套同一套主题
 		L.skin = function(ctrl, cls) {
 			if (!ctrl) return ctrl;
 
@@ -71,26 +84,56 @@ namespace m3layout {
 			return ctrl;
 		};
 
-		// ---------- 一节 ----------
+		// ---------- 分组框 ----------
 
-		// 分组标题：一条加粗小字，下面留 SECTION_GAP
-		L.section = function(text) {
+		// 这一节结束：用 bkplus 在内容外面补一圈线，并新建标题
+		L.close_section = function() {
+			var s = L.open_section;
+			if (!s) return;
+
+			s.y1 = L.y - L.section_space;
+			L.open_section = null;
+
+			if (!L.framed) return;
+
+			var frame = form.add({
+				cls = "bkplus";
+				left = L.left - GROUP_PAD_X;
+				top = s.caption_top + GROUP_TOP_ON;
+				right = L.right + GROUP_PAD_X;
+				bottom = s.y1 + GROUP_PAD_BOTTOM;
+				bgcolor = m3theme.BG;
+				border = { color = 0xDCDCDC; width = 1 };
+			});
+
+			table.push(L.controls, frame);
+
+			// 标题盖在框线上：先建框后建标题，标题就在上面
+			var cap = L.make({
+				cls = "static";
+				text = s.title;
+				left = L.left;
+				top = s.caption_top;
+				right = L.left + 160;
+				bottom = s.caption_top + L.section_h;
+				font = LOGFONT(name='Microsoft YaHei'; h=-12);
+			});
+
+			m3theme.ink(cap);
+		};
+
+		// 分组标题：关闭上一节、记下新节的起点
+		L.section = function(title) {
+			L.close_section();
+
 			if (!L.first_section) L.y = L.y + L.section_space;
 
 			var y = L.y;
-
-			L.make({
-				cls = "static";
-				text = text;
-				left = L.left;
-				top = y;
-				right = L.right;
-				bottom = y + L.section_h;
-				font = LOGFONT(name='Microsoft YaHei'; h=-13; weight=700);
-			});
-
-			L.y = y + L.section_h + L.section_gap;
 			L.first_section = false;
+
+			L.open_section = { title = title; caption_top = y; y0 = y + L.section_h + L.section_gap };
+
+			L.y = L.open_section.y0;
 
 			return y;
 		};
@@ -98,11 +141,12 @@ namespace m3layout {
 		// ---------- 一行 ----------
 
 		// 标签 + 控件（+ 可选的行内按钮）
-		// ctrl_opt 只写 cls 和控件自己的属性，坐标会被覆盖；返回控件以便继续填内容
+		// 返回两个值：控件、行内按钮（没有按钮时按钮为 null）
 		L.row = function(label, ctrl_opt, btn_text) {
 			var y = L.y;
 			var x = L.left + L.label_w;
 			var ctrl_right = L.right;
+			var row_btn = null;
 
 			if (btn_text) ctrl_right = L.right - L.btn_w - BTN_GAP;
 
@@ -113,7 +157,7 @@ namespace m3layout {
 					left = L.left;
 					top = y + L.text_dy;
 					right = L.left + L.label_w - 8;
-					bottom = y + L.text_dy + 20;
+					bottom = y + L.text_dy + 18;
 					font = LOGFONT(name='Microsoft YaHei'; h=L.font);
 				});
 
@@ -130,7 +174,7 @@ namespace m3layout {
 			L.skin(ctrl, ctrl_opt.cls);
 
 			if (btn_text) {
-				var btn = L.make({
+				row_btn = L.make({
 					cls = "plus";
 					text = btn_text;
 					left = L.right - L.btn_w;
@@ -139,15 +183,15 @@ namespace m3layout {
 					bottom = y + L.row_h;
 				});
 
-				m3theme.button(btn);
+				m3theme.button(row_btn);
 			}
 
 			L.y = y + L.row_step;
 
-			return ctrl;
+			return ctrl, row_btn;
 		};
 
-		// 复选框：整行，从标签列开始
+		// 复选框：从标签列开始，占满剩余宽度
 		L.check = function(text, checked) {
 			var y = L.y;
 
@@ -157,7 +201,7 @@ namespace m3layout {
 				left = L.left + L.label_w;
 				top = y;
 				right = L.right;
-				bottom = y + 22;
+				bottom = y + 20;
 			});
 
 			if (checked) c.checked = true;
@@ -189,7 +233,7 @@ namespace m3layout {
 			return note;
 		};
 
-		// 按钮行：从右往左排，最后一个按钮贴右边界；返回按钮数组（顺序与传入一致）
+		// 按钮行：从右往左排，最后一个贴右边界；返回值顺序与传入一致
 		L.buttons = function(texts) {
 			var y = L.y;
 			var x = L.right;
@@ -211,7 +255,6 @@ namespace m3layout {
 				x = x - L.btn_w - BTN_GAP;
 			}
 
-			// push 的顺序是倒的，反过来让返回值与传入一致
 			var ordered = {};
 			for i = #list; 1; -1 {
 				table.push(ordered, list[i]);
@@ -222,12 +265,13 @@ namespace m3layout {
 			return ordered;
 		};
 
-		// 手动留白 / 查当前排到哪
+		// 手动留白 / 结束（结束时会关掉最后一节的框）
 		L.gap = function(px) {
 			L.y = L.y + (px or 8);
 		};
 
 		L.finish = function() {
+			L.close_section();
 			return L.y;
 		};
 
@@ -236,13 +280,14 @@ namespace m3layout {
 }
 
 /**intellisense(m3layout)
-LABEL_W / ROW_H / ROW_STEP / BTN_H / BTN_W / SECTION_H = 尺寸常量（改这里调整体松紧）
-create(__/*窗体*/,__/*left*/,__/*top*/,__/*width*/,__/*覆盖项*/) = 创建一个布局游标
-!layout.section(__/*标题*/) = 分组标题，自动留白
+LABEL_W / ROW_H / ROW_STEP / BTN_H / BTN_W / SECTION_H = 尺寸常量（默认是紧凑密度）
+create(__/*窗体*/,__/*left*/,__/*top*/,__/*width*/,__/*覆盖项*/) = 创建布局游标
+!layout.section(__/*标题*/) = 开一节（可画线框，见 opt.framed）
 !layout.row(__/*标签*/,__/*控件参数表*/,__/*行内按钮文字*/) = 一行：标签 + 控件（+ 按钮），返回控件
 !layout.check(__/*文字*/,__/*默认选中*/) = 整行复选框，返回控件
 !layout.text(__/*说明*/) = 整行说明文字，返回控件
 !layout.buttons(__/*按钮文字数组*/) = 按钮行，从右往左排，返回按钮数组
 !layout.gap(__/*像素*/) = 手动留白
-!layout.finish() = 返回当前排到的 top
+!layout.finish() = 收尾（关掉最后一节）并返回当前 top
+!layout.controls = 本页建出来的控件数组（分页显隐用）
 end intellisense**/

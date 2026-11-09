@@ -49,27 +49,30 @@ function build(L) {
 	L.buttons({"保存"; "取消"});
 }
 
-// ---------- 左：紧凑 ----------
-var left_layout = m3layout.create(winform, 24, 64, 400, {
-	label_w = 64;
-	row_h = 24;
-	row_step = 30;
-	section_gap = 8;
-	section_space = 12;
-	note_step = 18;
-	text_dy = 3;
-	btn_w = 76;
-});
+// ---------- 左：紧凑（默认常量） ----------
+var left_layout = m3layout.create(winform, 40, 72, 380, { framed = true });
 
 build(left_layout);
+left_layout.finish();
 
-// ---------- 右：宽松（默认常量） ----------
-var right_layout = m3layout.create(winform, 468, 64, 400, null);
+// ---------- 右：宽松（覆盖常量） ----------
+var right_layout = m3layout.create(winform, 484, 72, 380, {
+	framed = true;
+	label_w = 88;
+	row_h = 28;
+	row_step = 36;
+	section_gap = 12;
+	section_space = 20;
+	note_step = 24;
+	text_dy = 5;
+	btn_w = 88;
+});
 
 build(right_layout);
+right_layout.finish();
 
-winform.lblInfo.text = string.format("左：紧凑（行高 24 / 行距 30 / 标签列 64）排到 %d　｜　右：默认（行高 28 / 行距 36 / 标签列 88）排到 %d",
-	left_layout.finish(), right_layout.finish());
+winform.lblInfo.text = string.format("左：紧凑（行高 24 / 行距 30 / 标签列 64）占 %d　｜　右：宽松（28 / 36 / 88）占 %d",
+	left_layout.y - 72, right_layout.y - 72);
 
 winform.btnClose.oncommand = function(id, event) {
 	winform.endModal(true);
