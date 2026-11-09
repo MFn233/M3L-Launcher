@@ -147,14 +147,13 @@ P3.finish();
 var P4 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P4.section("Java 列表");
-P4.btn_w = 100;   // 这一页按钮文字长一些
 
 var listJava = P4.make({
 	cls = "listview";
 	left = 232;
 	top = P4.y;
 	right = 736;
-	bottom = P4.y + 130;
+	bottom = P4.y + 150;
 });
 
 listJava.fullRow = true;
@@ -173,10 +172,12 @@ else {
 
 m3list.fit(listJava);
 
-P4.y = P4.y + 130 + 8;
+P4.y = P4.y + 150 + 8;
 
-var java_btns_1 = P4.buttons({"重新检测"; "添加"; "移除"});
-var java_btns_2 = P4.buttons({"加入黑名单"; "设为当前"; "打开目录"});
+// 一行放两组按钮：左边是列表级操作，右边是选中项操作
+P4.btn_w = 76;
+var java_tools = P4.tool_row({"重新检测"; "添加"; "移除"}, {"加入黑名单"; "设为当前"; "打开目录"});
+
 var lblJavaHint = P4.text("", true);
 
 P4.section("自定义 JVM 参数");
@@ -810,7 +811,7 @@ listJava.onSelChanged = function(sel, item, subItem, nm) {
 }
 
 // 重新检测
-java_btns_1[1].oncommand = function(id, event) {
+java_tools.left[1].oncommand = function(id, event) {
 	lblJavaHint.text = "检测中…";
 
 	winform.setTimeout(function() {
@@ -847,7 +848,7 @@ java_btns_1[1].oncommand = function(id, event) {
 }
 
 // 手动添加
-java_btns_1[2].oncommand = function(id, event) {
+java_tools.left[2].oncommand = function(id, event) {
 	var f = fsys.dlg.open("可执行文件|*.exe|所有文件|*.*|", "选择 java.exe", "", winform, , "java.exe");
 	if (!f) return;
 
@@ -866,7 +867,7 @@ java_btns_1[2].oncommand = function(id, event) {
 }
 
 // 移除记录
-java_btns_1[3].oncommand = function(id, event) {
+java_tools.left[3].oncommand = function(id, event) {
 	var path = java_current();
 	if (!path) {
 		lblJavaHint.text = "请先选择一个 Java。";
@@ -888,7 +889,7 @@ java_btns_1[3].oncommand = function(id, event) {
 }
 
 // 加入 / 移出黑名单
-java_btns_2[1].oncommand = function(id, event) {
+java_tools.right[1].oncommand = function(id, event) {
 	var path = java_current();
 	if (!path) {
 		lblJavaHint.text = "请先选择一个 Java。";
@@ -936,7 +937,7 @@ java_btns_2[1].oncommand = function(id, event) {
 }
 
 // 设为当前
-java_btns_2[2].oncommand = function(id, event) {
+java_tools.right[2].oncommand = function(id, event) {
 	var path = java_current();
 	if (!path) {
 		lblJavaHint.text = "请先选择一个 Java。";
@@ -951,7 +952,7 @@ java_btns_2[2].oncommand = function(id, event) {
 }
 
 // 在资源管理器里选中这条 Java
-java_btns_2[3].oncommand = function(id, event) {
+java_tools.right[3].oncommand = function(id, event) {
 	var path = java_current();
 	if (!path) {
 		lblJavaHint.text = "请先选择一个 Java。";

@@ -280,6 +280,52 @@ namespace m3layout {
 			return ordered;
 		};
 
+		// 一行工具按钮：左边一组（列表级操作）、右边一组（选中项操作），中间留白。
+		// 两行按钮各自右对齐会空出左边一大片，看着很乱；分行按"作用对象"分开更清楚。
+		L.tool_row = function(left_texts, right_texts) {
+			var y = L.y;
+			var out = { left = {}; right = {} };
+
+			var x = L.left;
+			var list1 = left_texts or {};
+			for i, t in list1 {
+				var b = L.make({
+					cls = "plus";
+					text = t;
+					left = x;
+					top = y;
+					right = x + L.btn_w;
+					bottom = y + L.btn_h;
+				});
+
+				m3theme.button(b);
+				table.push(out.left, b);
+
+				x = x + L.btn_w + BTN_GAP;
+			}
+
+			x = L.right;
+			var list2 = right_texts or {};
+			for i = #list2; 1; -1 {
+				var b = L.make({
+					cls = "plus";
+					text = list2[i];
+					left = x - L.btn_w;
+					top = y;
+					right = x;
+					bottom = y + L.btn_h;
+				});
+
+				m3theme.button(b);
+				table.insert(out.right, b, 1);   // 从右往左建，插回原位保持传入顺序
+
+				x = x - L.btn_w - BTN_GAP;
+			}
+
+			L.y = y + L.btn_h + BTN_GAP;
+
+			return out;
+		};
 		// 手动留白 / 结束（结束时会关掉最后一节的框）
 		L.gap = function(px) {
 			L.y = L.y + (px or 8);
