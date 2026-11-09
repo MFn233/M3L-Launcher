@@ -17,12 +17,12 @@ import string;
 import math;
 
 /*DSG{{*/
-var winform = win.form(text="设置";right=880;bottom=600;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+var winform = win.form(text="设置";right=760;bottom=560;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-listNav={cls="listbox";left=16;top=16;right=200;bottom=528;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei';h=-13);z=1};
-lblHint={cls="static";left=16;top=540;right=600;bottom=568;font=LOGFONT(name='Microsoft YaHei';h=-11);z=2};
-btnCancel={cls="plus";text="取消";left=700;top=540;right=780;bottom=572;font=LOGFONT(name='Microsoft YaHei';h=-13);z=3};
-btnSave={cls="plus";text="保存";left=788;top=540;right=868;bottom=572;font=LOGFONT(name='Microsoft YaHei';h=-13);z=4}
+
+lblHint={cls="static";left=16;top=516;right=520;bottom=544;font=LOGFONT(name='Microsoft YaHei';h=-11);z=1};
+btnCancel={cls="plus";text="取消";left=576;top=516;right=656;bottom=548;font=LOGFONT(name='Microsoft YaHei';h=-13);z=2};
+btnSave={cls="plus";text="保存";left=664;top=516;right=744;bottom=548;font=LOGFONT(name='Microsoft YaHei';h=-13);z=3}
 )
 /*}}*/
 
@@ -36,7 +36,7 @@ var path_dirs = {};
 
 // ---------- 第一页：启动器设置 ----------
 
-var P1 = m3layout.create(winform, 232, 24, 620, { framed = true });
+var P1 = m3layout.create(winform, 200, 20, 520, { framed = true });
 
 P1.section("启动器行为");
 var chkLog = P1.check("启动时弹出日志窗口", cfg.log);
@@ -46,14 +46,14 @@ var chkDebug = P1.check("调试模式", cfg.debug);
 var chkMulti = P1.check("允许同时运行多个实例", cfg.allow_multi);
 var chkShot = P1.check("崩溃时提醒「请勿直接截图分享此窗口」", cfg.shot_tip);
 
-P1.section("样式设置");
+P1.section("样式设置", true);
 P1.text("尚未实现。（后续在这里提供主题与外观调整）");
 
 P1.finish();
 
 // ---------- 第二页：游戏设置 ----------
 
-var P2 = m3layout.create(winform, 232, 24, 620, { framed = true });
+var P2 = m3layout.create(winform, 200, 20, 520, { framed = true });
 
 P2.section("窗口大小设置");
 var comboMode, btnDefault = P2.row("窗口模式", { cls = "combobox"; mode = "dropdownlist" }, "默认大小");
@@ -72,7 +72,7 @@ P2.finish();
 
 // ---------- 第三页：账户管理 ----------
 
-var P3 = m3layout.create(winform, 232, 24, 620, { framed = true });
+var P3 = m3layout.create(winform, 200, 20, 520, { framed = true });
 
 P3.section("当前账号");
 var lblAccount = P3.text("尚未配置账号");
@@ -86,20 +86,20 @@ P3.finish();
 
 // ---------- 第四页：JAVA 管理 ----------
 
-var P4 = m3layout.create(winform, 232, 24, 620, { framed = true });
+var P4 = m3layout.create(winform, 200, 20, 520, { framed = true });
 
 P4.section("Java 列表");
 var editJava, btnJava = P4.row("当前", { cls = "edit"; text = "" }, "Java 管理");
 P4.text("按路径检测 Java、显示厂商与版本、可加入黑名单。仍在「Java 管理」窗口里。");
 
-P4.section("自定义 JVM 参数");
+P4.section("自定义 JVM 参数", true);
 P4.text("尚未实现。（后续在这里填额外的 JVM 参数，每行一条）");
 
 P4.finish();
 
 // ---------- 第五页：路径与版本管理 ----------
 
-var P5 = m3layout.create(winform, 232, 24, 620, { framed = true });
+var P5 = m3layout.create(winform, 200, 20, 520, { framed = true });
 
 P5.section("游戏路径");
 var comboPath, btnPaths = P5.row("当前路径", { cls = "combobox"; mode = "dropdownlist" }, "路径管理");
@@ -213,15 +213,63 @@ function show_page(n) {
 	}
 }
 
-for i, t in nav_titles {
-	winform.listNav.add(t);
+// 导航用一排 plus 自绘项，不用 listbox：
+// listbox 的选中是系统蓝条，和黑白灰主题冲突，而且行高、内缩都改不动。
+var nav_items = {};
+var nav_current = 0;
+
+function nav_skin(i, selected) {
+	var c = nav_items[i];
+	if (!c) return;
+
+	if (selected) {
+		c.skin({
+			background = { default = 0xFFE4E4E4; hover = 0xFFE4E4E4; active = 0xFFE4E4E4 };
+			color = { default = m3theme.INK; hover = m3theme.INK; active = m3theme.INK };
+		});
+	}
+	else {
+		c.skin({
+			background = { default = m3theme.BG; hover = 0xFFECECEC; active = 0xFFE4E4E4 };
+			color = { default = m3theme.MUTED; hover = m3theme.INK; active = m3theme.INK };
+		});
+	}
 }
 
-winform.listNav.onSelChange = function() {
-	var i = winform.listNav.selIndex;
-	if (i <= 0) return;
-	show_page(i);
+function select_page(n) {
+	if (n < 1 or n > #PAGES) return;
+
+	nav_current = n;
+	show_page(n);
+
+	for i, c in nav_items {
+		nav_skin(i, i == n);
+	}
 }
+
+for i, t in nav_titles {
+	var y = 20 + (i - 1) * 32;
+	var idx = i;
+
+	var item = winform.add({
+		cls = "plus";
+		text = t;
+		align = "left";
+		left = 28;
+		top = y;
+		right = 188;
+		bottom = y + 30;
+		font = LOGFONT(name='Microsoft YaHei'; h=-13);
+	});
+
+	table.push(nav_items, item);
+
+	item.oncommand = function(id, event) {
+		select_page(idx);
+	}
+}
+
+select_page(1);
 
 // ---------- 事件 ----------
 
@@ -388,7 +436,6 @@ comboPri.selIndex = priority_index(cfg.priority);
 
 refresh_path_combo();
 
-show_page(1);
-winform.listNav.selIndex = 1;
+select_page(1);
 
 return winform;

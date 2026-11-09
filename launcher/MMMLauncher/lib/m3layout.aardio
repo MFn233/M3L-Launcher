@@ -87,6 +87,7 @@ namespace m3layout {
 		// ---------- 分组框 ----------
 
 		// 这一节结束：用 bkplus 在内容外面补一圈线，并新建标题
+		// plain = true 时不画框（用于只有一行说明的占位节，画框会显得空）
 		L.close_section = function() {
 			var s = L.open_section;
 			if (!s) return;
@@ -94,7 +95,7 @@ namespace m3layout {
 			s.y1 = L.y - L.section_space;
 			L.open_section = null;
 
-			if (!L.framed) return;
+			if (!L.framed or s.plain) return;
 
 			var frame = form.add({
 				cls = "bkplus";
@@ -123,7 +124,8 @@ namespace m3layout {
 		};
 
 		// 分组标题：关闭上一节、记下新节的起点
-		L.section = function(title) {
+		// plain = true 时这一节不画框
+		L.section = function(title, plain) {
 			L.close_section();
 
 			if (!L.first_section) L.y = L.y + L.section_space;
@@ -131,7 +133,7 @@ namespace m3layout {
 			var y = L.y;
 			L.first_section = false;
 
-			L.open_section = { title = title; caption_top = y; y0 = y + L.section_h + L.section_gap };
+			L.open_section = { title = title; caption_top = y; y0 = y + L.section_h + L.section_gap; plain = plain };
 
 			L.y = L.open_section.y0;
 
