@@ -249,26 +249,6 @@ function show_page(n) {
 var nav_items = {};
 var nav_current = 0;
 
-// 选中条：每个导航项各配一条横跨整个面板的 bkplus（0..200），切页时只显示当前那条。
-// 不用"一条条 setPos 移动"：bkplus 的 setPos 走的是 $rect，坐标系和 DSG 的
-// 逻辑像素不是一回事，实测会跑到别处。建五条固定位置、用 visible 切换最稳。
-var nav_bars = {};
-
-for i = 1; #nav_titles; 1 {
-	var by = 20 + (i - 1) * 32;
-
-	var bar = winform.add({
-		cls = "bkplus";
-		left = 0;
-		top = by;
-		right = 200;
-		bottom = by + 30;
-		bgcolor = NAV_SEL;
-	});
-
-	bar.visible = false;
-	table.push(nav_bars, bar);
-}
 
 function nav_skin(i, selected) {
 	var c = nav_items[i];
@@ -296,9 +276,6 @@ function select_page(n) {
 
 	winform.lblPageTitle.text = nav_titles[n];
 
-	for i, bar in nav_bars {
-		bar.visible = (i == n);
-	}
 
 	for i, c in nav_items {
 		nav_skin(i, i == n);
@@ -309,13 +286,16 @@ for i, t in nav_titles {
 	var y = 20 + (i - 1) * 32;
 	var idx = i;
 
+	// 整行宽度（0..200）+ 左内边距，选中/悬停的底色自然通到两边，
+	// 不需要额外的"选中条"控件，也就不会有残留。
 	var item = winform.add({
 		cls = "plus";
 		text = t;
 		align = "left";
-		left = 16;
+		paddingLeft = 16;
+		left = 0;
 		top = y;
-		right = 184;
+		right = 200;
 		bottom = y + 30;
 		font = LOGFONT(name='Microsoft YaHei'; h=-13);
 	});
