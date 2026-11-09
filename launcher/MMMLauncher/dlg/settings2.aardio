@@ -11,6 +11,9 @@ import m3theme;
 import m3layout;
 import m3config;
 import m3java;
+import MMMLC;
+import process;
+import fsys.dlg;
 import m3list;
 import crypt;
 import sys.mem;
@@ -144,11 +147,56 @@ P3.finish();
 var P4 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P4.section("Java 列表");
-var editJava, btnJava = P4.row("当前", { cls = "edit"; text = "" }, "Java 管理");
-P4.text("按路径检测 Java、显示厂商与版本、可加入黑名单。仍在「Java 管理」窗口里。");
+P4.btn_w = 100;   // 这一页按钮文字长一些
 
-P4.section("自定义 JVM 参数", true);
-P4.text("尚未实现。（后续在这里填额外的 JVM 参数，每行一条）", true);
+var listJava = P4.make({
+	cls = "listview";
+	left = 232;
+	top = P4.y;
+	right = 736;
+	bottom = P4.y + 130;
+});
+
+listJava.fullRow = true;
+
+var saved_java_cols = cfg.java_columns;
+if (type(saved_java_cols) == "table" and #saved_java_cols >= 3) {
+	listJava.columns = saved_java_cols;
+}
+else {
+	listJava.columns = {
+		{ "版本"; 150 };
+		{ "厂商"; 110 };
+		{ "路径"; 300 };
+	};
+}
+
+m3list.fit(listJava);
+
+P4.y = P4.y + 130 + 8;
+
+var java_btns_1 = P4.buttons({"重新检测"; "添加"; "移除"});
+var java_btns_2 = P4.buttons({"加入黑名单"; "设为当前"; "打开目录"});
+var lblJavaHint = P4.text("", true);
+
+P4.section("自定义 JVM 参数");
+var editJvm = P4.make({
+	cls = "edit";
+	multiline = 1;
+	vscroll = 1;
+	autohscroll = false;
+	left = 232;
+	top = P4.y;
+	right = 736;
+	bottom = P4.y + 80;
+});
+
+editJvm.color = m3theme.C_INK;
+editJvm.bgcolor = m3theme.C_FIELD;
+
+P4.y = P4.y + 80 + 8;
+
+P4.text("每行一条，追加在自动生成的参数之后。同名参数以这里为准，例如 -Xmx4G。", true);
 
 P4.finish();
 
@@ -671,11 +719,251 @@ acc_btns[4].oncommand = function(id, event) {
 	lblAccHint.text = "当前账号：" ++ cfg.account;
 }
 
-btnJava.oncommand = function(id, event) {
-	winform.loadForm("/dlg/java.aardio").doModal(winform);
+// ---------- Java 管理 ----------
 
-	cfg = m3config.read();
-	editJava.text = cfg.java;
+var java_rows = {};
+var java_selected = null;
+
+// 排序：版本号大的在前 → 同版本路径短的在前 → 再按路径字典序（只影响显示）
+function java_before(a, b) {
+	var ma = a.major or 0;
+	var mb = b.major or 0;
+	if (ma != mb) return ma > mb;
+
+	var la = #(a.path or "");
+	var lb = #(b.path or "");
+	if (la != lb) return la < lb;
+
+	return (a.path or "") < (b.path or "");
+}
+
+function sort_javas(list) {
+	var out = {};
+
+	for i, item in list {
+		var at = #out + 1;
+
+		for k, v in out {
+			if (java_before(item, v)) {
+				at = k;
+				break;
+			}
+		}
+
+		// aardio 的签名是 table.insert(表, 值, 位置)
+		table.insert(out, item, at);
+	}
+
+	return out;
+}
+
+function java_render() {
+	listJava.clear();
+	java_rows = {};
+
+	var sorted = sort_javas(cfg.javas);
+
+	for i, j in sorted {
+		var major_text = "?";
+		if (j.major and j.major > 0) major_text = "Java " ++ j.major;
+
+		if (j.version and #j.version > 0) major_text = major_text ++ " (" ++ j.version ++ ")";
+
+		var vendor_text = j.vendor;
+		if (!vendor_text or #vendor_text == 0) vendor_text = m3java.vendor_of(j.path, j.version);
+
+		var mark = "";
+		if (j.black) mark = mark ++ "[黑名单] ";
+		if (cfg.java == j.path) mark = mark ++ "[当前] ";
+
+		listJava.addItem({ mark ++ major_text; vendor_text; j.path });
+		table.push(java_rows, j.path);
+	}
+
+	// 按路径找回选中项
+	if (java_selected) {
+		var at = 0;
+		for i, p in java_rows {
+			if (p == java_selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) listJava.selIndex = at;
+		else java_selected = null;
+	}
+
+	lblJavaHint.text = "共 " ++ #cfg.javas ++ " 个。黑名单里的 Java 不会被自动选中。";
+}
+
+function java_current() {
+	var i = listJava.selIndex;
+	if (i > 0 and i <= #java_rows) return java_rows[i];
+
+	return java_selected;
+}
+
+listJava.onSelChanged = function(sel, item, subItem, nm) {
+	var i = listJava.selIndex;
+	if (i > 0 and i <= #java_rows) java_selected = java_rows[i];
+}
+
+// 重新检测
+java_btns_1[1].oncommand = function(id, event) {
+	lblJavaHint.text = "检测中…";
+
+	winform.setTimeout(function() {
+		var found_paths = m3java.scan_paths(cfg.game_path);
+
+		// 已经问过版本的直接复用，只有第一次需要逐个起进程
+		var cache = {};
+		for i, j in cfg.javas {
+			var major = j.major or 0;
+			if (j.path and major > 0) cache[string.lower(j.path)] = major;
+		}
+
+		for i, p in found_paths {
+			var major = cache[string.lower(p)];
+			if (!major) major = MMMLC.get_java_version(p) or 0;
+
+			var found = false;
+			for k, j in cfg.javas {
+				if (string.lower(j.path or "") == string.lower(p)) {
+					j.major = major;
+					found = true;
+				}
+			}
+
+			if (!found) {
+				table.push(cfg.javas, { path = p; major = major; black = false });
+			}
+		}
+
+		m3config.save_keys(cfg, {"javas"; "java"});
+		java_render();
+		lblJavaHint.text = "检测完成，共 " ++ #found_paths ++ " 个 Java。";
+	}, 50);
+}
+
+// 手动添加
+java_btns_1[2].oncommand = function(id, event) {
+	var f = fsys.dlg.open("可执行文件|*.exe|所有文件|*.*|", "选择 java.exe", "", winform, , "java.exe");
+	if (!f) return;
+
+	for i, j in cfg.javas {
+		if (j.path == f) {
+			lblJavaHint.text = "该 Java 已在列表当中。";
+			return;
+		}
+	}
+
+	var major = MMMLC.get_java_version(f);
+	table.push(cfg.javas, { path = f; major = major or 0; black = false });
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	java_render();
+}
+
+// 移除记录
+java_btns_1[3].oncommand = function(id, event) {
+	var path = java_current();
+	if (!path) {
+		lblJavaHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	// 重建数组，避免 table.remove 之后留下空洞
+	var list = {};
+	for i, j in cfg.javas {
+		if (j.path != path) table.push(list, j);
+	}
+	cfg.javas = list;
+
+	if (cfg.java == path) cfg.java = "";
+	java_selected = null;
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	java_render();
+}
+
+// 加入 / 移出黑名单
+java_btns_2[1].oncommand = function(id, event) {
+	var path = java_current();
+	if (!path) {
+		lblJavaHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	var hit = null;
+	for i, j in cfg.javas {
+		if (j.path == path) {
+			hit = j;
+			break;
+		}
+	}
+
+	if (!hit) {
+		lblJavaHint.text = "列表里找不到此记录，请点击「重新检测」。";
+		return;
+	}
+
+	if (hit.black) hit.black = false;
+	else hit.black = true;
+
+	java_selected = path;
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	java_render();
+
+	// 全都拉黑了就没有能自动选的，得提醒
+	var usable = 0;
+	for i, j in cfg.javas {
+		if (j.path and !j.black) usable++;
+	}
+
+	if (hit.black) {
+		if (usable == 0) {
+			lblJavaHint.text = "已加入黑名单：" ++ path ++ "　—— 所有 Java 都在黑名单中，启动时将无法自动选择。";
+		}
+		else {
+			lblJavaHint.text = "已加入黑名单：" ++ path;
+		}
+	}
+	else {
+		lblJavaHint.text = "已移出黑名单：" ++ path;
+	}
+}
+
+// 设为当前
+java_btns_2[2].oncommand = function(id, event) {
+	var path = java_current();
+	if (!path) {
+		lblJavaHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	cfg.java = path;
+	java_selected = path;
+
+	m3config.save_keys(cfg, {"javas"; "java"});
+	java_render();
+}
+
+// 在资源管理器里选中这条 Java
+java_btns_2[3].oncommand = function(id, event) {
+	var path = java_current();
+	if (!path) {
+		lblJavaHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	if (!io.exist(path)) {
+		lblJavaHint.text = "此 Java 已被删除或迁移。";
+		return;
+	}
+
+	process.exploreSelect(path);
 }
 
 btnPaths.oncommand = function(id, event) {
@@ -721,7 +1009,8 @@ winform.btnSave.oncommand = function(id, event) {
 		else c.version = "";
 	}
 
-	c.java = string.trim(editJava.text);
+	c.jvm_args = editJvm.text;
+	c.java_columns = listJava.columns;
 
 	c.width = tonumber(string.trim(editW.text)) or 854;
 	c.height = tonumber(string.trim(editH.text)) or 480;
@@ -775,9 +1064,11 @@ if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
 if (#about_ver > 0) lblAboutVer.text = "版本 " ++ about_ver;
 
 editMem.text = tostring(cfg.memory);
-editJava.text = cfg.java;
+editJvm.text = cfg.jvm_args or "";
 editW.text = tostring(cfg.width);
 editH.text = tostring(cfg.height);
+
+java_render();
 
 comboMode.add("手动设置");
 comboMode.add("全屏");

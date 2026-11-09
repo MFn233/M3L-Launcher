@@ -446,6 +446,15 @@ namespace MMMLC{
 			table.push(args, classpath);
 		}
 
+		//2.5 用户自定义 JVM 参数：追加在自动生成之后，
+		//同名参数以这里为准（比如用户自己写 -Xmx4G 就覆盖上面的默认值）
+		if (opts.extra_jvm) {
+			for i, a in opts.extra_jvm {
+				a = string.trim(a);
+				if (#a > 0) table.push(args, a);
+			}
+		}
+
 		//3. 主类
 		table.push(args, info.main_class);
 

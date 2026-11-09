@@ -567,6 +567,17 @@ function start_game(retried, inst) {
 		if (#custom > 0) uuid = custom;
 	}
 
+	// 自定义 JVM 参数：一行一条，空行忽略
+	var extra_jvm = {};
+	var jvm_text = string.replace(cfg.jvm_args or "", '\r', "");
+	if (#jvm_text > 0) {
+		var jvm_lines = string.split(jvm_text, '\n');
+		for k, line in jvm_lines {
+			line = string.trim(line);
+			if (#line > 0) table.push(extra_jvm, line);
+		}
+	}
+
 	var opts = {
 		minecraft_dir = cfg.game_path;
 		version = cfg.version;
@@ -581,6 +592,7 @@ function start_game(retried, inst) {
 		width = game_w;
 		height = game_h;
 		no_wait = false;
+		extra_jvm = extra_jvm;
 	};
 
 	log("--------------------------------------------------");

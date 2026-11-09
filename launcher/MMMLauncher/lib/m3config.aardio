@@ -32,6 +32,7 @@ namespace m3config{
 			username = "";
 			memory = 4096;
 			java = "";
+	jvm_args = "";   // 自定义 JVM 参数，一行一条
 			version = "";
 			game_path = "";
 			game_paths = {};
@@ -136,6 +137,7 @@ namespace m3config{
 			if (data.username !== null) cfg.username = data.username;
 			if (data.memory !== null) cfg.memory = data.memory;
 			if (data.java !== null) cfg.java = data.java;
+			if (data.jvm_args !== null) cfg.jvm_args = data.jvm_args;
 			if (data.version !== null) cfg.version = data.version;
 			if (data.game_path !== null) cfg.game_path = data.game_path;
 			if (data.window_mode !== null) cfg.window_mode = data.window_mode;
