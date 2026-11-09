@@ -149,26 +149,33 @@ namespace m3theme {
 }
 
 /**intellisense(m3theme)
+// 颜色 token：按用途命名，深色模式只改这一段
 INK = 近黑 #1A1A1A（ARGB，plus 的 skin 用）
 WHITE = 纯白
-BG = 窗口背景 #F2F2F2
+BG = 窗口 / 内容区背景 #F2F2F2
 MUTED = 次要文字 #8C8C8C
 LINE = 分隔线 #D8D8D8
 TRACK = 滑条轨道 #E2E2E2
 DIS = 禁用状态底色
 DISFG = 禁用状态文字
 RED = 错误红 #D03030
-C_INK = 近黑 COLORREF（static / edit 的 color 属性用）
-C_MUTED = 次要文字 COLORREF
-C_BG = 窗口背景 COLORREF（静态文本的 bgcolor 用，避免露出一块浅灰）
-C_RED = 错误红 COLORREF
+SIDEBAR = 左侧导航面板底 #E9E9E9
+SIDEBAR_HOVER = 导航项悬停底 #E2E2E2
+SIDEBAR_SEL = 导航项选中底 #DCDCDC
+FOOTER = 底部条底 #ECECEC
+DIVIDE = 分区之间的 1px 线 #D8D8D8
+FRAME = 分组框边框 #DCDCDC
+FIELD = 输入框 / 列表底 #FFFFFF
+CARD = 卡片 / 次级按钮底 #FFFFFF
+C_INK / C_MUTED / C_BG / C_RED = 对应的 COLORREF（static / edit 的 color、bgcolor 用）
+C_SIDEBAR / C_FOOTER / C_FIELD / C_FRAME = 分区色的 COLORREF
 toRef(__/*argb*/) = ARGB 转 COLORREF
 button(__/*控件*/) = 主要按钮：白底、1px 黑框，悬停整块反色
 ghost(__/*控件*/) = 次要按钮：无框灰字，悬停变黑
 plain(__/*控件*/) = 无框无底，主页标题那种
 rule(__/*控件*/) = 分隔线：1px 高的 plus，只填色
 slider(__/*控件*/) = 滑条：圆形滑块，三个状态形状一致
-field(__/*控件*/) = 输入框文字颜色（不动背景）
+field(__/*控件*/) = 输入框：文字色 + 底色
 ink(__/*控件*/) = 静态文本：主要文字
 note(__/*控件*/) = 静态文本：说明 / 标签
 danger(__/*控件*/) = 静态文本：错误红（不能叫 error，和内置函数冲突）
