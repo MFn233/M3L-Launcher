@@ -88,6 +88,7 @@ namespace m3layout {
 
 		// 这一节结束：用 bkplus 在内容外面补一圈线，并新建标题
 		// plain = true 时不画框（用于只有一行说明的占位节，画框会显得空）
+		// 注意：不论画不画框，**标题一定要建**，否则占位节会只剩一行说明、没有名字。
 		L.close_section = function() {
 			var s = L.open_section;
 			if (!s) return;
@@ -95,21 +96,21 @@ namespace m3layout {
 			s.y1 = L.y - L.section_space;
 			L.open_section = null;
 
-			if (!L.framed or s.plain) return;
+			if (L.framed and !s.plain) {
+				var frame = form.add({
+					cls = "bkplus";
+					left = L.left - GROUP_PAD_X;
+					top = s.caption_top + GROUP_TOP_ON;
+					right = L.right + GROUP_PAD_X;
+					bottom = s.y1 + GROUP_PAD_BOTTOM;
+					bgcolor = m3theme.C_BG;
+					border = { color = m3theme.C_FRAME; width = 1 };
+				});
 
-			var frame = form.add({
-				cls = "bkplus";
-				left = L.left - GROUP_PAD_X;
-				top = s.caption_top + GROUP_TOP_ON;
-				right = L.right + GROUP_PAD_X;
-				bottom = s.y1 + GROUP_PAD_BOTTOM;
-				bgcolor = m3theme.C_BG;
-				border = { color = m3theme.C_FRAME; width = 1 };
-			});
+				table.push(L.controls, frame);
+			}
 
-			table.push(L.controls, frame);
-
-			// 标题盖在框线上：先建框后建标题，标题就在上面
+			// 标题盖在框线上：bkplus 画在窗体背景、static 是窗口，所以标题总在上面
 			var cap = L.make({
 				cls = "static";
 				text = s.title;

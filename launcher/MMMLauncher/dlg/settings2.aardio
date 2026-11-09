@@ -249,17 +249,26 @@ function show_page(n) {
 var nav_items = {};
 var nav_current = 0;
 
-// 选中条：横跨整个导航面板（0..200）。导航项本身只有 16..184，
-// 用它补上左右两侧，高亮才是"整行通到边"。
-// bkplus 画在窗体背景上，不会盖住导航项的文字。
-var nav_highlight = winform.add({
-	cls = "bkplus";
-	left = 0;
-	top = 20;
-	right = 200;
-	bottom = 50;
-	bgcolor = NAV_SEL;
-});
+// 选中条：每个导航项各配一条横跨整个面板的 bkplus（0..200），切页时只显示当前那条。
+// 不用"一条条 setPos 移动"：bkplus 的 setPos 走的是 $rect，坐标系和 DSG 的
+// 逻辑像素不是一回事，实测会跑到别处。建五条固定位置、用 visible 切换最稳。
+var nav_bars = {};
+
+for i = 1; #nav_titles; 1 {
+	var by = 20 + (i - 1) * 32;
+
+	var bar = winform.add({
+		cls = "bkplus";
+		left = 0;
+		top = by;
+		right = 200;
+		bottom = by + 30;
+		bgcolor = NAV_SEL;
+	});
+
+	bar.visible = false;
+	table.push(nav_bars, bar);
+}
 
 function nav_skin(i, selected) {
 	var c = nav_items[i];
@@ -286,7 +295,10 @@ function select_page(n) {
 	show_page(n);
 
 	winform.lblPageTitle.text = nav_titles[n];
-	nav_highlight.setPos(0, 20 + (n - 1) * 32, 200, 30);
+
+	for i, bar in nav_bars {
+		bar.visible = (i == n);
+	}
 
 	for i, c in nav_items {
 		nav_skin(i, i == n);
