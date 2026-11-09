@@ -36,7 +36,8 @@ lblSec5={cls="static";text="列表";left=24;top=422;right=200;bottom=442;font=LO
 listDemo={cls="listview";mode="report";left=24;top=448;right=596;bottom=548;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei';h=-12);z=25};
 btnClose={cls="plus";text="关闭";left=496;top=566;right=596;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-13);z=26};
 btnCrashTest={cls="plus";text="崩溃窗口测试台";left=24;top=566;right=196;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-12);z=27};
-lblDpi={cls="static";text="";left=204;top=566;right=398;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-11);z=28};
+lblDpi={cls="static";text="";left=204;top=566;right=298;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-11);z=28};
+btnLayout={cls="plus";text="布局测试";left=306;top=566;right=396;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-12);z=30};
 btnSettings2={cls="plus";text="设置界面";left=406;top=566;right=488;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-12);z=29};
 )
 /*}}*/
@@ -46,6 +47,7 @@ m3theme.button(winform.btnPrimary);
 m3theme.ghost(winform.btnGhost);
 m3theme.button(winform.btnDisabled);
 m3theme.button(winform.btnCrashTest);
+m3theme.button(winform.btnLayout);
 m3theme.button(winform.btnSettings2);
 m3theme.button(winform.btnClose);
 
@@ -105,6 +107,11 @@ winform.btnCrashTest.oncommand = function(id, event) {
 // 新版设置界面（左侧分类导航 + 右侧分组），先在这里试用，满意再替换主页入口
 winform.btnSettings2.oncommand = function(id, event) {
 	winform.loadForm("/dlg/settings2.aardio").doModal(winform);
+}
+
+// 布局助手 m3layout 的对照页：同一内容两种密度
+winform.btnLayout.oncommand = function(id, event) {
+	winform.loadForm("/dlg/layout_test.aardio").doModal(winform);
 }
 
 winform.btnClose.oncommand = function(id, event) {

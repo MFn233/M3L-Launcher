@@ -1,0 +1,248 @@
+//m3layout.aardio
+
+//竖向流式布局：按「一节 → 一行一行往下排」的方式算坐标。
+//
+//为什么需要它：aardio 的控件坐标是绝对像素，手写每一行的 top 必然会有偏差
+//（HTML 有 flex / gap 自动算，这里没有），十几个控件叠起来就"看着歪但说不上哪歪"。
+//这层把行高、行距、标签列宽度都变成常量，调用方只说「放什么」，不再算坐标。
+//
+//坐标全部按逻辑像素算，再交给 winform.add —— 它接受逻辑坐标，DPI 缩放由 aardio 处理。
+
+namespace m3layout {
+	import table;
+	import m3theme;
+
+	// ---------- 尺寸常量：整体松紧只改这里 ----------
+	LABEL_W = 88;        // 左侧标签列宽度
+	ROW_H = 28;          // 行内控件高度
+	ROW_STEP = 36;       // 行距（控件高 + 8）
+	BTN_H = 32;          // 按钮高度
+	BTN_W = 88;          // 行内按钮宽度
+	BTN_GAP = 8;         // 控件与行内按钮之间
+	SECTION_H = 22;      // 分组标题高度
+	SECTION_GAP = 12;    // 标题与第一行之间
+	SECTION_SPACE = 16;  // 上一节内容与本节标题之间
+	NOTE_STEP = 24;      // 说明行步进
+	TEXT_DY = 5;         // 单行文字相对控件顶部的下移量（让标签与控件视觉居中）
+
+	function create(form, left, top, width, opt) {
+		var L = {};
+
+		L.form = form;
+		L.left = left;
+		L.top = top;
+		L.width = width;
+		L.right = left + width;
+		L.y = top;
+
+		// 允许调用方覆盖尺寸（同一个窗体里并排放"紧凑 / 宽松"两版）
+		L.label_w = (opt and opt.label_w) or LABEL_W;
+		L.row_h = (opt and opt.row_h) or ROW_H;
+		L.row_step = (opt and opt.row_step) or ROW_STEP;
+		L.btn_h = (opt and opt.btn_h) or BTN_H;
+		L.btn_w = (opt and opt.btn_w) or BTN_W;
+		L.section_h = (opt and opt.section_h) or SECTION_H;
+		L.section_gap = (opt and opt.section_gap) or SECTION_GAP;
+		L.section_space = (opt and opt.section_space) or SECTION_SPACE;
+		L.note_step = (opt and opt.note_step) or NOTE_STEP;
+		L.text_dy = (opt and opt.text_dy) or TEXT_DY;
+		L.font = (opt and opt.font) or -12;
+
+		L.first_section = true;
+
+		// 建控件：坐标由调用方给，字体没给就统一用正文号
+		L.make = function(o) {
+			var t = table.assign({}, o);
+
+			if (t.font == null) t.font = LOGFONT(name='Microsoft YaHei'; h=L.font);
+
+			return form.add(t);
+		};
+
+		// 同一类控件套同一套主题，保证各页面长得一样
+		L.skin = function(ctrl, cls) {
+			if (!ctrl) return ctrl;
+
+			if (cls == "static") m3theme.note(ctrl);
+			elseif (cls == "edit") m3theme.field(ctrl);
+			elseif (cls == "checkbox") ctrl.bgcolor = m3theme.C_BG;
+			elseif (cls == "plus") m3theme.button(ctrl);
+
+			return ctrl;
+		};
+
+		// ---------- 一节 ----------
+
+		// 分组标题：一条加粗小字，下面留 SECTION_GAP
+		L.section = function(text) {
+			if (!L.first_section) L.y = L.y + L.section_space;
+
+			var y = L.y;
+
+			L.make({
+				cls = "static";
+				text = text;
+				left = L.left;
+				top = y;
+				right = L.right;
+				bottom = y + L.section_h;
+				font = LOGFONT(name='Microsoft YaHei'; h=-13; weight=700);
+			});
+
+			L.y = y + L.section_h + L.section_gap;
+			L.first_section = false;
+
+			return y;
+		};
+
+		// ---------- 一行 ----------
+
+		// 标签 + 控件（+ 可选的行内按钮）
+		// ctrl_opt 只写 cls 和控件自己的属性，坐标会被覆盖；返回控件以便继续填内容
+		L.row = function(label, ctrl_opt, btn_text) {
+			var y = L.y;
+			var x = L.left + L.label_w;
+			var ctrl_right = L.right;
+
+			if (btn_text) ctrl_right = L.right - L.btn_w - BTN_GAP;
+
+			if (label and #label) {
+				var lab = L.make({
+					cls = "static";
+					text = label;
+					left = L.left;
+					top = y + L.text_dy;
+					right = L.left + L.label_w - 8;
+					bottom = y + L.text_dy + 20;
+					font = LOGFONT(name='Microsoft YaHei'; h=L.font);
+				});
+
+				m3theme.note(lab);
+			}
+
+			var ctrl = L.make(table.assign({}, ctrl_opt, {
+				left = x;
+				top = y;
+				right = ctrl_right;
+				bottom = y + L.row_h;
+			}));
+
+			L.skin(ctrl, ctrl_opt.cls);
+
+			if (btn_text) {
+				var btn = L.make({
+					cls = "plus";
+					text = btn_text;
+					left = L.right - L.btn_w;
+					top = y;
+					right = L.right;
+					bottom = y + L.row_h;
+				});
+
+				m3theme.button(btn);
+			}
+
+			L.y = y + L.row_step;
+
+			return ctrl;
+		};
+
+		// 复选框：整行，从标签列开始
+		L.check = function(text, checked) {
+			var y = L.y;
+
+			var c = L.make({
+				cls = "checkbox";
+				text = text;
+				left = L.left + L.label_w;
+				top = y;
+				right = L.right;
+				bottom = y + 22;
+			});
+
+			if (checked) c.checked = true;
+			c.bgcolor = m3theme.C_BG;
+
+			L.y = y + L.row_step;
+
+			return c;
+		};
+
+		// 说明文字：整行次要灰字（多行用 \r\n 自己断）
+		L.text = function(text) {
+			var y = L.y;
+
+			var note = L.make({
+				cls = "static";
+				text = text;
+				left = L.left + L.label_w;
+				top = y;
+				right = L.right;
+				bottom = y + L.note_step;
+				font = LOGFONT(name='Microsoft YaHei'; h=-11);
+			});
+
+			m3theme.note(note);
+
+			L.y = y + L.note_step;
+
+			return note;
+		};
+
+		// 按钮行：从右往左排，最后一个按钮贴右边界；返回按钮数组（顺序与传入一致）
+		L.buttons = function(texts) {
+			var y = L.y;
+			var x = L.right;
+			var list = {};
+
+			for i = #texts; 1; -1 {
+				var btn = L.make({
+					cls = "plus";
+					text = texts[i];
+					left = x - L.btn_w;
+					top = y;
+					right = x;
+					bottom = y + L.btn_h;
+				});
+
+				m3theme.button(btn);
+				table.push(list, btn);
+
+				x = x - L.btn_w - BTN_GAP;
+			}
+
+			// push 的顺序是倒的，反过来让返回值与传入一致
+			var ordered = {};
+			for i = #list; 1; -1 {
+				table.push(ordered, list[i]);
+			}
+
+			L.y = y + L.btn_h + BTN_GAP;
+
+			return ordered;
+		};
+
+		// 手动留白 / 查当前排到哪
+		L.gap = function(px) {
+			L.y = L.y + (px or 8);
+		};
+
+		L.finish = function() {
+			return L.y;
+		};
+
+		return L;
+	}
+}
+
+/**intellisense(m3layout)
+LABEL_W / ROW_H / ROW_STEP / BTN_H / BTN_W / SECTION_H = 尺寸常量（改这里调整体松紧）
+create(__/*窗体*/,__/*left*/,__/*top*/,__/*width*/,__/*覆盖项*/) = 创建一个布局游标
+!layout.section(__/*标题*/) = 分组标题，自动留白
+!layout.row(__/*标签*/,__/*控件参数表*/,__/*行内按钮文字*/) = 一行：标签 + 控件（+ 按钮），返回控件
+!layout.check(__/*文字*/,__/*默认选中*/) = 整行复选框，返回控件
+!layout.text(__/*说明*/) = 整行说明文字，返回控件
+!layout.buttons(__/*按钮文字数组*/) = 按钮行，从右往左排，返回按钮数组
+!layout.gap(__/*像素*/) = 手动留白
+!layout.finish() = 返回当前排到的 top
+end intellisense**/

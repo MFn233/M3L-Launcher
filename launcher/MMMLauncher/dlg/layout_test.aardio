@@ -1,0 +1,82 @@
+//dlg/layout_test.aardio
+
+//布局测试：同一份内容，左边紧凑、右边宽松，各用一套 m3layout 常量排出。
+//目的是把"行距/控件高/标签列宽"变成看得见的对照，而不是靠猜。
+//内容只是摆设，用来看对齐，不参与任何配置。
+
+import win.ui;
+import m3theme;
+import m3layout;
+
+/*DSG{{*/
+var winform = win.form(text="布局测试";right=900;bottom=600;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+lblTitle={cls="static";text="布局测试：同一份内容，两种密度";left=24;top=16;right=640;bottom=44;font=LOGFONT(name='Microsoft YaHei';h=-14;weight=700);z=1};
+lineDiv={cls="plus";left=444;top=64;right=445;bottom=540;z=2};
+lblInfo={cls="static";left=24;top=552;right=760;bottom=580;font=LOGFONT(name='Microsoft YaHei';h=-11);z=3};
+btnClose={cls="plus";text="关闭";left=788;top=552;right=876;bottom=584;font=LOGFONT(name='Microsoft YaHei';h=-13);z=4}
+)
+/*}}*/
+
+m3theme.ink(winform.lblTitle);
+m3theme.note(winform.lblInfo);
+m3theme.rule(winform.lineDiv);
+m3theme.button(winform.btnClose);
+
+// 同一份内容：只描述「放什么」，坐标全交给 m3layout
+function build(L) {
+	L.section("账号");
+	L.row("用户", { cls = "edit"; text = "MFn" }, "用户配置");
+	L.text("离线登录。切换账号请用右侧按钮。");
+
+	L.section("分配内存");
+	L.row("内存", { cls = "edit"; text = "4096"; num = 1 }, "自动配置");
+	L.text("按物理内存的 1/4 建议。");
+
+	L.section("游戏窗口");
+	var mode = L.row("大小", { cls = "combobox"; mode = "dropdownlist" }, "默认大小");
+	mode.add("手动设置");
+	mode.add("全屏");
+	mode.add("与启动器一致");
+	mode.selIndex = 1;
+
+	L.section("启动器行为");
+	L.check("启动时弹出日志窗口", true);
+	L.check("启动后隐藏启动器", false);
+	L.check("显示主页状态栏", true);
+
+	L.section("操作");
+	L.buttons({"保存"; "取消"});
+}
+
+// ---------- 左：紧凑 ----------
+var left_layout = m3layout.create(winform, 24, 64, 400, {
+	label_w = 64;
+	row_h = 24;
+	row_step = 30;
+	section_gap = 8;
+	section_space = 12;
+	note_step = 18;
+	text_dy = 3;
+	btn_w = 76;
+});
+
+build(left_layout);
+
+// ---------- 右：宽松（默认常量） ----------
+var right_layout = m3layout.create(winform, 468, 64, 400, null);
+
+build(right_layout);
+
+winform.lblInfo.text = string.format("左：紧凑（行高 24 / 行距 30 / 标签列 64）排到 %d　｜　右：默认（行高 28 / 行距 36 / 标签列 88）排到 %d",
+	left_layout.finish(), right_layout.finish());
+
+winform.btnClose.oncommand = function(id, event) {
+	winform.endModal(true);
+}
+
+winform.onCancel = function() {
+	winform.endModal(true);
+}
+
+return winform;
