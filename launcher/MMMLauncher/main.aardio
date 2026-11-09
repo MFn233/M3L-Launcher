@@ -744,14 +744,10 @@ winform.btnSettings.oncommand = function(id, event) {
 	}
 }
 
-winform.btnTitle.oncommand = function(id, event) {
-	winform.loadForm("/dlg/about.aardio").doModal(winform);
-}
-
-// 右键标题 = 控件样式测试台（改主题时用来对照）
-// Ctrl + 右键 = 崩溃窗口测试台（崩溃场景不好人为制造，用它验证分析逻辑）
+// 左键标题 = 控件样式测试台（改主题时用来对照）
+// Ctrl + 左键 = 崩溃窗口测试台（崩溃场景不好人为制造，用它验证分析逻辑）
 // 两个都是开发工具：只有开了「调试模式」才响应，正式用户点不出来
-winform.btnTitle.onRightMouseUp = function(wParam, lParam) {
+winform.btnTitle.oncommand = function(id, event) {
 	var cfg = m3config.read();
 	if (!cfg.debug) return;
 

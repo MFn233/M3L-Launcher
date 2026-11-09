@@ -13,6 +13,7 @@ import m3config;
 import m3java;
 import sys.mem;
 import fsys;
+import fsys.version;
 import string;
 import math;
 /*DSG{{*/
@@ -143,6 +144,70 @@ P5.text("切换当前版本、隔离、重命名、删除（删除进回收站�
 
 P5.finish();
 
+// ---------- 第六页：关于 ----------
+
+var P6 = m3layout.create(winform, 232, 92, 504, { framed = false });
+
+var lblAboutName = winform.add({
+	cls = "static";
+	text = "MFn's Minimalism Mclauncher";
+	left = 232; top = 52; right = 736; bottom = 82;
+	font = LOGFONT(name='Microsoft YaHei'; h=-16; weight=700);
+});
+m3theme.ink(lblAboutName);
+table.push(P6.controls, lblAboutName);
+
+P6.text("—— 一个妄图写出完美代码的程序爱好者。", true);
+P6.gap(12);
+P6.text("作者：MFn。本项目遵循 GPL-3.0 协议开源。", true);
+var lblAboutVer = P6.text("版本 0.1.3", true);
+
+P6.finish();
+
+// ---------- 第七页：鸣谢 ----------
+
+var P7 = m3layout.create(winform, 232, 52, 504, { framed = false });
+
+// 正文用 richedit：测试者名单会变长，必须能滚动
+var editCredits = winform.add({
+	cls = "richedit";
+	readonly = 1;
+	multiline = 1;
+	vscroll = 1;
+	autohscroll = false;
+	left = 232; top = 52; right = 736; bottom = 508;
+	font = LOGFONT(name='Microsoft YaHei'; h=-12);
+});
+editCredits.color = m3theme.C_INK;
+editCredits.bgcolor = m3theme.C_FIELD;
+table.push(P7.controls, editCredits);
+
+// 追加一行：小标题近黑，条目次要灰
+function credit(text, is_heading) {
+	editCredits.readonly = false;
+
+	if (is_heading) editCredits.appendText({ textColor = m3theme.C_INK }, text ++ '\r\n');
+	else editCredits.appendText({ textColor = m3theme.C_MUTED }, text ++ '\r\n');
+
+	editCredits.readonly = true;
+}
+
+credit("第三方", true);
+credit("aardio · 开发工具与运行时");
+credit("Mojang · Minecraft 本体与版本清单格式");
+credit("HMCL · 崩溃原因分析规则的参考实现（GPL-3.0）");
+credit("");
+credit("实现协作", true);
+credit("DeepSeek · 代码实现、文档整理与测试");
+credit("");
+credit("参与测试", true);
+credit("（名单待补充）");
+credit("");
+credit("本项目为个人非营利项目，与上述公司、项目无隶属关系。", true);
+credit("「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。", true);
+
+P7.finish();
+
 // ---------- 用得到控件的函数（必须在控件声明之后） ----------
 
 function user_summary(c) {
@@ -231,8 +296,8 @@ function selected_path() {
 
 // ---------- 分页 ----------
 
-var PAGES = { P1; P2; P3; P4; P5 };
-var nav_titles = { "启动器设置"; "游戏设置"; "账户管理"; "Java 管理"; "路径与版本管理" };
+var PAGES = { P1; P2; P3; P4; P5; P6; P7 };
+var nav_titles = { "启动器设置"; "游戏设置"; "账户管理"; "Java 管理"; "路径与版本管理"; "关于"; "鸣谢" };
 
 function show_page(n) {
 	for i, page in PAGES {
@@ -353,6 +418,17 @@ comboPath.onSelChange = function() {
 function lblHint_update() {
 	winform.lblHint.text = "当前游戏路径已切换：" ++ (cfg.game_path or "");
 	lblVersion.text = "当前版本：" ++ (cfg.version or "未选择");
+// 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
+// F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
+var about_ver = "";
+var vi = fsys.version.getInfo(io._exepath);
+if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
+	var fv = vi.fileVersion;
+	if (fv.valid()) {
+		about_ver = tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
+	}
+}
+if (#about_ver > 0) lblAboutVer.text = "版本 " ++ about_ver;
 }
 
 btnDefault.oncommand = function(id, event) {
@@ -400,6 +476,17 @@ btnsVersions[1].oncommand = function(id, event) {
 
 	cfg = m3config.read();
 	lblVersion.text = "当前版本：" ++ (cfg.version or "未选择");
+// 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
+// F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
+var about_ver = "";
+var vi = fsys.version.getInfo(io._exepath);
+if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
+	var fv = vi.fileVersion;
+	if (fv.valid()) {
+		about_ver = tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
+	}
+}
+if (#about_ver > 0) lblAboutVer.text = "版本 " ++ about_ver;
 }
 
 winform.btnSave.oncommand = function(id, event) {
@@ -460,6 +547,17 @@ winform.onCancel = function() {
 
 lblAccount.text = user_summary(cfg);
 lblVersion.text = "当前版本：" ++ (cfg.version or "未选择");
+// 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
+// F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
+var about_ver = "";
+var vi = fsys.version.getInfo(io._exepath);
+if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
+	var fv = vi.fileVersion;
+	if (fv.valid()) {
+		about_ver = tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
+	}
+}
+if (#about_ver > 0) lblAboutVer.text = "版本 " ++ about_ver;
 
 editMem.text = tostring(cfg.memory);
 editJava.text = cfg.java;

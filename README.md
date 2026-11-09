@@ -124,7 +124,7 @@ tools\deploy-core-lib.bat
 
 **参与测试**
 
-- 见程序内「关于 → 鸣谢」
+- 见程序内「设置 → 鸣谢」
 
 本项目为个人非营利项目，与上述公司、项目无隶属关系。
 「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。
