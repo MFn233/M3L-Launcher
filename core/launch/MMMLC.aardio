@@ -423,8 +423,18 @@ namespace MMMLC{
 			table.push(args, normalize_jvm_arg(substitute(a, vars)));
 		}
 
-		//2. JSON 里没有的才补上：内存、natives 路径、classpath
-		if (!has_token_prefix(args, "-Xmx")) {
+		// 用户自定义参数先收好：下面判断"要不要补默认 -Xmx"要用到它，
+		// 否则会出现 -Xmx3840M 和 -Xmx2G 同时存在（虽然 JVM 取后一个，但没必要）。
+		var extra = {};
+		if (opts.extra_jvm) {
+			for i, a in opts.extra_jvm {
+				a = string.trim(a);
+				if (#a > 0) table.push(extra, a);
+			}
+		}
+
+		//2. JSON 与用户参数里都没有才补上：内存
+		if (!has_token_prefix(args, "-Xmx") and !has_token_prefix(extra, "-Xmx")) {
 			table.push(args, "-Xmx" ++ tostring(opts.memory) ++ "M");
 		}
 
@@ -448,11 +458,8 @@ namespace MMMLC{
 
 		//2.5 用户自定义 JVM 参数：追加在自动生成之后，
 		//同名参数以这里为准（比如用户自己写 -Xmx4G 就覆盖上面的默认值）
-		if (opts.extra_jvm) {
-			for i, a in opts.extra_jvm {
-				a = string.trim(a);
-				if (#a > 0) table.push(args, a);
-			}
+		for i, a in extra {
+			table.push(args, a);
 		}
 
 		//3. 主类
