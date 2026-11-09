@@ -15,6 +15,8 @@ import MMMLC;
 import process;
 import fsys.dlg;
 import m3list;
+import m3version;
+import json;
 import crypt;
 import sys.mem;
 import fsys;
@@ -67,8 +69,6 @@ m3theme.button(winform.btnCancel);
 m3theme.button(winform.btnSave);
 
 var cfg = m3config.read();
-var paths = cfg.game_paths;
-var path_dirs = {};
 
 // ---------- 滚动条 ----------
 // 列表与多行输入框的滚动条是 Windows 主题（UxTheme）画的，aardio 改不了颜色。
@@ -222,14 +222,69 @@ P4.finish();
 var P5 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P5.section("游戏路径");
-var comboPath, btnPaths = P5.row("当前路径", { cls = "combobox"; mode = "dropdownlist" }, "路径管理");
-P5.text("切换路径后，若当前版本在新路径里不存在，会自动选第一个可用版本。");
+
+var listPaths = P5.make({
+	cls = "listview";
+	left = 232;
+	top = P5.y;
+	right = 736;
+	bottom = P5.y + 100;
+});
+
+listPaths.fullRow = true;
+
+var saved_path_cols = cfg.paths_columns;
+if (type(saved_path_cols) == "table" and #saved_path_cols >= 2) {
+	listPaths.columns = saved_path_cols;
+}
+else {
+	listPaths.columns = {
+		{ "名称"; 150 };
+		{ "路径"; 700 };
+	};
+}
+
+m3list.fit(listPaths);
+try_thin_scrollbar(listPaths);
+
+P5.y = P5.y + 100 + 8;
+
+var editPathName, btnPathRename = P5.row("名称", { cls = "edit" }, "重命名");
+var path_tools = P5.tool_row({"添加"; "删除"}, {"设为当前"; "打开目录"});
 
 P5.section("版本");
-var lblVersion = P5.text("");
-var btnsVersions = P5.buttons({"版本管理"});
-P5.gap(4);
-P5.text("切换当前版本、隔离、重命名、删除（删除进回收站）。仍在「版本管理」窗口里。");
+
+var listVers = P5.make({
+	cls = "listview";
+	left = 232;
+	top = P5.y;
+	right = 736;
+	bottom = P5.y + 100;
+});
+
+listVers.fullRow = true;
+
+var saved_ver_cols = cfg.version_columns;
+if (type(saved_ver_cols) == "table" and #saved_ver_cols >= 4) {
+	listVers.columns = saved_ver_cols;
+}
+else {
+	listVers.columns = {
+		{ "版本名"; 190 };
+		{ "游戏版本"; 90 };
+		{ "加载器"; 150 };
+		{ "隔离"; 80 };
+	};
+}
+
+m3list.fit(listVers);
+try_thin_scrollbar(listVers);
+
+P5.y = P5.y + 100 + 8;
+
+var editVerNew, btnVerRename = P5.row("新名称", { cls = "edit" }, "重命名");
+var ver_tools = P5.tool_row({"切换隔离"; "删除"}, {"设为当前"; "打开目录"});
+var lblP5Hint = P5.text("", true);
 
 P5.finish();
 
@@ -362,27 +417,6 @@ function has_version(dir, name) {
 	return false;
 }
 
-function refresh_path_combo() {
-	comboPath.clear();
-	path_dirs = {};
-
-	for i, p in paths {
-		var label = p.name;
-		if (!label or #label == 0) label = p.dir;
-
-		comboPath.add(label);
-		table.push(path_dirs, p.dir);
-
-		if (p.dir == cfg.game_path) comboPath.selIndex = #path_dirs;
-	}
-}
-
-function selected_path() {
-	var i = comboPath.selIndex;
-	if (i <= 0) return null;
-	return path_dirs[i];
-}
-
 // ---------- 分页 ----------
 
 var PAGES = { P1; P2; P3; P4; P5; P6; P7 };
@@ -482,42 +516,6 @@ editMem.onChange = function() {
 
 comboMode.onSelChange = function() {
 	update_mode_ui();
-}
-
-comboPath.onSelChange = function() {
-	var dir = selected_path();
-	if (!dir) return;
-	if (dir == cfg.game_path) return;
-
-	var c = m3config.read();
-	c.game_path = dir;
-
-	if (!has_version(dir, c.version)) {
-		var v = first_version(dir);
-		if (v) c.version = v;
-		else c.version = "";
-	}
-
-	m3config.save_keys(c, {"game_path"; "version"});
-
-	cfg = m3config.read();
-	lblHint_update();
-}
-
-function lblHint_update() {
-	winform.lblHint.text = "当前游戏路径已切换：" ++ (cfg.game_path or "");
-	lblVersion.text = "当前版本：" ++ (cfg.version or "未选择");
-// 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
-// F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
-var about_ver = "";
-var vi = fsys.version.getInfo(io._exepath);
-if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
-	var fv = vi.fileVersion;
-	if (fv.valid()) {
-		about_ver = tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
-	}
-}
-if (#about_ver > 0) lblAboutVer.text = "版本 " ++ about_ver;
 }
 
 btnDefault.oncommand = function(id, event) {
@@ -983,30 +981,516 @@ java_tools.right[3].oncommand = function(id, event) {
 	process.exploreSelect(path);
 }
 
-btnPaths.oncommand = function(id, event) {
-	winform.loadForm("/dlg/paths.aardio").doModal(winform);
+// ---------- 游戏路径 ----------
 
-	cfg = m3config.read();
-	paths = cfg.game_paths;
-	refresh_path_combo();
+var path_rows = {};
+var path_selected = null;
+
+function paths_render() {
+	listPaths.clear();
+	path_rows = {};
+
+	for i, p in cfg.game_paths {
+		var name = p.name;
+		if (!name or #name == 0) name = io.splitpath(p.dir).name;
+
+		var mark = "";
+		if (p.official) mark = mark ++ "[官方] ";
+		if (cfg.game_path == p.dir) mark = mark ++ "[当前] ";
+
+		listPaths.addItem({ mark ++ name; p.dir });
+		table.push(path_rows, i);
+	}
+
+	// 按目录找回选中项，重建列表不会把选中状态弄丢
+	if (path_selected) {
+		var at = 0;
+		for i, idx in path_rows {
+			var p = cfg.game_paths[idx];
+			if (p and p.dir == path_selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) listPaths.selIndex = at;
+		else path_selected = null;
+	}
+
+	lblP5Hint.text = "游戏路径共 " ++ #cfg.game_paths ++ " 条。官方目录不能删除。";
 }
 
-btnsVersions[1].oncommand = function(id, event) {
-	winform.loadForm("/dlg/versions.aardio").doModal(winform);
+function path_index() {
+	var i = listPaths.selIndex;
+	if (i > 0 and i <= #path_rows) {
+		var p = cfg.game_paths[path_rows[i]];
+		if (p) return path_rows[i];
+	}
 
-	cfg = m3config.read();
-	lblVersion.text = "当前版本：" ++ (cfg.version or "未选择");
-// 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
-// F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
-var about_ver = "";
-var vi = fsys.version.getInfo(io._exepath);
-if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
-	var fv = vi.fileVersion;
-	if (fv.valid()) {
-		about_ver = tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
+	if (!path_selected) return 0;
+
+	for i, p in cfg.game_paths {
+		if (p.dir == path_selected) return i;
+	}
+
+	return 0;
+}
+
+listPaths.onSelChanged = function(sel, item, subItem, nm) {
+	var i = listPaths.selIndex;
+	if (i <= 0 or i > #path_rows) return;
+
+	var p = cfg.game_paths[path_rows[i]];
+	if (!p) return;
+
+	path_selected = p.dir;
+	editPathName.text = p.name or "";
+}
+
+// 添加路径
+path_tools.left[1].oncommand = function(id, event) {
+	var dir = fsys.dlg.openDir("", winform, "选择 .minecraft 目录");
+	if (!dir) return;
+
+	for i, p in cfg.game_paths {
+		if (p.dir == dir) {
+			lblP5Hint.text = "此游戏路径已在列表当中。";
+			return;
+		}
+	}
+
+	table.push(cfg.game_paths, { name = io.splitpath(dir).name; dir = dir; official = false });
+
+	path_selected = dir;
+
+	m3config.save_keys(cfg, {"game_paths"; "game_path"});
+	paths_render();
+	lblP5Hint.text = "已添加路径：" ++ dir;
+}
+
+// 删除路径
+path_tools.left[2].oncommand = function(id, event) {
+	var i = path_index();
+	if (i == 0) {
+		lblP5Hint.text = "请先选择一条游戏路径。";
+		return;
+	}
+
+	var p = cfg.game_paths[i];
+	if (p.official) {
+		lblP5Hint.text = "官方目录不允许删除。";
+		return;
+	}
+
+	var show_name = p.name or p.dir;
+	if (#show_name > 20) show_name = string.slice(show_name, 1, 20) ++ "…";
+
+	var frm = winform.loadForm("/dlg/confirm.aardio");
+	frm.lblMsg.text = "确定删除路径「" ++ show_name ++ "」吗？" ++ '\r\n\r\n' ++ "只从列表里移除，不会删除磁盘上的文件夹。";
+	if (!frm.doModal(winform)) return;
+
+	// 重建数组，避免 table.remove 之后留下空洞
+	var list = {};
+	for k, item in cfg.game_paths {
+		if (k != i) table.push(list, item);
+	}
+	cfg.game_paths = list;
+
+	path_selected = null;
+
+	// 删掉的正好是当前路径，就切回第一条
+	if (cfg.game_path == p.dir) {
+		if (cfg.game_paths[1]) cfg.game_path = cfg.game_paths[1].dir;
+		else cfg.game_path = "";
+	}
+
+	m3config.save_keys(cfg, {"game_paths"; "game_path"});
+	paths_render();
+	vers_render();
+	lblP5Hint.text = "已删除路径：" ++ show_name;
+}
+
+// 重命名路径
+btnPathRename.oncommand = function(id, event) {
+	var i = path_index();
+	if (i == 0) {
+		lblP5Hint.text = "请先选择一条游戏路径。";
+		return;
+	}
+
+	var name = string.trim(editPathName.text);
+	if (#name == 0) {
+		lblP5Hint.text = "请先填写名称。";
+		return;
+	}
+
+	cfg.game_paths[i].name = name;
+	m3config.save_keys(cfg, {"game_paths"; "game_path"});
+	paths_render();
+	lblP5Hint.text = "已重命名为：" ++ name;
+}
+
+// 设为当前路径
+path_tools.right[1].oncommand = function(id, event) {
+	var i = path_index();
+	if (i == 0) {
+		lblP5Hint.text = "请先选择一条游戏路径。";
+		return;
+	}
+
+	cfg.game_path = cfg.game_paths[i].dir;
+
+	// 换了目录，当前版本可能不存在，自动选第一个可用版本
+	if (!has_version(cfg.game_path, cfg.version)) {
+		var v = first_version(cfg.game_path);
+		if (v) cfg.version = v;
+		else cfg.version = "";
+	}
+
+	m3config.save_keys(cfg, {"game_path"; "version"});
+	paths_render();
+	vers_render();
+	lblP5Hint.text = "当前游戏路径：" ++ cfg.game_path;
+}
+
+// 打开所选路径
+path_tools.right[2].oncommand = function(id, event) {
+	var i = path_index();
+	if (i == 0) {
+		lblP5Hint.text = "请先选择一条游戏路径。";
+		return;
+	}
+
+	var dir = cfg.game_paths[i].dir;
+	if (!io.exist(dir)) {
+		lblP5Hint.text = "该目录已被删除或迁移：" ++ dir;
+		return;
+	}
+
+	process.explore(dir);
+}
+
+// ---------- 版本 ----------
+
+var ver_rows = {};
+var ver_selected = null;
+
+// 没在 shared 表里记过的，默认隔离（每个版本用自己的目录）。
+// 只记「关闭隔离」的版本，表里只会有 true / 缺省，不存 false。
+function is_isolated(name) {
+	if (cfg.shared and cfg.shared[name]) return false;
+	return true;
+}
+
+// 提示行里显示用的短名字（太长的版本名会把提示撑爆）
+function short_name(name) {
+	if (#name <= 16) return name;
+	return string.slice(name, 1, 16) ++ "…";
+}
+
+// 版本名排序（简单插入排序，版本数量很少）
+function sort_names(list) {
+	var out = {};
+
+	for i, item in list {
+		var at = #out + 1;
+
+		for k, v in out {
+			if (item < v) {
+				at = k;
+				break;
+			}
+		}
+
+		table.insert(out, item, at);
+	}
+
+	return out;
+}
+
+function list_version_names() {
+	var names = {};
+
+	var vdir = io.joinpath(cfg.game_path, "versions");
+	if (!vdir) return names;
+	if (!io.exist(vdir)) return names;
+
+	var files, folders = fsys.list(vdir);
+	for(i = 1; #folders; 1) {
+		if (folders[i]) table.push(names, folders[i]);
+	}
+
+	// 顺手自愈：JSON 文件名不对、或里面 id 与目录名不一致时修正过来
+	for i, name in names {
+		m3version.repair(cfg.game_path, name);
+	}
+
+	return sort_names(names);
+}
+
+function vers_render() {
+	listVers.clear();
+	ver_rows = {};
+
+	var names = list_version_names();
+
+	for i, name in names {
+		var mark = "";
+		if (name == cfg.version) mark = "[当前] ";
+
+		var isolate_text = "隔离";
+		if (!is_isolated(name)) isolate_text = "共用根目录";
+
+		// 真正的游戏版本 + 加载器：读版本 JSON 判断，不靠文件夹名
+		var info = m3version.describe(cfg.game_path, name);
+
+		listVers.addItem({ mark ++ name; info.game; info.loader; isolate_text });
+		table.push(ver_rows, name);
+	}
+
+	// 按名字找回选中项
+	if (ver_selected) {
+		var at = 0;
+		for i, name in ver_rows {
+			if (name == ver_selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) listVers.selIndex = at;
+		else ver_selected = null;
+	}
+
+	if (#ver_rows == 0) {
+		lblP5Hint.text = "该游戏目录下还没有游戏版本：" ++ cfg.game_path;
+	}
+	else {
+		lblP5Hint.text = "共 " ++ #ver_rows ++ " 个版本。（删除的版本将移至回收站，可恢复）";
 	}
 }
-if (#about_ver > 0) lblAboutVer.text = "版本 " ++ about_ver;
+
+function ver_current() {
+	var i = listVers.selIndex;
+	if (i > 0 and i <= #ver_rows) return ver_rows[i];
+
+	return ver_selected;
+}
+
+listVers.onSelChanged = function(sel, item, subItem, nm) {
+	var i = listVers.selIndex;
+	if (i <= 0 or i > #ver_rows) return;
+
+	ver_selected = ver_rows[i];
+	editVerNew.text = ver_selected;
+}
+
+// 设为当前版本
+ver_tools.right[1].oncommand = function(id, event) {
+	var name = ver_current();
+	if (!name) {
+		lblP5Hint.text = "请先选择一个版本。";
+		return;
+	}
+
+	cfg.version = name;
+	m3config.save_keys(cfg, {"version"});
+	vers_render();
+	lblP5Hint.text = "已设为当前版本：" ++ short_name(name);
+}
+
+// 切换隔离
+ver_tools.left[1].oncommand = function(id, event) {
+	var name = ver_current();
+	if (!name) {
+		lblP5Hint.text = "请先选择一个版本。";
+		return;
+	}
+
+	cfg.shared = cfg.shared or {};
+
+	// 只往表里写 true，恢复隔离就把键删掉——避免往表里存 false
+	if (is_isolated(name)) cfg.shared[name] = true;
+	else cfg.shared[name] = null;
+
+	m3config.save_keys(cfg, {"shared"});
+	vers_render();
+
+	if (is_isolated(name)) {
+		lblP5Hint.text = short_name(name) ++ "：开启隔离（用 versions" ++ '\\' ++ short_name(name) ++ " 作为游戏目录）";
+	}
+	else {
+		lblP5Hint.text = short_name(name) ++ "：关闭隔离（与其它版本共用 .minecraft 根目录）";
+	}
+}
+
+// 当前游戏目录下版本名最多能有多长：
+// 完整路径是 <versions>\<名字>\<名字>.json，要压在 250 字符以内
+function max_name_length() {
+	var vdir = io.joinpath(cfg.game_path, "versions");
+	if (!vdir) return 0;
+
+	var room = 250 - #vdir - 7;   // 两个反斜杠 + ".json"
+	if (room < 2) return 0;
+
+	return math.floor(room / 2);
+}
+
+// 重命名：改目录名、json/jar 文件名，并更新 json 里的 id。
+// Windows 路径上限 260，版本名在路径里出现两次，长名字会把完整路径顶爆，
+// 而 io.joinpath 会静默截断——所以先把所有路径算出来，任何一个不对劲就放弃。
+function rename_version(old, new) {
+	var vdir = io.joinpath(cfg.game_path, "versions");
+	if (!vdir) return false, "游戏目录路径无效。";
+
+	var src = io.joinpath(vdir, old);
+	var dst = io.joinpath(vdir, new);
+	if (!src or !dst) return false, "新名称太长，超出限制。";
+
+	if (!io.exist(src)) return false, "版本目录不存在。";
+	if (io.exist(dst)) return false, "已存在同名版本。";
+
+	var old_json = io.joinpath(dst, old ++ ".json");
+	var new_json = io.joinpath(dst, new ++ ".json");
+	var old_jar = io.joinpath(dst, old ++ ".jar");
+	var new_jar = io.joinpath(dst, new ++ ".jar");
+
+	if (!old_json or !new_json or !old_jar or !new_jar) return false, "新名称太长，超出限制。";
+	if (#new_json >= 250 or #new_jar >= 250) return false, "新名称太长，超出限制。";
+
+	if (!fsys.rename(src, dst)) return false, "无法进行重命名操作，游戏可能正在运行。";
+
+	// json：先改名，再更新里面的 id；任何一步失败都整体回滚
+	if (io.exist(old_json)) {
+		if (!fsys.rename(old_json, new_json)) {
+			fsys.rename(dst, src);
+			return false, "json 文件重命名失败";
+		}
+
+		var data = json.load(new_json);
+		if (data) {
+			data.id = new;
+			if (data.jar == old) data.jar = new;
+			json.save(new_json, data);
+		}
+	}
+
+	// 客户端 jar
+	if (io.exist(old_jar)) {
+		if (!fsys.rename(old_jar, new_jar)) {
+			if (io.exist(new_json)) fsys.rename(new_json, old_json);
+			fsys.rename(dst, src);
+			return false, "客户端 jar 重命名失败";
+		}
+	}
+
+	return true;
+}
+
+// 重命名版本
+btnVerRename.oncommand = function(id, event) {
+	var name = ver_current();
+	if (!name) {
+		lblP5Hint.text = "请先选择一个版本。";
+		return;
+	}
+
+	var new_name = string.trim(editVerNew.text);
+	if (#new_name == 0 or new_name == name) {
+		lblP5Hint.text = "请输入一个新名字。";
+		return;
+	}
+
+	// 文件名非法字符
+	var bad_chars = '\\/:*?"<>|';
+	for i = 1; #bad_chars; 1 {
+		if (string.indexOf(new_name, string.slice(bad_chars, i, i))) {
+			lblP5Hint.text = '版本名里不可包含 \\ / : * ? " < > | 。';
+			return;
+		}
+	}
+
+	var limit = max_name_length();
+	if (limit <= 0) {
+		lblP5Hint.text = "游戏目录路径太长，无法重命名版本。";
+		return;
+	}
+	if (#new_name > limit) {
+		lblP5Hint.text = "名称过长：当前游戏目录下最多 " ++ limit ++ " 字符（Windows 路径上限 260）。";
+		return;
+	}
+
+	var ok, err = rename_version(name, new_name);
+	if (!ok) {
+		lblP5Hint.text = "重命名失败：" ++ err;
+		return;
+	}
+
+	// 当前版本 / 隔离设置跟着改
+	if (cfg.version == name) cfg.version = new_name;
+
+	cfg.shared = cfg.shared or {};
+	if (cfg.shared[name]) {
+		cfg.shared[new_name] = true;
+		cfg.shared[name] = null;
+	}
+
+	ver_selected = new_name;
+
+	m3config.save_keys(cfg, {"version"; "shared"});
+	vers_render();
+	lblP5Hint.text = "已重命名为：" ++ short_name(new_name);
+}
+
+// 删除版本（移到回收站）
+ver_tools.left[2].oncommand = function(id, event) {
+	var name = ver_current();
+	if (!name) {
+		lblP5Hint.text = "请先选择一个版本。";
+		return;
+	}
+
+	var frm = winform.loadForm("/dlg/confirm.aardio");
+	frm.lblMsg.text = "确定删除版本「" ++ short_name(name) ++ "」吗？" ++ '\r\n\r\n' ++ "（版本目录将被移至回收站，可恢复）";
+	if (!frm.doModal(winform)) return;
+
+	var dir = io.joinpath(cfg.game_path, "versions", name);
+	if (!dir) {
+		lblP5Hint.text = "路径太长，无法删除该版本。";
+		return;
+	}
+
+	if (!fsys.delete(dir, true)) {
+		lblP5Hint.text = "删除失败，游戏可能正在运行。";
+		return;
+	}
+
+	if (cfg.version == name) cfg.version = "";
+
+	cfg.shared = cfg.shared or {};
+	cfg.shared[name] = null;
+	ver_selected = null;
+
+	m3config.save_keys(cfg, {"version"; "shared"});
+	vers_render();
+	lblP5Hint.text = "已删除版本：" ++ short_name(name);
+}
+
+// 打开所选版本的文件夹
+ver_tools.right[2].oncommand = function(id, event) {
+	var name = ver_current();
+	if (!name) {
+		lblP5Hint.text = "请先选择一个版本。";
+		return;
+	}
+
+	var dir = io.joinpath(cfg.game_path, "versions", name);
+	if (!io.exist(dir)) {
+		lblP5Hint.text = "此版本目录已被删除或迁移。";
+		return;
+	}
+
+	process.explore(dir);
 }
 
 winform.btnSave.oncommand = function(id, event) {
@@ -1016,9 +1500,6 @@ winform.btnSave.oncommand = function(id, event) {
 	if (mb < 512) mb = 512;
 	if (mb > 32768) mb = 32768;
 	c.memory = mb;
-
-	var dir = selected_path();
-	if (dir) c.game_path = dir;
 
 	if (#c.game_path > 0 and !has_version(c.game_path, c.version)) {
 		var v = first_version(c.game_path);
@@ -1067,7 +1548,6 @@ winform.onCancel = function() {
 // ---------- 初始化 ----------
 
 acc_render();
-lblVersion.text = "当前版本：" ++ (cfg.version or "未选择");
 // 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
 // F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
 var about_ver = "";
@@ -1100,8 +1580,16 @@ comboPri.add("较高");
 comboPri.add("高");
 comboPri.selIndex = priority_index(cfg.priority);
 
-refresh_path_combo();
+paths_render();
+vers_render();
 
-select_page(1);
+// 允许调用方指定打开时停在哪一页（全局变量在 loadForm 之前设置，进去后立刻清掉）
+var start_page = 1;
+if (g_settings_start_page) {
+	start_page = g_settings_start_page;
+	g_settings_start_page = null;
+}
+
+select_page(start_page);
 
 return winform;

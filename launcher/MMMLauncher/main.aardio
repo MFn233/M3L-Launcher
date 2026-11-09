@@ -706,7 +706,13 @@ function start_game(retried, inst) {
 			return;
 		}
 		elseif (choice == 2) {
-			winform.loadForm("/dlg/java.aardio").doModal(winform);
+			// 带起始页打开设置：第 4 页是 Java 管理
+			g_settings_start_page = 4;
+			var java_frm = winform.loadForm("/dlg/settings2.aardio");
+			if (java_frm.doModal(winform)) {
+				load_version_combo();
+				refresh_status();
+			}
 			set_launching(false);
 			start_game(true, inst);
 			return;
@@ -748,7 +754,7 @@ winform.btnLaunch.onRightMouseUp = function(wParam, lParam) {
 // ---------- 设置 / 关于 ----------
 
 winform.btnSettings.oncommand = function(id, event) {
-	// settings2 是当前版本（左导航 + 右分组）；旧的 /dlg/settings.aardio 留作回退参考
+	// 设置窗口：左侧导航 + 右侧分组，所有设置与管理都在里面
 	var frm = winform.loadForm("/dlg/settings2.aardio");
 	if (frm.doModal(winform)) {
 		// 设置里可能换了游戏路径、换了账号，版本下拉框与状态栏都要跟着刷新
