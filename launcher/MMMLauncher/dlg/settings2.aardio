@@ -270,11 +270,19 @@ function nav_skin(i, selected) {
 function select_page(n) {
 	if (n < 1 or n > #PAGES) return;
 
+	// 已经在这一页：不再重排一遍（show_page 要遍历整页控件），
+	// 只把导航样式刷一次，顺手清掉可能卡住的悬停态。
+	if (n == nav_current) {
+		for i, c in nav_items {
+			nav_skin(i, i == n);
+		}
+		return;
+	}
+
 	nav_current = n;
 	show_page(n);
 
 	winform.lblPageTitle.text = nav_titles[n];
-
 
 	for i, c in nav_items {
 		nav_skin(i, i == n);
