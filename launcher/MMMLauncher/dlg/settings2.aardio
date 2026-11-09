@@ -77,7 +77,7 @@ var chkMulti = P1.check("允许同时运行多个实例", cfg.allow_multi);
 var chkShot = P1.check("崩溃时提醒「请勿直接截图分享此窗口」", cfg.shot_tip);
 
 P1.section("样式设置", true);
-P1.text("尚未实现。（后续在这里提供主题与外观调整）");
+P1.text("尚未实现。（后续在这里提供主题与外观调整）", true);
 
 P1.finish();
 
@@ -123,7 +123,7 @@ var editJava, btnJava = P4.row("当前", { cls = "edit"; text = "" }, "Java 管�
 P4.text("按路径检测 Java、显示厂商与版本、可加入黑名单。仍在「Java 管理」窗口里。");
 
 P4.section("自定义 JVM 参数", true);
-P4.text("尚未实现。（后续在这里填额外的 JVM 参数，每行一条）");
+P4.text("尚未实现。（后续在这里填额外的 JVM 参数，每行一条）", true);
 
 P4.finish();
 

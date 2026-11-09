@@ -203,14 +203,14 @@ namespace m3layout {
 			return ctrl, row_btn;
 		};
 
-		// 复选框：从标签列开始，占满剩余宽度
+		// 复选框：贴着内容区左边（不缩进到标签列——它没有标签），占满剩余宽度
 		L.check = function(text, checked) {
 			var y = L.y;
 
 			var c = L.make({
 				cls = "checkbox";
 				text = text;
-				left = L.left + L.label_w;
+				left = L.left;
 				top = y;
 				right = L.right;
 				bottom = y + 20;
@@ -225,13 +225,16 @@ namespace m3layout {
 		};
 
 		// 说明文字：整行次要灰字（多行用 \r\n 自己断）
-		L.text = function(text) {
+		// at_left = true 时贴内容区左边（用于没有标签列的占位节）
+		L.text = function(text, at_left) {
 			var y = L.y;
+			var x = L.left + L.label_w;
+			if (at_left) x = L.left;
 
 			var note = L.make({
 				cls = "static";
 				text = text;
-				left = L.left + L.label_w;
+				left = x;
 				top = y;
 				right = L.right;
 				bottom = y + L.note_step;
