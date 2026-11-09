@@ -73,8 +73,10 @@ var path_dirs = {};
 // ---------- 滚动条 ----------
 // 列表与多行输入框的滚动条是 Windows 主题（UxTheme）画的，aardio 改不了颜色。
 // 唯一能试的办法是换主题名："DarkMode_Explorer" 会让 Win10/11 用深色细滚动条。
-// 觉得比现在好看就把下面改成 true，F5 立刻能看出差别；不喜欢就改回 false。
-var THIN_SCROLLBAR = true;
+//
+// 实测结论（浅色界面）：深色滚动条配浅色壳体"更诡异"，浅色界面下保持 false。
+// 但**深色模式**下它才是正确选择——做完深色主题后，把这里改成 true（或改成跟随主题）。
+var THIN_SCROLLBAR = false;
 
 function try_thin_scrollbar(ctrl) {
 	if (!THIN_SCROLLBAR) return;
