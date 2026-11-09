@@ -22,15 +22,14 @@ namespace m3layout {
 	BTN_W = 76;          // 行内按钮宽度
 	BTN_GAP = 8;         // 控件与行内按钮之间
 	SECTION_H = 20;      // 分组标题高度
-	SECTION_GAP = 8;     // 标题与第一行之间
+	SECTION_GAP = 12;    // 标题与第一行之间（标题在框外，这里同时是标题与框的距离）
 	SECTION_SPACE = 14;  // 上一节内容与本节标题之间
 	NOTE_STEP = 18;      // 说明行步进
 	TEXT_DY = 3;         // 单行文字相对控件顶部的下移量（让标签与控件视觉居中）
 
-	// 分组线框的内缩
+	// 分组线框：**只包内容**，标题在框外（参考 MultiMC 那种关系）
 	GROUP_PAD_X = 12;    // 框比内容左右各宽出的部分
-	GROUP_PAD_BOTTOM = 8;// 框比最后一行低出的部分
-	GROUP_TOP_ON = 10;   // 框线相对标题顶部的下移量（让标题压住线）
+	GROUP_PAD_Y = 10;    // 框比内容上下各高出的部分
 
 	function create(form, left, top, width, opt) {
 		var L = {};
@@ -69,6 +68,14 @@ namespace m3layout {
 			var c = form.add(t);
 			table.push(L.controls, c);
 
+			// 记录本节内容的真实底边：框的最后一条线要靠它，
+			// 不能拿"下一节的起点"来算，那样每个框底部都会多出半行。
+			if (L.open_section and t.bottom) {
+				if (!L.open_section.bottom or t.bottom > L.open_section.bottom) {
+					L.open_section.bottom = t.bottom;
+				}
+			}
+
 			return c;
 		};
 
@@ -93,16 +100,18 @@ namespace m3layout {
 			var s = L.open_section;
 			if (!s) return;
 
-			s.y1 = L.y - L.section_space;
+			s.y1 = s.bottom or (L.y - L.section_space);
 			L.open_section = null;
 
+			// 框只包内容：上边在内容顶上方 GROUP_PAD_Y，下边在最后一行下方 GROUP_PAD_Y。
+			// 标题在框外，所以框里不会多出一块"只有标题"的空白。
 			if (L.framed and !s.plain) {
 				var frame = form.add({
 					cls = "bkplus";
 					left = L.left - GROUP_PAD_X;
-					top = s.caption_top + GROUP_TOP_ON;
+					top = s.y0 - GROUP_PAD_Y;
 					right = L.right + GROUP_PAD_X;
-					bottom = s.y1 + GROUP_PAD_BOTTOM;
+					bottom = s.y1 + GROUP_PAD_Y;
 					bgcolor = m3theme.C_BG;
 					border = { color = m3theme.C_FRAME; width = 1 };
 				});
@@ -110,7 +119,7 @@ namespace m3layout {
 				table.push(L.controls, frame);
 			}
 
-			// 标题盖在框线上：bkplus 画在窗体背景、static 是窗口，所以标题总在上面
+			// 标题在框外、内容之上；比正文大一号，当小标题用
 			var cap = L.make({
 				cls = "static";
 				text = s.title;
@@ -118,7 +127,7 @@ namespace m3layout {
 				top = s.caption_top;
 				right = L.left + 160;
 				bottom = s.caption_top + L.section_h;
-				font = LOGFONT(name='Microsoft YaHei'; h=-12);
+				font = LOGFONT(name='Microsoft YaHei'; h=-13);
 			});
 
 			m3theme.ink(cap);

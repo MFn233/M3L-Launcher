@@ -15,14 +15,13 @@ import sys.mem;
 import fsys;
 import string;
 import math;
-
 /*DSG{{*/
-var winform = win.form(text="设置";right=760;bottom=560;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+var winform = win.form(text="设置";right=759;bottom=567;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-lblPageTitle={cls="static";text="";left=232;top=14;right=680;bottom=42;font=LOGFONT(name='Microsoft YaHei';h=-16;weight=700);z=1};
-lblHint={cls="static";left=16;top=524;right=556;bottom=552;font=LOGFONT(name='Microsoft YaHei';h=-11);z=2};
-btnCancel={cls="plus";text="取消";left=576;top=524;right=656;bottom=556;font=LOGFONT(name='Microsoft YaHei';h=-13);z=3};
-btnSave={cls="plus";text="保存";left=664;top=524;right=744;bottom=556;font=LOGFONT(name='Microsoft YaHei';h=-13);z=4}
+btnCancel={cls="plus";text="取消";left=576;top=524;right=656;bottom=556;font=LOGFONT(h=-13;name='Microsoft YaHei');z=3};
+btnSave={cls="plus";text="保存";left=664;top=524;right=744;bottom=556;font=LOGFONT(h=-13;name='Microsoft YaHei');z=4};
+lblHint={cls="static";left=16;top=524;right=556;bottom=552;font=LOGFONT(h=-11;name='Microsoft YaHei');z=2};
+lblPageTitle={cls="static";left=232;top=14;right=680;bottom=42;font=LOGFONT(h=-16;name='Microsoft YaHei';weight=700);z=1}
 )
 /*}}*/
 
