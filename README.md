@@ -71,6 +71,18 @@
 2. **F5** 直接运行；
 3. 发布：工程 → 发布，产物在 `launcher/MMMLauncher/dist/MMMLauncher.exe`。
 
+**发布后必须验一次**，否则可能出现「在别人机器上打不开、报找不到库」：
+
+```
+pwsh -File tools\check-publish.ps1
+```
+
+它检查 exe 里是否真的内嵌了所有库（PE 资源类型 `LIB`）与所有窗体（`DLG/NAME.AARDIO`），
+并逐项打印 `[ OK ]` / `[MISS]`。**有 `[MISS]` 就不要发出去。**
+
+新增 `dlg/*.aardio` 后忘了在 IDE 里「同步本地目录」，发布版就会缺窗体——
+这个脚本正是用来兜住这类漏项的。
+
 **改了 core 之后要重新部署**：
 
 ```

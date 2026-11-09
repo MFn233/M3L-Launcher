@@ -11,6 +11,7 @@
 		<file name="credits.aardio" path="dlg\credits.aardio" comment="dlg\credits.aardio"/>
 		<file name="java.aardio" path="dlg\java.aardio" comment="dlg\java.aardio"/>
 		<file name="java_warn.aardio" path="dlg\java_warn.aardio" comment="dlg\java_warn.aardio"/>
+		<file name="layout_test.aardio" path="dlg\layout_test.aardio" comment="dlg\layout_test.aardio"/>
 		<file name="log.aardio" path="dlg\log.aardio" comment="dlg\log.aardio"/>
 		<file name="notice.aardio" path="dlg\notice.aardio" comment="dlg\notice.aardio"/>
 		<file name="paths.aardio" path="dlg\paths.aardio" comment="dlg\paths.aardio"/>
