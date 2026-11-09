@@ -19,7 +19,7 @@ import math;
 /*DSG{{*/
 var winform = win.form(text="设置";right=760;bottom=560;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-lblPageTitle={cls="static";text="";left=232;top=16;right=680;bottom=46;font=LOGFONT(name='Microsoft YaHei';h=-16;weight=700);z=1};
+lblPageTitle={cls="static";text="";left=232;top=14;right=680;bottom=42;font=LOGFONT(name='Microsoft YaHei';h=-16;weight=700);z=1};
 lblHint={cls="static";left=16;top=524;right=556;bottom=552;font=LOGFONT(name='Microsoft YaHei';h=-11);z=2};
 btnCancel={cls="plus";text="取消";left=576;top=524;right=656;bottom=556;font=LOGFONT(name='Microsoft YaHei';h=-13);z=3};
 btnSave={cls="plus";text="保存";left=664;top=524;right=744;bottom=556;font=LOGFONT(name='Microsoft YaHei';h=-13);z=4}
@@ -30,10 +30,11 @@ btnSave={cls="plus";text="保存";left=664;top=524;right=744;bottom=556;font=LOG
 // 背景一律用 bkplus（无句柄背景控件）画，它不会抢 Z 序。
 // 注意所有灰都是等值 RGB，ARGB 与 COLORREF 之间不需要反转。
 
-var NAV_BG = 0xE9E9E9;     // 导航面板（ARGB 与 COLORREF 同值）
-var NAV_SEL = 0xFFDCDCDC;  // 导航选中
-var FOOT_BG = 0xECECEC;    // 底部条
-var DIVIDE = 0xD8D8D8;     // 分隔线
+// 颜色全部来自 m3theme：以后深色模式只改主题库
+var NAV_BG = m3theme.SIDEBAR;
+var NAV_SEL = m3theme.SIDEBAR_SEL;
+var FOOT_BG = m3theme.FOOTER;
+var DIVIDE = m3theme.DIVIDE;
 
 var FOOT_TOP = 516;
 
@@ -55,7 +56,7 @@ winform.add({
 m3theme.ink(winform.lblPageTitle);
 
 winform.lblHint.color = m3theme.C_MUTED;
-winform.lblHint.bgcolor = FOOT_BG;
+winform.lblHint.bgcolor = m3theme.C_FOOTER;
 
 m3theme.button(winform.btnCancel);
 m3theme.button(winform.btnSave);
@@ -66,7 +67,7 @@ var path_dirs = {};
 
 // ---------- 第一页：启动器设置 ----------
 
-var P1 = m3layout.create(winform, 232, 64, 504, { framed = true });
+var P1 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P1.section("启动器行为");
 var chkLog = P1.check("启动时弹出日志窗口", cfg.log);
@@ -83,7 +84,7 @@ P1.finish();
 
 // ---------- 第二页：游戏设置 ----------
 
-var P2 = m3layout.create(winform, 232, 64, 504, { framed = true });
+var P2 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P2.section("窗口大小设置");
 var comboMode, btnDefault = P2.row("窗口模式", { cls = "combobox"; mode = "dropdownlist" }, "默认大小");
@@ -102,7 +103,7 @@ P2.finish();
 
 // ---------- 第三页：账户管理 ----------
 
-var P3 = m3layout.create(winform, 232, 64, 504, { framed = true });
+var P3 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P3.section("当前账号");
 var lblAccount = P3.text("尚未配置账号");
@@ -116,7 +117,7 @@ P3.finish();
 
 // ---------- 第四页：JAVA 管理 ----------
 
-var P4 = m3layout.create(winform, 232, 64, 504, { framed = true });
+var P4 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P4.section("Java 列表");
 var editJava, btnJava = P4.row("当前", { cls = "edit"; text = "" }, "Java 管理");
@@ -129,7 +130,7 @@ P4.finish();
 
 // ---------- 第五页：路径与版本管理 ----------
 
-var P5 = m3layout.create(winform, 232, 64, 504, { framed = true });
+var P5 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P5.section("游戏路径");
 var comboPath, btnPaths = P5.row("当前路径", { cls = "combobox"; mode = "dropdownlist" }, "路径管理");
@@ -248,6 +249,18 @@ function show_page(n) {
 var nav_items = {};
 var nav_current = 0;
 
+// 选中条：横跨整个导航面板（0..200）。导航项本身只有 16..184，
+// 用它补上左右两侧，高亮才是"整行通到边"。
+// bkplus 画在窗体背景上，不会盖住导航项的文字。
+var nav_highlight = winform.add({
+	cls = "bkplus";
+	left = 0;
+	top = 20;
+	right = 200;
+	bottom = 50;
+	bgcolor = NAV_SEL;
+});
+
 function nav_skin(i, selected) {
 	var c = nav_items[i];
 	if (!c) return;
@@ -260,7 +273,7 @@ function nav_skin(i, selected) {
 	}
 	else {
 		c.skin({
-			background = { default = NAV_BG; hover = 0xFFE2E2E2; active = NAV_SEL };
+			background = { default = NAV_BG; hover = m3theme.SIDEBAR_HOVER; active = NAV_SEL };
 			color = { default = m3theme.MUTED; hover = m3theme.INK; active = m3theme.INK };
 		});
 	}
@@ -273,6 +286,7 @@ function select_page(n) {
 	show_page(n);
 
 	winform.lblPageTitle.text = nav_titles[n];
+	nav_highlight.setPos(0, 20 + (n - 1) * 32, 200, 30);
 
 	for i, c in nav_items {
 		nav_skin(i, i == n);

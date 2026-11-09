@@ -6,11 +6,16 @@
 namespace m3theme {
 
 	// ---------- 颜色 ----------
+	// 这里的颜色是**唯一的定义处**：以后做深色模式或自定义主题，只改这一段。
+	// 名字按用途取（BG / SIDEBAR / FOOTER / FIELD …），不要按色值取（GREY1 / LIGHT2）。
+	//
+	// 注意：所有灰都写成等值 RGB（如 0xE9E9E9），这样 ARGB 与 COLORREF 两种格式
+	// 数值相同，省掉一次转换，也不会写反。
 
 	// plus 的 skin、argbColor 用 ARGB（0xAARRGGBB）
 	INK   = 0xFF1A1A1A;   // 近黑，主文字/边框
 	WHITE = 0xFFFFFFFF;
-	BG    = 0xFFF2F2F2;   // 窗口背景
+	BG    = 0xFFF2F2F2;   // 窗口 / 内容区背景
 	MUTED = 0xFF8C8C8C;   // 次要文字
 	LINE  = 0xFFD8D8D8;   // 分隔线
 	TRACK = 0xFFE2E2E2;   // 滑条轨道
@@ -18,11 +23,28 @@ namespace m3theme {
 	DISFG = 0xFF9C9C9C;   // 禁用字
 	RED   = 0xFFD03030;   // 错误
 
+	// 分区用色（设置窗口的三区）
+	SIDEBAR    = 0xFFE9E9E9;   // 左侧导航面板
+	SIDEBAR_HOVER = 0xFFE2E2E2; // 导航悬停
+	SIDEBAR_SEL = 0xFFDCDCDC;  // 导航选中项
+	FOOTER     = 0xFFECECEC;   // 底部条
+	DIVIDE     = 0xFFD8D8D8;   // 分区之间的 1px 线
+
+	// 控件用色
+	FRAME   = 0xFFDCDCDC;   // 分组框边框
+	FIELD   = 0xFFFFFFFF;   // 输入框 / 列表底
+	CARD    = 0xFFFFFFFF;   // 卡片、次级按钮底
+
 	// static / edit 的 color 属性用 COLORREF（0xBBGGRR，和 ARGB 分量顺序相反）
+	// 上面的灰都是等值 RGB，所以下面直接照抄数值即可
 	C_INK   = 0x1A1A1A;
 	C_MUTED = 0x8C8C8C;
 	C_BG    = 0xF2F2F2;   // 窗口背景的 COLORREF：静态文本要和它一致，否则会露出一块浅灰
 	C_RED   = 0x3030D0;   // #D03030 的 COLORREF
+	C_SIDEBAR = 0xE9E9E9;
+	C_FOOTER  = 0xECECEC;
+	C_FIELD   = 0xFFFFFF;
+	C_FRAME   = 0xDCDCDC;
 
 	// ARGB → COLORREF
 	// ARGB 是 0xAARRGGBB（低字节是 BB），COLORREF 是 0x00BBGGRR（低字节是 RR），
@@ -96,10 +118,11 @@ namespace m3theme {
 
 	// ---------- 文字颜色 ----------
 
-	// 输入框：只改文字颜色，白底保持不变
+	// 输入框：文字色 + 底色都走主题（深色模式下要一起换）
 	function field(ctrl) {
 		if (!ctrl) return;
 		ctrl.color = C_INK;
+		ctrl.bgcolor = C_FIELD;
 	}
 
 	// 静态文本：主要文字

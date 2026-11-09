@@ -103,8 +103,8 @@ namespace m3layout {
 				top = s.caption_top + GROUP_TOP_ON;
 				right = L.right + GROUP_PAD_X;
 				bottom = s.y1 + GROUP_PAD_BOTTOM;
-				bgcolor = m3theme.BG;
-				border = { color = 0xDCDCDC; width = 1 };
+				bgcolor = m3theme.C_BG;
+				border = { color = m3theme.C_FRAME; width = 1 };
 			});
 
 			table.push(L.controls, frame);
