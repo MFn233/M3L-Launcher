@@ -70,6 +70,18 @@ var cfg = m3config.read();
 var paths = cfg.game_paths;
 var path_dirs = {};
 
+// ---------- 滚动条 ----------
+// 列表与多行输入框的滚动条是 Windows 主题（UxTheme）画的，aardio 改不了颜色。
+// 唯一能试的办法是换主题名："DarkMode_Explorer" 会让 Win10/11 用深色细滚动条。
+// 觉得比现在好看就把下面改成 true，F5 立刻能看出差别；不喜欢就改回 false。
+var THIN_SCROLLBAR = false;
+
+function try_thin_scrollbar(ctrl) {
+	if (!THIN_SCROLLBAR) return;
+	if (!ctrl) return;
+
+	win.setWindowTheme(ctrl.hwnd, "DarkMode_Explorer", null);
+}
 // ---------- 第一页：启动器设置 ----------
 
 var P1 = m3layout.create(winform, 232, 52, 504, { framed = true });
@@ -171,6 +183,7 @@ else {
 }
 
 m3list.fit(listJava);
+try_thin_scrollbar(listJava);
 
 P4.y = P4.y + 150 + 8;
 
@@ -194,6 +207,7 @@ var editJvm = P4.make({
 
 editJvm.color = m3theme.C_INK;
 editJvm.bgcolor = m3theme.C_FIELD;
+try_thin_scrollbar(editJvm);
 
 P4.y = P4.y + 80 + 8;
 
