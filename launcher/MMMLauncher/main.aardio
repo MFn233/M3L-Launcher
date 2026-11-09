@@ -736,9 +736,10 @@ winform.btnLaunch.onRightMouseUp = function(wParam, lParam) {
 // ---------- 设置 / 关于 ----------
 
 winform.btnSettings.oncommand = function(id, event) {
-	var frm = winform.loadForm("/dlg/settings.aardio");
+	// settings2 是当前版本（左导航 + 右分组）；旧的 /dlg/settings.aardio 留作回退参考
+	var frm = winform.loadForm("/dlg/settings2.aardio");
 	if (frm.doModal(winform)) {
-		// 设置里可能换了游戏路径，版本下拉框要跟着刷新
+		// 设置里可能换了游戏路径、换了账号，版本下拉框与状态栏都要跟着刷新
 		load_version_combo();
 		refresh_status();
 	}

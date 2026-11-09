@@ -11,6 +11,8 @@ import m3theme;
 import m3layout;
 import m3config;
 import m3java;
+import m3list;
+import crypt;
 import sys.mem;
 import fsys;
 import fsys.version;
@@ -104,14 +106,36 @@ P2.finish();
 // ---------- 第三页：账户管理 ----------
 
 var P3 = m3layout.create(winform, 232, 52, 504, { framed = true });
-
-P3.section("当前账号");
-var lblAccount = P3.text("尚未配置账号");
+P3.btn_w = 100;   // 这一页按钮文字长一些，四个并排要宽一点
 
 P3.section("账号列表");
-P3.text("账号列表、离线 UUID、删除账号仍在「用户配置」窗口里。" ++ '\r\n'
-	++ "迁移完成后这一页会直接列出所有账号，不必再开新窗口。");
-var btnsAccount = P3.buttons({"用户配置"});
+
+// 列表用 L.make 建：这样框架的底边会算进这一节的内容范围
+var listAcc = P3.make({
+	cls = "listview";
+	left = 232;
+	top = P3.y;
+	right = 736;
+	bottom = P3.y + 150;
+});
+
+listAcc.fullRow = true;
+listAcc.columns = {
+	{ "用户名"; 120 };
+	{ "登录方式"; 70 };
+	{ "UUID"; 280 };
+};
+
+m3list.fit(listAcc);
+
+P3.y = P3.y + 150 + 8;
+
+P3.section("编辑");
+var editName = P3.row("用户名", { cls = "edit" });
+var editUuid = P3.row("UUID", { cls = "edit" });
+P3.text("UUID 留空 = 按用户名自动生成；填写时必须是 32 位十六进制（可带横线）。", true);
+var lblAccHint = P3.text("", true);
+var acc_btns = P3.buttons({"添加账号"; "删除"; "应用修改"; "设为当前"});
 
 P3.finish();
 
@@ -449,11 +473,202 @@ btnAuto.oncommand = function(id, event) {
 	winform.lblHint.text = "按物理内存的 1/4 建议：" ++ mb ++ " MB（本机共 " ++ total_mb ++ " MB）";
 }
 
-btnsAccount[1].oncommand = function(id, event) {
-	winform.loadForm("/dlg/accounts.aardio").doModal(winform);
+// ---------- 账户管理 ----------
 
-	cfg = m3config.read();
-	lblAccount.text = user_summary(cfg);
+var acc_rows = {};
+var acc_selected = null;
+
+// 32 位十六进制
+function is_hex32(s) {
+	if (#s != 32) return false;
+
+	for i = 1; 32; 1 {
+		var c = string.slice(s, i, i);
+		if (!string.indexOf('0123456789abcdefABCDEF', c)) return false;
+	}
+
+	return true;
+}
+
+function acc_render() {
+	listAcc.clear();
+	acc_rows = {};
+
+	for i, a in cfg.accounts {
+		var mark = "";
+		if (a.name == cfg.account) mark = "[当前] ";
+
+		var type_text = "离线";
+		if (a.type == "msa" or a.type == "mojang") type_text = "正版";
+
+		var uuid_text = a.uuid or "";
+		if (#uuid_text == 0) {
+			// 留空 = 按用户名自动生成，列表里直接显示实际会用的值
+			uuid_text = crypt.md5("OfflinePlayer:" ++ (a.name or ""));
+		}
+
+		listAcc.addItem({ mark ++ a.name; type_text; uuid_text });
+		table.push(acc_rows, i);
+	}
+
+	// 按名字找回选中项
+	if (acc_selected) {
+		var at = 0;
+		for i, idx in acc_rows {
+			var a = cfg.accounts[idx];
+			if (a and a.name == acc_selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) listAcc.selIndex = at;
+		else acc_selected = null;
+	}
+
+	if (#acc_rows == 0) {
+		lblAccHint.text = "还没有账号。请点击「添加账号」创建一个。";
+	}
+	else {
+		lblAccHint.text = "共 " ++ #acc_rows ++ " 个账号。当前：" ++ user_summary(cfg);
+	}
+}
+
+// 选中项对应的 cfg.accounts 下标
+function acc_index() {
+	var i = listAcc.selIndex;
+	if (i > 0 and i <= #acc_rows) return acc_rows[i];
+
+	if (!acc_selected) return 0;
+
+	for i, a in cfg.accounts {
+		if (a.name == acc_selected) return i;
+	}
+
+	return 0;
+}
+
+listAcc.onSelChanged = function(sel, item, subItem, nm) {
+	var i = listAcc.selIndex;
+	if (i <= 0 or i > #acc_rows) return;
+
+	var a = cfg.accounts[acc_rows[i]];
+	if (!a) return;
+
+	acc_selected = a.name;
+	editName.text = a.name or "";
+	editUuid.text = a.uuid or "";
+}
+
+acc_btns[1].oncommand = function(id, event) {
+	cfg.accounts = cfg.accounts or {};
+
+	// 起一个不重名的默认名字：player / player2 / player3 ...
+	var name = "player";
+	var n = 1;
+	while (m3config.find_account(cfg, name)) {
+		n = n + 1;
+		name = "player" ++ n;
+	}
+
+	table.push(cfg.accounts, { name = name; type = "offline"; uuid = "" });
+
+	acc_selected = name;
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	acc_render();
+	lblAccHint.text = "已添加离线账号：" ++ name ++ "，可在上方修改用户名。";
+}
+
+acc_btns[2].oncommand = function(id, event) {
+	var i = acc_index();
+	if (i == 0) {
+		lblAccHint.text = "请先选择一个账号。";
+		return;
+	}
+
+	var name = cfg.accounts[i].name;
+
+	// 先确认：自定义的 UUID 删掉就没了
+	var show_name = name;
+	if (#show_name > 20) show_name = string.slice(show_name, 1, 20) ++ "…";
+
+	var frm = winform.loadForm("/dlg/confirm.aardio");
+	frm.lblMsg.text = "确定删除账号「" ++ show_name ++ "」吗？" ++ '\r\n\r\n' ++ "自定义的 UUID 也会删除，不可恢复。";
+	if (!frm.doModal(winform)) return;
+
+	// 重建数组，避免 table.remove 之后留下空洞
+	var list = {};
+	for k, a in cfg.accounts {
+		if (k != i) table.push(list, a);
+	}
+	cfg.accounts = list;
+
+	if (cfg.account == name) {
+		if (#cfg.accounts > 0) cfg.account = cfg.accounts[1].name;
+		else cfg.account = "";
+	}
+
+	acc_selected = null;
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	acc_render();
+	lblAccHint.text = "已删除账号：" ++ name;
+}
+
+acc_btns[3].oncommand = function(id, event) {
+	var i = acc_index();
+	if (i == 0) {
+		lblAccHint.text = "请先选择一个账号。";
+		return;
+	}
+
+	var name = string.trim(editName.text);
+	if (#name == 0) {
+		lblAccHint.text = "用户名不能为空。";
+		return;
+	}
+
+	// 重名检查（跳过自己）
+	for k, a in cfg.accounts {
+		if (k != i and a.name == name) {
+			lblAccHint.text = "已有同名账号。";
+			return;
+		}
+	}
+
+	// UUID：留空 = 自动生成；填了就必须是 32 位十六进制
+	var uuid = string.trim(editUuid.text);
+	uuid = string.replace(uuid, "-", "");
+	if (#uuid > 0 and !is_hex32(uuid)) {
+		lblAccHint.text = "UUID 必须是 32 位十六进制（可带横线），留空则自动生成。";
+		return;
+	}
+
+	var old_name = cfg.accounts[i].name;
+
+	cfg.accounts[i].name = name;
+	cfg.accounts[i].uuid = uuid;
+
+	if (cfg.account == old_name) cfg.account = name;
+
+	acc_selected = name;
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	acc_render();
+	lblAccHint.text = "已保存账号：" ++ name;
+}
+
+acc_btns[4].oncommand = function(id, event) {
+	var i = acc_index();
+	if (i == 0) {
+		lblAccHint.text = "请先选择一个账号。";
+		return;
+	}
+
+	cfg.account = cfg.accounts[i].name;
+	acc_selected = cfg.account;
+
+	m3config.save_keys(cfg, {"accounts"; "account"});
+	acc_render();
+	lblAccHint.text = "当前账号：" ++ cfg.account;
 }
 
 btnJava.oncommand = function(id, event) {
@@ -545,7 +760,7 @@ winform.onCancel = function() {
 
 // ---------- 初始化 ----------
 
-lblAccount.text = user_summary(cfg);
+acc_render();
 lblVersion.text = "当前版本：" ++ (cfg.version or "未选择");
 // 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
 // F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
