@@ -15,7 +15,9 @@
 */
 
 namespace MMMLC{
-	import console;
+	// 不要 import console：这个库一行 console.* 都没用，GUI 也不需要控制台。
+	// 它还曾经是发布版报“import console failed / bad constant in precompiled chunk”的位置，
+	// 少一个依赖就少一处可坏的资源。
 	import process;
 	import process.popen;
 	import string;
