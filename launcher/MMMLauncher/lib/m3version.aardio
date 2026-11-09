@@ -181,13 +181,14 @@ namespace m3version {
 		return rest;
 	}
 
-	// 下载器（MMM-DL）在版本目录里写的边车文件：<版本目录>\.m3l.json
+	// 下载器（MMM-DL）在版本目录里写的边车文件：<版本目录>\.m3l-meta.json
 	// 例：{"game":"1.20.1","loader":"Fabric","loader_version":"0.19.3","source":"mmmd"}
 	// 有这个文件就说明版本是下载器装的，里面的信息比任何推断都可靠。
+	// 命名约定：.m3l-meta.json = 下载元信息；.m3l.options.json = 版本独立设置（以后做）。
 	function read_sidecar(minecraft_dir, name) {
 		if (!minecraft_dir or !name) return null;
 
-		var file = minecraft_dir ++ "\versions\" ++ name ++ "\.m3l.json";
+		var file = minecraft_dir ++ "\versions\" ++ name ++ "\.m3l-meta.json";
 		if (!io.exist(file)) return null;
 
 		var data = json.load(file);
@@ -220,7 +221,7 @@ namespace m3version {
 				for i = 1; #files; 1 {
 					var fname = files[i];
 					if (!fname) continue;
-					if (string.startsWith(fname, ".")) continue;   // 跳过边车文件 .m3l.json
+					if (string.startsWith(fname, ".")) continue;   // 跳过边车文件（.m3l-meta.json / .m3l.options.json）
 					if (!string.endsWith(string.lower(fname), ".json")) continue;
 
 					table.push(cands, fname);
