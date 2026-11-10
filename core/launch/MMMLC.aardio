@@ -111,9 +111,13 @@ namespace MMMLC{
 		if (has_lwjgl3) {
 			var kept = {};
 			var kept_meta = {};
+			var dropped = 0;
 
 			for i, m in info.class_meta {
-				if (m and m.key and string.startsWith(m.key, "org.lwjgl.lwjgl:")) continue;
+				if (m and m.key and string.startsWith(m.key, "org.lwjgl.lwjgl:")) {
+					dropped = dropped + 1;
+					continue;
+				}
 
 				table.push(kept, info.classpath[i]);
 				table.push(kept_meta, m);
@@ -121,6 +125,14 @@ namespace MMMLC{
 
 			info.classpath = kept;
 			info.class_meta = kept_meta;
+
+			if (dropped > 0) {
+				table.push(info.notes, "此版本同时带 LWJGL2 与 LWJGL3，已剔除 " ++ dropped ++ " 个 LWJGL2 库（否则会互相遮蔽）。");
+			}
+		}
+
+		if ((info.fallback or 0) > 0) {
+			table.push(info.notes, info.fallback ++ " 个库没写下载地址，已按坐标补出路径。");
 		}
 
 		return info;
@@ -247,6 +259,8 @@ namespace MMMLC{
 			classpath = {};      //放进 -cp 的 jar
 			missing = {};        //磁盘上找不到的 jar（只警告，不中断）
 			native_jars = {};    //需要解压的 natives 压缩包
+			notes = {};          //启动时提示给用户的"我们做了什么"
+			fallback = 0;        //缺 downloads、按坐标补出路径的条目数
 			natives = io.joinpath(version_dir, version_name + "-natives");
 			version_dir = version_dir;
 			jar_id = data.jar or version_name;
@@ -356,6 +370,7 @@ namespace MMMLC{
 		//漏掉这种条目会丢关键库，表现为 ClassNotFoundException 找不到 tweaker。
 		if (!jar and #parted >= 3) {
 			jar = library_path(minecraft_dir, maven_relative_path(parted));
+			if (io.exist(jar)) info.fallback = (info.fallback or 0) + 1;
 		}
 
 		if (jar) {
@@ -399,6 +414,8 @@ namespace MMMLC{
 			classpath = {};
 			missing = {};
 			native_jars = {};
+			notes = {};
+			fallback = (child.fallback or 0) + (parent.fallback or 0);
 			natives = child.natives;
 			version_dir = child.version_dir;
 			jar_id = child.jar_id;
@@ -420,6 +437,8 @@ namespace MMMLC{
 		for i, v in child.missing { table.push(info.missing, v); }
 		for i, v in parent.native_jars { table.push(info.native_jars, v); }
 		for i, v in child.native_jars { table.push(info.native_jars, v); }
+		for i, v in parent.notes { table.push(info.notes, v); }
+		for i, v in child.notes { table.push(info.notes, v); }
 
 		return info;
 	}

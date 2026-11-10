@@ -654,6 +654,14 @@ function start_game(retried, inst) {
 		log("        请补齐这些文件后再启动游戏。", true);
 	}
 
+	//启动前把我们做过的兼容处理说清楚：方便日后对照日志判断问题出在哪一层。
+	var notes = info.notes;
+	if (notes) {
+		for i, s in notes {
+			log("[提示] " ++ s);
+		}
+	}
+
 	var ok, nerr = MMMLC.prepare_natives(info);
 	if (!ok) { log("[错误] " ++ nerr, true); set_launching(false); return; }
 
