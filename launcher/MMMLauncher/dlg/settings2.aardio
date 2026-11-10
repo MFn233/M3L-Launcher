@@ -71,6 +71,17 @@ m3theme.button(winform.btnSave);
 
 var cfg = m3config.read();
 
+// 上次可能没点保存就退出了（崩溃 / 强关）：把残留草稿套到工作副本上，
+// 界面显示的就是"改到一半"的样子。保存会写入，取消会（确认后）丢弃。
+var draft_restored = false;
+var pending = m3config.load_draft();
+if (pending) {
+	for k, v in pending {
+		cfg[k] = v;
+	}
+	draft_restored = true;
+}
+
 // ---------- 滚动条 ----------
 // 列表与多行输入框的滚动条是 Windows 主题（UxTheme）画的，aardio 改不了颜色。
 // 唯一能试的办法是换主题名："DarkMode_Explorer" 会让 Win10/11 用深色细滚动条。
@@ -525,6 +536,55 @@ for i, t in nav_titles {
 
 select_page(1);
 
+// ---------- 设置草稿 ----------
+// 值类设置先写进 config.pending.json；点「保存」时合并进 config.json，
+// 点「取消」时若发现有草稿，先确认再丢弃。
+// 列表类操作（账号 / Java / 路径 / 版本）本身就是提交动作，仍然立即写盘。
+
+// 从控件收当前值（含范围钳制）
+function collect_draft() {
+	var c = m3config.read();
+
+	var mb = tonumber(string.trim(editMem.text)) or c.memory;
+	if (mb < 512) mb = 512;
+	if (mb > 32768) mb = 32768;
+
+	var w = tonumber(string.trim(editW.text)) or c.width;
+	var h = tonumber(string.trim(editH.text)) or c.height;
+	if (w < 320) w = 320;
+	if (h < 240) h = 240;
+
+	var mi = comboMode.selIndex;
+	var mode = "manual";
+	if (mi == 2) mode = "fullscreen";
+	elseif (mi == 3) mode = "match";
+
+	return {
+		memory = mb;
+		width = w;
+		height = h;
+		window_mode = mode;
+		priority = priority_value(comboPri.selIndex);
+		log = chkLog.checked;
+		hide_after_launch = chkHide.checked;
+		status_bar = chkStatus.checked;
+		debug = chkDebug.checked;
+		allow_multi = chkMulti.checked;
+		shot_tip = chkShot.checked;
+		jvm_args = editJvm.text;
+	};
+}
+
+// 初始化期间程序化设置下拉框也会触发 onSelChange，
+// 那时不该写草稿——否则用户什么都没改，点取消却会看到"有未保存的修改"。
+var loading = true;
+
+function mark_dirty() {
+	if (loading) return;
+
+	m3config.save_draft(collect_draft());
+}
+
 // ---------- 事件 ----------
 
 editMem.onChange = function() {
@@ -537,11 +597,13 @@ editMem.onChange = function() {
 
 comboMode.onSelChange = function() {
 	update_mode_ui();
+	mark_dirty();
 }
 
 btnDefault.oncommand = function(id, event) {
 	editW.text = "854";
 	editH.text = "480";
+	mark_dirty();
 	winform.lblHint.text = "已设为默认窗口大小 854 × 480。";
 }
 
@@ -554,6 +616,7 @@ btnAuto.oncommand = function(id, event) {
 	if (mb > 8192) mb = 8192;
 
 	editMem.text = tostring(mb);
+	mark_dirty();
 	winform.lblHint.text = "按物理内存的 1/4 建议：" ++ mb ++ " MB（本机共 " ++ total_mb ++ " MB）";
 }
 
@@ -1514,12 +1577,13 @@ ver_tools.right[2].oncommand = function(id, event) {
 }
 
 winform.btnSave.oncommand = function(id, event) {
+	// 先重读，再把草稿里的值覆盖上去：这一会儿别处（账号 / Java / 路径 / 版本）可能改过列表数据
 	var c = m3config.read();
 
-	var mb = tonumber(string.trim(editMem.text)) or c.memory;
-	if (mb < 512) mb = 512;
-	if (mb > 32768) mb = 32768;
-	c.memory = mb;
+	var vals = collect_draft();
+	for k, v in vals {
+		c[k] = v;
+	}
 
 	if (#c.game_path > 0 and !has_version(c.game_path, c.version)) {
 		var v = first_version(c.game_path);
@@ -1527,33 +1591,23 @@ winform.btnSave.oncommand = function(id, event) {
 		else c.version = "";
 	}
 
-	c.jvm_args = editJvm.text;
+	// 列宽不是"值类设置"（拖列头改的），单独带上
 	c.java_columns = listJava.columns;
 
-	c.width = tonumber(string.trim(editW.text)) or 854;
-	c.height = tonumber(string.trim(editH.text)) or 480;
-	if (c.width < 320) c.width = 320;
-	if (c.height < 240) c.height = 240;
-
-	var mi = comboMode.selIndex;
-	if (mi == 2) c.window_mode = "fullscreen";
-	elseif (mi == 3) c.window_mode = "match";
-	else c.window_mode = "manual";
-
-	c.priority = priority_value(comboPri.selIndex);
-
-	c.log = chkLog.checked;
-	c.hide_after_launch = chkHide.checked;
-	c.status_bar = chkStatus.checked;
-	c.debug = chkDebug.checked;
-	c.allow_multi = chkMulti.checked;
-	c.shot_tip = chkShot.checked;
-
 	m3config.save(c);
+	m3config.clear_draft();
 	winform.endModal(true);
 }
 
 winform.btnCancel.oncommand = function(id, event) {
+	// 有未保存的修改时先问一句，避免改了半天被一次误点丢掉
+	if (m3config.load_draft()) {
+		var frm_cancel = winform.loadForm("/dlg/confirm.aardio");
+		frm_cancel.lblMsg.text = "有未保存的设置修改，确定放弃吗？";
+		if (!frm_cancel.doModal(winform)) return;
+	}
+
+	m3config.clear_draft();
 	winform.endModal(false);
 }
 
@@ -1591,6 +1645,31 @@ if (g_settings_start_page) {
 	start_page = g_settings_start_page;
 	g_settings_start_page = null;
 }
+
+// 值类控件一改动就写草稿（不直接写 config.json）
+for i, c in { chkLog; chkHide; chkStatus; chkDebug; chkMulti; chkShot } {
+	c.oncommand = function(id, event) {
+		mark_dirty();
+	};
+}
+
+comboPri.onSelChange = function() {
+	mark_dirty();
+}
+
+editMem.onFocusLost = function() { mark_dirty(); }
+editMem.onOk = function() { mark_dirty(); }
+editW.onFocusLost = function() { mark_dirty(); }
+editW.onOk = function() { mark_dirty(); }
+editH.onFocusLost = function() { mark_dirty(); }
+editH.onOk = function() { mark_dirty(); }
+editJvm.onFocusLost = function() { mark_dirty(); }
+
+if (draft_restored) {
+	winform.lblHint.text = "已恢复上次未保存的设置修改。点「保存」生效，点「取消」丢弃。";
+}
+
+loading = false;
 
 select_page(start_page);
 

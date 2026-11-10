@@ -5,6 +5,7 @@
 
 namespace m3config{
 	import io;
+	import fsys;
 	import json;
 	import string;
 	import table;
@@ -15,6 +16,31 @@ namespace m3config{
 
 	function old_file_path() {
 		return io.fullpath("/config.txt");
+	}
+
+	// 设置窗口的草稿：改了但还没点「保存」的值先写在这里。
+	// 只存"值类设置"，列表类操作（删账号/删版本等）本身是提交动作，仍然立即写 config.json。
+	function draft_path() {
+		return io.fullpath("/config.pending.json");
+	}
+
+	function load_draft() {
+		var f = draft_path();
+		if (!io.exist(f)) return null;
+
+		var data = json.load(f);
+		if (type(data) != "table") return null;
+
+		return data;
+	}
+
+	function save_draft(t) {
+		json.save(draft_path(), t);
+	}
+
+	function clear_draft() {
+		var f = draft_path();
+		if (io.exist(f)) fsys.delete(f);
 	}
 
 	// 官方 .minecraft 目录（不允许删除的那一个）
