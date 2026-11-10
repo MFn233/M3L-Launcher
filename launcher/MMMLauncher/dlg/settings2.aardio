@@ -540,6 +540,43 @@ var editPvW, chkW = pv_row("宽度", { cls = "edit"; text = "" });
 var editPvH, chkH = pv_row("高度", { cls = "edit"; text = "" });
 var comboPvPri, chkPri = pv_row("进程优先级", { cls = "combobox"; mode = "dropdownlist" });
 
+// Java：跟随全局，或给这个版本单独指定（可写相对路径，以版本文件夹为起点）
+var comboPvJava = PVA.make({
+	cls = "combobox";
+	mode = "dropdownlist";
+	left = PVA.left;
+	top = PVA.y;
+	right = PVA.left + 104;
+	bottom = PVA.y + PVA.row_h;
+});
+
+comboPvJava.add("跟随全局");
+comboPvJava.add("手动指定");
+
+var editPvJava = PVA.make({
+	cls = "edit";
+	text = "";
+	left = PVA.left + 112;
+	top = PVA.y;
+	right = PVA.right - 64;
+	bottom = PVA.y + PVA.row_h;
+});
+
+m3theme.field(editPvJava);
+
+var btnPvJava = PVA.make({
+	cls = "plus";
+	text = "选择";
+	left = PVA.right - 56;
+	top = PVA.y;
+	right = PVA.right;
+	bottom = PVA.y + PVA.row_h;
+});
+
+m3theme.button(btnPvJava);
+
+PVA.y = PVA.y + PVA.row_step;
+
 var chkJvm = PVA.make({
 	cls = "checkbox";
 	text = "JVM 参数（每行一条）";
@@ -571,7 +608,7 @@ PVA.y = PVA.y + 56 + 8;
 // 版本级开关（没有全局对应项）：勾上就写进这个版本的覆盖文件
 var chkSkip = PVA.check("关闭文件校验（跳过「缺少库文件」的检查）", false);
 
-PVA.text("勾选的设置项将覆盖全局设置。", true);
+PVA.text("勾选的设置项将覆盖全局设置。Java 可写相对路径，以版本文件夹为起点（例如 jre/bin/java.exe）。", true);
 var lblPvHint = PVA.text("", true);
 
 PVA.finish();
@@ -710,6 +747,10 @@ function pv_sync_enabled() {
 	editPvH.disabled = !chkH.checked;
 	comboPvPri.disabled = !chkPri.checked;
 	editPvJvm.disabled = !chkJvm.checked;
+
+	var manual = (comboPvJava.selIndex == 2);
+	editPvJava.disabled = !manual;
+	btnPvJava.disabled = !manual;
 }
 
 function pv_fill_versions() {
@@ -736,8 +777,12 @@ function pv_fill_versions() {
 	return ordered;
 }
 
+// 填表期间不要标脏：程序设置控件也会触发 change 通知
+var pv_filling = false;
+
 // 把某个版本的值填进控件（先看有没有待保存的覆盖，再看磁盘上的文件）
 function pv_load(name) {
+	pv_filling = true;
 	pv_current = name;
 
 	var ov = ver_pending[name];
@@ -764,6 +809,10 @@ function pv_load(name) {
 	chkPri.checked = has_pri;
 	comboPvPri.selIndex = priority_index(has_pri ? ov.priority : cfg.priority);
 
+	var has_java = (ov.java !== null);
+	comboPvJava.selIndex = has_java ? 2 : 1;
+	editPvJava.text = has_java ? ov.java : "";
+
 	var has_jvm = (ov.jvm_args !== null);
 	chkJvm.checked = has_jvm;
 	editPvJvm.text = has_jvm ? ov.jvm_args : (cfg.jvm_args or "");
@@ -783,6 +832,8 @@ function pv_load(name) {
 	else {
 		lblPvHint.text = "这个版本有 " ++ n ++ " 项独立设置。";
 	}
+
+	pv_filling = false;
 }
 
 // 从控件收集成覆盖表（没勾的键不写 = 跟随全局）
@@ -811,6 +862,11 @@ function pv_collect() {
 	}
 
 	if (chkPri.checked) t.priority = priority_value(comboPvPri.selIndex);
+
+	if (comboPvJava.selIndex == 2) {
+		var jp = string.trim(editPvJava.text);
+		if (#jp > 0) t.java = jp;
+	}
 
 	if (chkJvm.checked) t.jvm_args = editPvJvm.text;
 
@@ -881,6 +937,42 @@ for i, c in { chkMem; chkMode; chkW; chkH; chkPri; chkJvm } {
 		pv_sync_enabled();
 		mark_dirty();
 	};
+}
+
+comboPvJava.oncommand = function(id, event) {
+	pv_sync_enabled();
+
+	if (!pv_filling) mark_dirty();
+}
+
+//选择 java.exe：以版本文件夹为起点打开，选中的若是版本目录内的文件，就存成相对路径
+btnPvJava.oncommand = function(id, event) {
+	var start = cfg.game_path;
+	if (pv_current) start = io.joinpath(cfg.game_path, "versions", pv_current);
+
+	var f = fsys.dlg.open("可执行文件|*.exe|所有文件|*.*|", "选择 java.exe", start, winform, , "java.exe");
+	if (!f) return;
+
+	var vdir = (pv_current ? io.joinpath(cfg.game_path, "versions", pv_current) : null);
+
+	//在版本目录里就写相对路径（方便整个版本文件夹搬家），否则写绝对路径
+	var rel = null;
+	if (vdir) rel = string.replace(f, vdir ++ '\\', "");
+
+	if (rel and #rel < #f and !string.find(rel, "^%a:")) {
+		editPvJava.text = rel;
+	}
+	else {
+		editPvJava.text = f;
+	}
+
+	comboPvJava.selIndex = 2;
+	pv_sync_enabled();
+	mark_dirty();
+}
+
+editPvJava.onFocusLost = function() {
+	if (!pv_filling) mark_dirty();
 }
 
 chkSkip.oncommand = function(id, event) {

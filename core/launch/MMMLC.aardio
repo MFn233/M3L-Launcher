@@ -542,6 +542,37 @@ namespace MMMLC{
 
 	/* ---------- Java ---------- */
 
+	//版本独立设置里的 Java：允许写相对路径，以版本文件夹为起点。
+	//也接受目录（自动补 bin\java.exe）与 javaw.exe。
+	function version_java(hint, version_dir) {
+		var p = string.trim(tostring(hint or ""));
+		if (#p == 0) return null;
+
+		//统一分隔符：用户可能照抄 / 或者混着写
+		p = string.replace(p, "/", '\\');
+		p = string.replace(p, '"', "");
+
+		//绝对路径（带盘符）原样用；否则按版本文件夹解析
+		if (string.find(p, "^%a:")) {
+			//已经在盘符上
+		}
+		elseif (string.startsWith(p, '\\')) {
+			//UNC 路径
+		}
+		else {
+			p = io.joinpath(version_dir, p);
+		}
+
+		//给的是目录就补 bin\java.exe
+		if (io.exist(p) and fsys.isDir(p)) p = io.joinpath(p, "bin", "java.exe");
+
+		if (!io.exist(p)) {
+			return null, "找不到指定的 Java：" ++ tostring(hint);
+		}
+
+		return p;
+	}
+
 	//找 java.exe：明确指定 > JAVA_HOME > 系统 PATH
 	function find_java(hint) {
 		if (hint) {

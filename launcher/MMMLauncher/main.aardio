@@ -665,6 +665,20 @@ function start_game(retried, inst) {
 	var ok, nerr = MMMLC.prepare_natives(info);
 	if (!ok) { log("[错误] " ++ nerr, true); set_launching(false); return; }
 
+	//版本独立设置里指定了 Java：优先用它（相对路径以版本文件夹为起点）
+	if (eff.java) {
+		var vj, vjerr = MMMLC.version_java(eff.java, info.version_dir);
+
+		if (vj) {
+			opts.java_hint = vj;
+			log("[提示] 本版本指定了 Java：" ++ vj);
+		}
+		else {
+			log("[警告] " ++ tostring(vjerr), true);
+			log("        已改用全局 Java。", true);
+		}
+	}
+
 	var java, jerr = MMMLC.find_java(opts.java_hint);
 	if (!java) { log("[错误] " ++ jerr, true); set_launching(false); return; }
 
