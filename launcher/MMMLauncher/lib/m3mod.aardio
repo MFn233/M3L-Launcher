@@ -225,7 +225,10 @@ namespace m3mod {
 				if (!fileName) continue;
 
 				seen = seen + 1;
-				if (seen > 400) break;   // 兜底：极端包不无限扫
+
+				// 不能给小的上限：有的包 mods.toml 在第 3900 个条目（几乎在尾部），
+				// 截断就会读不到元数据、只能退回文件名。这里只留一个防死循环的保险。
+				if (seen > 200000) break;
 
 				if (!first_entry) first_entry = fileName;
 
