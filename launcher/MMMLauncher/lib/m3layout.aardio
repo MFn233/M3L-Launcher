@@ -31,6 +31,42 @@ namespace m3layout {
 	GROUP_PAD_X = 12;    // 框比内容左右各宽出的部分
 	GROUP_PAD_Y = 10;    // 框比内容上下各高出的部分
 
+	// ---------- 批量改显隐 ----------
+	//
+	// 逐个 ShowWindow 会每个控件触发一次重绘，几十个控件连着来就能看到闪。
+	// 这里在批量开始前对父窗口发 WM_SETREDRAW(0)，全部改完再发 (1) 并 RedrawWindow，
+	// 中间那一堆重绘就被合掉了。
+	//
+	// 支持嵌套：只有最外层真正开关重绘。
+
+	var batch_depth = 0;
+
+	function batched(form, fn) {
+		if (!form or !fn) return;
+
+		batch_depth = batch_depth + 1;
+		if (batch_depth == 1) {
+			::SendMessage(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
+		}
+
+		var err = null;
+		try {
+			fn();
+		}
+		catch(e) {
+			err = e;
+		}
+
+		batch_depth = batch_depth - 1;
+		if (batch_depth == 0) {
+			::SendMessage(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 1, 0);
+			form.redraw();
+		}
+
+		// 出错也要先把重绘恢复，再把异常抛出去
+		if (err) error(err);
+	}
+
 	function create(form, left, top, width, opt) {
 		var L = {};
 

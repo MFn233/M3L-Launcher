@@ -381,17 +381,21 @@ function sub_btn_skin(ctrl, selected) {
 }
 
 function sub_apply() {
-	var on_path = (sub_current == 1);
+	// 两个子页加起来几十个控件，逐个改 visible 会闪；包一层重绘抑制。
+	// 嵌在 select_page 的 batched 里也不会重复开关（batched 支持嵌套）。
+	m3layout.batched(winform, function() {
+		var on_path = (sub_current == 1);
 
-	for i, c in SP.controls {
-		c.visible = on_path;
-	}
-	for i, c in SV.controls {
-		c.visible = !on_path;
-	}
+		for i, c in SP.controls {
+			c.visible = on_path;
+		}
+		for i, c in SV.controls {
+			c.visible = !on_path;
+		}
 
-	sub_btn_skin(subPathBtn, on_path);
-	sub_btn_skin(subVerBtn, !on_path);
+		sub_btn_skin(subPathBtn, on_path);
+		sub_btn_skin(subVerBtn, !on_path);
+	});
 }
 
 function sub_select(n) {
@@ -616,15 +620,18 @@ function select_page(n) {
 		return;
 	}
 
-	nav_current = n;
-	show_page(n);
-	ensure_page(n);
+	// 整段（切显隐 + 换标题 + 刷导航样式）放在一次重绘抑制里，避免闪
+	m3layout.batched(winform, function() {
+		nav_current = n;
+		show_page(n);
+		ensure_page(n);
 
-	winform.lblPageTitle.text = nav_titles[n];
+		winform.lblPageTitle.text = nav_titles[n];
 
-	for i, c in nav_items {
-		nav_skin(i, i == n);
-	}
+		for i, c in nav_items {
+			nav_skin(i, i == n);
+		}
+	});
 }
 
 for i, t in nav_titles {
