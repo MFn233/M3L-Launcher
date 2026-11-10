@@ -187,6 +187,17 @@ namespace m3mod {
 		}
 	}
 
+	// 计量：open / locate / read / parse 四段各自的总耗时（毫秒），只做整数累加
+	var st = { open = 0; locate = 0; read = 0; parse = 0; hit = 0; miss = 0 };
+
+	function stats_reset() {
+		st = { open = 0; locate = 0; read = 0; parse = 0; hit = 0; miss = 0 };
+	}
+
+	function stats_get() {
+		return st;
+	}
+
 	// 按名字跳读一个条目。zip 里用正斜杠，但有的实现按反斜杠比较，两种都试。
 	// 这是"随机读取"：不遍历整个压缩包，一个 jar 只读几条。
 	function read_one(zip, name) {
@@ -194,6 +205,7 @@ namespace m3mod {
 
 		for i, v in variants {
 			var ok = false;
+			var t = ..time.tick();
 
 			try {
 				ok = zip.locate(v);
@@ -202,15 +214,21 @@ namespace m3mod {
 				ok = false;
 			}
 
+			st.locate = st.locate + (..time.tick() - t);
+
 			if (!ok) continue;
 
 			var s = null;
+			t = ..time.tick();
+
 			try {
 				s = zip.readCurrentFile();
 			}
 			catch(e) {
 				s = null;
 			}
+
+			st.read = st.read + (..time.tick() - t);
 
 			if (s and #s > 0) return s;
 		}
@@ -423,6 +441,8 @@ namespace m3mod {
 
 		var zip = null;
 
+		var t_open = ..time.tick();
+
 		try {
 			zip = zlib.unzip(path, false);
 		}
@@ -430,59 +450,69 @@ namespace m3mod {
 			zip = null;
 		}
 
+		st.open = st.open + (..time.tick() - t_open);
+
 		if (!zip) {
 			var bad = { modid = ""; name = ""; version = ""; loader = ""; err = "打不开压缩包" };
 			meta_cache[key] = bad;
 			return bad;
 		}
 
-		// MANIFEST 每个包都有，先读它当补缺来源；再按优先级读加载器专属元数据，
-		// 名字与版本都齐了才停 —— 但不因为"命中一个"就停（litemod.json 可能没有 version）。
+		// 按优先级逐个定位，命中即停；MANIFEST 只在缺字段时才读（多数包不需要）。
 		var texts = {};
 		var hit = 0;
 		var tried = {};
 
-		var mf = read_one(zip, "META-INF/MANIFEST.MF");
-		if (mf) {
-			texts["manifest.mf"] = mf;
-			hit = hit + 1;
-		}
-		table.push(tried, "manifest" ++ (mf ? "+" : "-"));
-
 		// .litemod 里只可能有 litemod.json，把它排最前，省掉几次白跑的 locate
 		var order = {};
-		var is_lite = string.endsWith(string.lower(path), ".litemod");
+		var is_lite = ..string.endsWith(..string.lower(path), ".litemod");
 
 		if (is_lite) {
-			table.push(order, { key = "litemod.json"; name = "litemod.json" });
+			..table.push(order, { key = "litemod.json"; name = "litemod.json" });
 		}
 
 		for i, c in META_CANDIDATES {
 			if (is_lite and c.key == "litemod.json") continue;
-			table.push(order, c);
+			..table.push(order, c);
 		}
 
 		for i, c in order {
-			if (c.key == "manifest.mf") continue;
-
 			var s = read_one(zip, c.name);
 
-			var mark = "-";
-			if (s) {
-				mark = "+";
-				texts[c.key] = s;
-				hit = hit + 1;
+			if (!s) {
+				..table.push(tried, c.key ++ "-");
+				st.miss = st.miss + 1;
+				continue;
 			}
-			table.push(tried, c.key ++ mark);
 
-			// 名字和版本都拿到了就够用了
-			if (s) {
-				var probe = pick_meta(texts);
-				if (#probe.modid > 0 and #probe.version > 0) break;
-			}
+			texts[c.key] = s;
+			hit = hit + 1;
+			..table.push(tried, c.key ++ "+");
+			st.hit = st.hit + 1;
+
+			break;
 		}
 
+		var tp = ..time.tick();
 		var m = pick_meta(texts);
+
+		st.parse = st.parse + (..time.tick() - tp);
+
+		// 缺名字或版本时才去读 MANIFEST（它是"统一位置"，但多数包用不上）
+		if (#m.version == 0 or #m.name == 0) {
+			var mf = read_one(zip, "META-INF/MANIFEST.MF");
+
+			if (mf) {
+				texts["manifest.mf"] = mf;
+
+				tp = ..time.tick();
+				m = pick_meta(texts);
+				st.parse = st.parse + (..time.tick() - tp);
+
+				..table.push(tried, "manifest+");
+				hit = hit + 1;
+			}
+		}
 
 		m.tried = table.concat(tried, ",");
 

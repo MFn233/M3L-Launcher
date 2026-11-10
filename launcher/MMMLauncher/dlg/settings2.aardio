@@ -1041,7 +1041,9 @@ function mods_render() {
 	var at = 1;
 	var t_start = ..time.tick();
 	var t_meta = 0;
-	var slow = {};
+	var slow = {};      // 每条 >=30ms 的记一行，最后取最慢的 5 个
+
+	m3mod.stats_reset();
 
 	var step;
 	step = function() {
@@ -1059,8 +1061,9 @@ function mods_render() {
 			var ms = ..time.tick() - t1;
 			t_meta = t_meta + ms;
 
-			if (ms >= 30 and #slow < 6) {
-				table.push(slow, ms ++ "ms  " ++ mod_rows[idx].file);
+			if (ms >= 30) {
+				// 零填充后再排序，字符串比较就等于数值比较；分隔符要用单引号才是真制表符
+				table.push(slow, string.format('%08d\t%s', ms, mod_rows[idx].file));
 			}
 
 			m3mod.cache_put(mod_rows[idx].path, meta);
@@ -1079,10 +1082,25 @@ function mods_render() {
 
 		m3mod.cache_save();
 
+		table.sort(slow);
+
+		var top = {};
+
+		for i = #slow; i >= 1; 1 {
+			if (#top >= 5) break;
+
+			var one = slow[i];
+			var at_tab = string.indexOf(one, '\t');
+			var ms = tonumber(string.left(one, at_tab - 1));
+
+			table.push(top, string.format("%6dms  %s", ms, string.slice(one, at_tab + 1)));
+		}
+
 		mod_scan_stats = {
 			total = ..time.tick() - t_start;
 			meta = t_meta;
-			slow = slow;
+			slow = top;
+			st = m3mod.stats_get();
 		};
 
 		mod_write_scan_file(dir);
@@ -1101,6 +1119,13 @@ function mod_write_scan_file(dir) {
 
 	if (mod_scan_stats) {
 		table.push(lines, "#ms_total=" ++ mod_scan_stats.total ++ "  #ms_meta=" ++ mod_scan_stats.meta);
+
+		var st = mod_scan_stats.st;
+		if (st) {
+			table.push(lines, "#ms_breakdown: open=" ++ st.open ++ "  locate=" ++ st.locate
+				++ "  read=" ++ st.read ++ "  parse=" ++ st.parse);
+			table.push(lines, "#entries: hit=" ++ st.hit ++ "  miss=" ++ st.miss);
+		}
 
 		for i, s in mod_scan_stats.slow {
 			table.push(lines, "#slow=" ++ s);
