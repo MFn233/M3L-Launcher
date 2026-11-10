@@ -241,6 +241,7 @@ namespace m3mod {
 		}
 
 		var got = {};
+		var got_n = 0;        // 字符串键的表不能用 #，自己计数
 		var loader_hit = false;
 		var seen = 0;
 		var first_entry = null;
@@ -279,13 +280,14 @@ namespace m3mod {
 				if (!s or #s == 0) continue;
 
 				got[low] = s;
+				got_n = got_n + 1;
 				st.hit = st.hit + 1;
 
 				// 加载器专属条目（不是 MANIFEST）拿到就够用了，MANIFEST 只是补缺；
 				// 再给一点余量找 MANIFEST（一般在前几个条目），找不到也收工
 				if (low != "manifest.mf") loader_hit = true;
 
-				if (loader_hit and (#got >= 2 or seen >= 40)) break;
+				if (loader_hit and (got_n >= 2 or seen >= 40)) break;
 			}
 		}
 		catch(e) {
@@ -514,8 +516,9 @@ namespace m3mod {
 
 		var sample = null;
 
-		// 少数非标准包（加密、分卷之类）退回 zlib.unzip 遍历
-		if (#texts == 0) {
+		// 少数非标准包（加密、分卷之类）退回 zlib.unzip 遍历。
+		// 注意不能用 #texts 判断：texts 是**字符串键**的表，# 永远是 0。
+		if (zerr) {
 			var ts2 = ..time.tick();
 			texts, sample = collect_via_unzip(path, names);
 			st.open = st.open + (..time.tick() - ts2);

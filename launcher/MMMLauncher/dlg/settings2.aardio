@@ -1296,7 +1296,11 @@ function mods_render_final() {
 		if (dups > 0) tip = tip ++ "有 " ++ dups ++ " 个是重复安装（同一个 modid），已标红。";
 
 		var reasons = "";
+		var reason_n = 0;
+
 		for k, v in mod_meta_reasons {
+			reason_n = reason_n + 1;
+
 			if (#reasons > 0) reasons = reasons ++ " / ";
 			reasons = reasons ++ k ++ " " ++ v;
 		}
@@ -1304,12 +1308,12 @@ function mods_render_final() {
 		if (#reasons > 0) tip = tip ++ "读不到元数据：" ++ reasons ++ "。";
 
 		lblModHint.text = tip;
+
+		// 有读不到的就把细节写到 exe 旁边的 mod-diag.txt
+		if (reason_n > 0) mod_dump_diag();
 	}
 
 	mod_btn_update();
-
-	// 有读不到的就把细节写到 exe 旁边的 mod-diag.txt（排查用，能自动清理）
-	if (#mod_meta_reasons > 0) mod_dump_diag();
 }
 
 // 把"读不到元数据"的细节写到 mod-diag.txt：文件名 / 原因 / 试过哪些条目
