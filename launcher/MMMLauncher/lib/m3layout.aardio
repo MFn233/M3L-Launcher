@@ -41,13 +41,32 @@ namespace m3layout {
 
 	var batch_depth = 0;
 
-	function batched(form, fn) {
-		if (!form or !fn) return;
+	// 开始抑制重绘。可以手动调用（比如包裹整个初始化过程），count 会累加。
+	function suspend(form) {
+		if (!form) return;
 
 		batch_depth = batch_depth + 1;
 		if (batch_depth == 1) {
 			::SendMessageInt(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
 		}
+	}
+
+	// 结束抑制；只有最外层（count 归零）才真正恢复并重画一次。
+	function resume(form) {
+		if (!form) return;
+		if (batch_depth <= 0) return;
+
+		batch_depth = batch_depth - 1;
+		if (batch_depth == 0) {
+			::SendMessageInt(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 1, 0);
+			form.redraw();
+		}
+	}
+
+	function batched(form, fn) {
+		if (!form or !fn) return;
+
+		suspend(form);
 
 		var err = null;
 		try {
@@ -57,11 +76,7 @@ namespace m3layout {
 			err = e;
 		}
 
-		batch_depth = batch_depth - 1;
-		if (batch_depth == 0) {
-			::SendMessageInt(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 1, 0);
-			form.redraw();
-		}
+		resume(form);
 
 		// 出错也要先把重绘恢复，再把异常抛出去
 		if (err) error(err);

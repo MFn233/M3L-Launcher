@@ -61,6 +61,10 @@ winform.add({
 	bgcolor = DIVIDE;
 });
 
+// 从这里开始到 return 之前，窗口正在被搭出来：控件、分组框、列宽都在变。
+// 冻结重绘，避免屏幕上出现中间状态（看起来像窗口在变形）。
+m3layout.suspend(winform);
+
 m3theme.ink(winform.lblPageTitle);
 
 winform.lblHint.color = m3theme.C_MUTED;
@@ -1846,5 +1850,8 @@ if (draft_restored) {
 loading = false;
 
 select_page(start_page);
+
+// 全部搭完再解冻，一次性画出来
+m3layout.resume(winform);
 
 return winform;
