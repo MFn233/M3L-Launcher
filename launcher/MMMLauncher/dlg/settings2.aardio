@@ -184,17 +184,17 @@ var listJava = P4.make({
 
 listJava.fullRow = true;
 
+var java_cols = {
+	{ "版本"; 140 };
+	{ "厂商"; 100 };
+	{ "路径"; 260 };
+};
 var saved_java_cols = cfg.java_columns;
 if (type(saved_java_cols) == "table" and #saved_java_cols >= 3) {
-	listJava.columns = saved_java_cols;
+	java_cols = saved_java_cols;
 }
-else {
-	listJava.columns = {
-		{ "版本"; 150 };
-		{ "厂商"; 110 };
-		{ "路径"; 300 };
-	};
-}
+
+m3list.setup(listJava, java_cols, true);
 
 m3list.fit(listJava);
 try_thin_scrollbar(listJava);
@@ -283,25 +283,17 @@ var listPaths = SP.make({
 
 listPaths.fullRow = true;
 
-// 第一列固定是序号「#」；旧配置里存的是没有序号列的版本，这里补上
-var path_cols = { { "#"; 40 } };
+// 列宽优先用上次保存的；第三个参数 true = 最前面加「#」行号列
+var path_cols = {
+	{ "名称"; 120 };
+	{ "路径"; 340 };
+};
 var saved_path_cols = cfg.paths_columns;
 if (type(saved_path_cols) == "table" and #saved_path_cols >= 2) {
-	if (saved_path_cols[1] and saved_path_cols[1][1] == "#") {
-		path_cols = saved_path_cols;
-	}
-	else {
-		for i, c in saved_path_cols {
-			table.push(path_cols, c);
-		}
-	}
-}
-else {
-	table.push(path_cols, { "名称"; 120 });
-	table.push(path_cols, { "路径"; 340 });
+	path_cols = saved_path_cols;
 }
 
-listPaths.columns = path_cols;
+m3list.setup(listPaths, path_cols, true);
 
 m3list.fit(listPaths);
 try_thin_scrollbar(listPaths);
@@ -331,27 +323,19 @@ var listVers = SV.make({
 
 listVers.fullRow = true;
 
-// 同上：第一列固定是序号「#」
-var ver_cols = { { "#"; 40 } };
+// 同上：第三个参数 true = 加「#」行号列
+var ver_cols = {
+	{ "版本名"; 180 };
+	{ "游戏版本"; 80 };
+	{ "加载器"; 140 };
+	{ "隔离"; 70 };
+};
 var saved_ver_cols = cfg.version_columns;
 if (type(saved_ver_cols) == "table" and #saved_ver_cols >= 4) {
-	if (saved_ver_cols[1] and saved_ver_cols[1][1] == "#") {
-		ver_cols = saved_ver_cols;
-	}
-	else {
-		for i, c in saved_ver_cols {
-			table.push(ver_cols, c);
-		}
-	}
-}
-else {
-	table.push(ver_cols, { "版本名"; 180 });
-	table.push(ver_cols, { "游戏版本"; 80 });
-	table.push(ver_cols, { "加载器"; 140 });
-	table.push(ver_cols, { "隔离"; 70 });
+	ver_cols = saved_ver_cols;
 }
 
-listVers.columns = ver_cols;
+m3list.setup(listVers, ver_cols, true);
 
 m3list.fit(listVers);
 try_thin_scrollbar(listVers);
@@ -1004,9 +988,11 @@ function java_render() {
 		if (j.black) mark = mark ++ "[黑名单] ";
 		if (cfg.java == j.path) mark = mark ++ "[当前] ";
 
-		listJava.addItem({ mark ++ major_text; vendor_text; j.path });
+		listJava.addItem({ ""; mark ++ major_text; vendor_text; j.path });
 		table.push(java_rows, j.path);
 	}
+
+	m3list.renumber(listJava);
 
 	// 按路径找回选中项
 	if (java_selected) {
@@ -1202,7 +1188,6 @@ var path_selected = null;
 function paths_render() {
 	listPaths.clear();
 	path_rows = {};
-	var path_seq = 0;
 
 	for i, p in cfg.game_paths {
 		var name = p.name;
@@ -1212,10 +1197,11 @@ function paths_render() {
 		if (p.official) mark = mark ++ "[官方] ";
 		if (cfg.game_path == p.dir) mark = mark ++ "[当前] ";
 
-		path_seq = path_seq + 1;
-		listPaths.addItem({ tostring(path_seq); mark ++ name; p.dir });
+		listPaths.addItem({ ""; mark ++ name; p.dir });
 		table.push(path_rows, i);
 	}
+
+	m3list.renumber(listPaths);
 
 	// 按目录找回选中项，重建列表不会把选中状态弄丢
 	if (path_selected) {
@@ -1452,7 +1438,6 @@ function list_version_names() {
 function vers_render() {
 	listVers.clear();
 	ver_rows = {};
-	var ver_seq = 0;
 
 	var names = list_version_names();
 
@@ -1466,10 +1451,11 @@ function vers_render() {
 		// 真正的游戏版本 + 加载器：读版本 JSON 判断，不靠文件夹名
 		var info = m3version.describe(cfg.game_path, name);
 
-		ver_seq = ver_seq + 1;
-		listVers.addItem({ tostring(ver_seq); mark ++ name; info.game; info.loader; isolate_text });
+		listVers.addItem({ ""; mark ++ name; info.game; info.loader; isolate_text });
 		table.push(ver_rows, name);
 	}
+
+	m3list.renumber(listVers);
 
 	// 按名字找回选中项
 	if (ver_selected) {

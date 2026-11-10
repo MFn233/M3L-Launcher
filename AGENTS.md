@@ -99,6 +99,8 @@ arr = list;
 - 颜色和 skin **一律走 `lib/m3theme.aardio`**，不要在新窗口里再定义 `A_WHITE / A_INK`
 - plus 的 skin 里 `background/color` 用 ARGB（`0xAARRGGBB`），static/edit 的 `color` 属性用 COLORREF（`0xBBGGRR`）
 - plus 的 trackbar 滑块形状只看 `border.radius`（`<0` 圆 / `>0` 圆角矩形 / 无则方块），三个状态都要写死
+- 列表统一走 `m3list`：`setup(list, cols, true)` 设列宽（第三个参数为 true 时最前面加「#」行号列），
+  `renumber(list)` 在每次重填列表后按显示顺序重编号，`fit(list)` 兜住超宽压缩
 
 ### 工程/发布
 

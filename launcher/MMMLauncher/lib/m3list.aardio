@@ -20,6 +20,55 @@ namespace m3list {
 		return 56;
 	}
 
+
+	// ---------- 行号列 ----------
+	//
+	// 行号是"内容"而不是"外观"：列可以一键加，但每行的数字得跟着数据走。
+	// 所以拆成两步——setup() 设列（用布尔参数决定要不要 #），
+	// renumber() 在每次重填列表后按显示顺序重编号。
+	// 只对"行数可能很多"的列表开行号；只有一两行的列表（比如账号）加了反而吵。
+
+	ROW_NO_W = 40;
+
+	// 记住哪些列表开了行号（用句柄做键，避免往控件上挂自定义属性）
+	var row_numbered = {};
+
+	// 设列宽。boolRowNumber 为 true 时在最前面加一列 #。
+	// 传进来的 cols 如果已经带 # 就直接用，不重复插。
+	function setup(list, cols, boolRowNumber) {
+		if (!list) return;
+
+		var out = {};
+
+		if (boolRowNumber) {
+			var has_no = (cols and cols[1] and cols[1][1] == "#");
+
+			if (!has_no) {
+				table.push(out, { "#"; ROW_NO_W });
+			}
+		}
+
+		if (cols) {
+			for i, c in cols {
+				table.push(out, c);
+			}
+		}
+
+		list.columns = out;
+		row_numbered[tostring(list.hwnd)] = (boolRowNumber and true);
+	}
+
+	// 按当前显示顺序重编第 1 列，从 1 开始。
+	// 必须在列表填完之后调用；没开行号的列表会被忽略，防止误改第一列。
+	function renumber(list) {
+		if (!list) return;
+		if (!row_numbered[tostring(list.hwnd)]) return;
+
+		for i = 1; list.count; 1 {
+			list.setItemText(tostring(i), i, 1);
+		}
+	}
+
 	// 打开窗口时用：先保证最小宽度，再把总宽压进可视区域。
 	// 用 setColumnWidth（底层 LVM_SETCOLUMNWIDTH）逐列改，
 	// 不要整体赋值 columns —— 那个 setter 是「删掉所有列再重建」，又重又不刷新。
