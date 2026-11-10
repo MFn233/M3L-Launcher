@@ -87,27 +87,101 @@ namespace MMMLC{
 		//Fabric / Quilt 的版本可能压根没有自己的 jar，只靠 inheritsFrom 用父版本的，
 		//这种情况不算缺失，不用报警。
 		var main_jar = io.joinpath(minecraft_dir, "versions", info.jar_id, info.jar_id + ".jar");
-		if (io.exist(main_jar)) table.push(info.classpath, main_jar);
+		if (io.exist(main_jar)) {
+			table.push(info.classpath, main_jar);
+			table.push(info.class_meta, { key = "net.minecraft:client"; ver = "" });
+		}
 		elseif (!data.inheritsFrom) table.push(info.missing, main_jar);
 
 		info.minecraft_dir = minecraft_dir;
 		info.version_dir = version_dir;
 		info.java_version = info.java_version or 8;
-		info.classpath = dedupe(info.classpath);
+		info.classpath = dedupe_by_key(info.classpath, info.class_meta);
+		info.classpath, info.class_meta = dedupe(info.classpath, info.class_meta);
 
 		return info;
 	}
 
 	//同一个 jar 可能在 JSON 里出现两次（比如 text2speech 的普通条目和 natives 条目），
-	//去重一下，classpath 干净些。
-	function dedupe(list) {
+	//去重一下，classpath 干净些。给了 keys 就同步维护，避免和 classpath 错位。
+	function dedupe(list, keys) {
 		var out = {};
+		var out_keys = {};
 		var seen = {};
 		for i, v in list {
 			if (seen[v]) continue;
 			seen[v] = true;
 			table.push(out, v);
+			if (keys) table.push(out_keys, keys[i]);
 		}
+		return out, out_keys;
+	}
+
+	//库的身份只看 group:artifact，版本号不参与比较。
+	function library_key(parted) {
+		if (type(parted) != "table") return null;
+		if (#parted < 2) return null;
+
+		return parted[1] ++ ":" ++ parted[2];
+	}
+
+	//版本号比较：只按点分数字比（2.0-beta9 这种尾巴忽略）。
+	function version_newer(a, b) {
+		var x = {};
+		for i, p in string.split(tostring(a or ""), ".") {
+			var n = tonumber(string.match(p, "^\d+"));
+			table.push(x, n or 0);
+		}
+
+		var y = {};
+		for i, p in string.split(tostring(b or ""), ".") {
+			var n = tonumber(string.match(p, "^\d+"));
+			table.push(y, n or 0);
+		}
+
+		var n = math.max(#x, #y);
+		for i = 1; n; 1 {
+			var va = x[i] or 0;
+			var vb = y[i] or 0;
+
+			if (va > vb) return true;
+			if (va < vb) return false;
+		}
+
+		return false;
+	}
+
+	//同一个 group:artifact 只留一份，取**版本号更大**的那个。
+	//整合包的 JSON 常把原版 guava 15.0 与 Forge 的 guava 17.0 都写进来，
+	//两份都在 classpath 里时 Java 取第一个命中的，于是拿到旧版，报 NoSuchMethodError。
+	function dedupe_by_key(paths, metas) {
+		if (#metas != #paths) return paths;
+
+		var best = {};
+		for i, m in metas {
+			if (!m or !m.key) continue;
+
+			var j = best[m.key];
+			if (!j) best[m.key] = i;
+			elseif (version_newer(m.ver, metas[j].ver)) best[m.key] = i;
+		}
+
+		var out = {};
+		var seen = {};
+		for i, p in paths {
+			var m = metas[i];
+			if (!m or !m.key) {
+				table.push(out, p);
+				continue;
+			}
+
+			if (seen[m.key]) continue;
+			if (best[m.key] != i) continue;
+
+			seen[m.key] = true;
+			table.push(out, p);
+		}
+
 		return out;
 	}
 
@@ -122,6 +196,7 @@ namespace MMMLC{
 			version_type = data.type or "release";
 			game_args = {};
 			jvm_args = {};
+			class_meta = {};     //与 classpath 一一对应：{ key = group:artifact; ver = 版本号 }
 			classpath = {};      //放进 -cp 的 jar
 			missing = {};        //磁盘上找不到的 jar（只警告，不中断）
 			native_jars = {};    //需要解压的 natives 压缩包
@@ -234,7 +309,13 @@ namespace MMMLC{
 		}
 
 		if (jar) {
-			if (io.exist(jar)) table.push(info.classpath, jar);
+			if (io.exist(jar)) {
+				table.push(info.classpath, jar);
+				table.push(info.class_meta, {
+					key = library_key(parted);
+					ver = parted[3];
+				});
+			}
 			//老格式（natives 写在 classifiers 里）的库，artifact 常常只是个占位空包，
 			//缺了也不影响，不用报警。
 			elseif (!lib.natives) table.push(info.missing, jar);
@@ -264,6 +345,7 @@ namespace MMMLC{
 			version_type = child.version_type;
 			game_args = {};
 			jvm_args = {};
+			class_meta = {};
 			classpath = {};
 			missing = {};
 			native_jars = {};
@@ -282,6 +364,8 @@ namespace MMMLC{
 		for i, v in child.jvm_args { table.push(info.jvm_args, v); }
 		for i, v in parent.classpath { table.push(info.classpath, v); }
 		for i, v in child.classpath { table.push(info.classpath, v); }
+		for i, v in parent.class_meta { table.push(info.class_meta, v); }
+		for i, v in child.class_meta { table.push(info.class_meta, v); }
 		for i, v in parent.missing { table.push(info.missing, v); }
 		for i, v in child.missing { table.push(info.missing, v); }
 		for i, v in parent.native_jars { table.push(info.native_jars, v); }
