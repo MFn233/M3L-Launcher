@@ -1,0 +1,122 @@
+//m3mod.aardio
+
+//Mod 管理：只认 mods 目录里的文件，不解压、不解析内容。
+//
+//禁用约定：文件名加 .disabled（各加载器都认这条），所以"启用/禁用"就是改名。
+//放在这一层是因为它同时被三处用：设置里的 Mod 页、内存估算（数 Mod）、以后的拖入安装。
+
+namespace m3mod {
+	import io;
+	import fsys;
+	import string;
+	import m3config;
+
+	// 某个版本实际使用的 mods 目录：隔离时在版本目录里，否则在游戏目录根下
+	function dir_of(cfg, name) {
+		if (!cfg or !cfg.game_path or #cfg.game_path == 0) return null;
+
+		if (!name or #name == 0) return cfg.game_path ++ "\mods";
+
+		if (m3config.is_isolated(cfg, cfg.game_path, name)) {
+			return cfg.game_path ++ "\versions\" ++ name ++ "\mods";
+		}
+
+		return cfg.game_path ++ "\mods";
+	}
+
+	function size_text(n) {
+		if (!n) return "0 KB";
+
+		var kb = n / 1024;
+		if (kb < 1024) return string.format("%.0f KB", kb);
+
+		return string.format("%.1f MB", kb / 1024);
+	}
+
+	// 列出一层 mods（含一层子目录：有的整合包按游戏版本分文件夹）
+	// 返回数组，每项：{ name; file; path; folder; size; enabled }
+	function scan(dir) {
+		var out = {};
+		if (!dir or !io.exist(dir)) return out;
+
+		var add_files = function(dirpath, folder) {
+			fsys.enum(dirpath, "*.*", function(dirname, filename, fullpath, findData) {
+				if (!filename) return;   // 目录，由外层单独处理
+
+				var low = string.lower(filename);
+				var enabled = false;
+				var base = filename;
+
+				if (string.endsWith(low, ".jar.disabled")) {
+					base = string.left(filename, #filename - 9);
+				}
+				elseif (string.endsWith(low, ".jar")) {
+					enabled = true;
+				}
+				else {
+					return;   // 其它文件不管（.txt、.old 之类）
+				}
+
+				table.push(out, {
+					name = base;
+					file = filename;
+					path = fullpath;
+					folder = folder;
+					size = io.getSize(fullpath);
+					enabled = enabled;
+				});
+			}, false);
+		};
+
+		add_files(dir, "");
+
+		var _, folders = fsys.list(dir);
+		for i, sub in folders {
+			add_files(dir ++ "\" ++ sub, sub);
+		}
+
+		return out;
+	}
+
+	// 只数启用的（内存估算用：禁用的 Mod 不会被加载）
+	function count_enabled(dir) {
+		var list = scan(dir);
+
+		var n = 0;
+		for i, m in list {
+			if (m.enabled) n = n + 1;
+		}
+
+		return n;
+	}
+
+	// 启用/禁用 = 改名去掉或加上 .disabled
+	function set_enabled(path, enabled) {
+		if (!path or !io.exist(path)) return false, "文件不存在";
+
+		var is_enabled = string.endsWith(string.lower(path), ".jar");
+
+		if (enabled and is_enabled) return true;
+		if (!enabled and !is_enabled) return true;
+
+		var target;
+		if (enabled) target = string.left(path, #path - 9);
+		else target = path ++ ".disabled";
+
+		if (io.exist(target)) return false, "目标文件已存在";
+
+		// 用 MoveFileEx 直接改名：fsys.rename 走的是 Shell 操作，
+		// 会带界面/进度框，改个文件名不值得。
+		if (::Kernel32.MoveFileExW(path, target, 0)) return true;
+
+		return false, "改名失败（文件可能正被游戏占用）";
+	}
+}
+
+/**intellisense(m3mod)
+dir_of(__/*配置*/,__/*版本名*/) = 该版本实际使用的 mods 目录
+scan(__/*目录*/) = 列出 .jar 与 .jar.disabled（含一层子目录）
+count_enabled(__/*目录*/) = 只数启用的 Mod
+set_enabled(__/*文件路径*/,__/*true 启用 / false 禁用*/) = 改名切换启用状态
+size_text(__/*字节数*/) = 人类可读的大小
+end intellisense**/

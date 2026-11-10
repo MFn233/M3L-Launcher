@@ -16,6 +16,7 @@ import process;
 import fsys.dlg;
 import m3list;
 import m3opts;
+import m3mod;
 import m3version;
 import json;
 import crypt;
@@ -440,51 +441,87 @@ subVerBtn.oncommand = function(id, event) {
 
 sub_apply();
 
-// ---------- 第五页之二：版本独立设置 ----------
+// ---------- 第五页之二：版本独立设置（设置 / Mod 两个子页） ----------
 //
-// 只存「与全局不同的部分」：勾上的项写进 versions\<版本名>\.m3l.options.json，
-// 没勾 = 跟随全局。改动先攒在 ver_pending 里，点「保存」才落盘，
-// 「取消」则整批丢弃——和其他页的保存语义保持一致。
+// 这两个子页都属于"某个版本"：设置只存与全局不同的项（versions\<版本名>\.m3l.options.json），
+// Mod 是该版本 mods 目录里的文件。所以共用顶部同一个版本下拉。
+//
+// 设置：勾上的项才写文件；改动先攒在 ver_pending 里，点「保存」才落盘。
+// Mod：启用/禁用就是给文件名加/去掉 .disabled，立即生效（不需要保存）。
 
-var PV = m3layout.create(winform, 232, 52, 504, { framed = true });
+var PV = m3layout.create(winform, 232, 52, 504, { framed = false });
 PV.btn_w = 76;
 
-// 页标题已经叫「版本独立设置」，这里不再加小标题，免得同一个词又出现一次
-PV.section("");
-
 var comboOptVer = PV.row("版本", { cls = "combobox"; mode = "dropdownlist" });
-var pv_versions = {};
+PV.finish();
+
+// 子页切换按钮，和第五页那对同一套样式
+var SUB2_W = 88;
+var SUB2_TOP = PV.y + 4;
+
+// 左侧与分组框边线对齐（框比内容左移 12px）
+var SUB2_LEFT = 220;
+
+var subCfgBtn = winform.add({
+	cls = "plus";
+	text = "设置";
+	left = SUB2_LEFT;
+	top = SUB2_TOP;
+	right = SUB2_LEFT + SUB2_W;
+	bottom = SUB2_TOP + 28;
+	font = LOGFONT(name='Microsoft YaHei'; h=-12);
+});
+
+var subModBtn = winform.add({
+	cls = "plus";
+	text = "Mod";
+	left = SUB2_LEFT + SUB2_W + 8;
+	top = SUB2_TOP;
+	right = SUB2_LEFT + SUB2_W * 2 + 8;
+	bottom = SUB2_TOP + 28;
+	font = LOGFONT(name='Microsoft YaHei'; h=-12);
+});
+
+table.push(PV.controls, subCfgBtn);
+table.push(PV.controls, subModBtn);
+
+var SUB2_BODY_TOP = SUB2_TOP + 28 + 8;
+
+// ---------- 子页一：设置 ----------
+
+var PVA = m3layout.create(winform, 232, SUB2_BODY_TOP, 504, { framed = true });
+PVA.btn_w = 76;
+
+PVA.section("");
 
 // 一行：左边勾「使用独立设置」，右边控件。勾选框本身就是"有没有覆盖"的开关。
 function pv_row(label, ctrl_opt) {
-	var y = PV.y;
+	var y = PVA.y;
 
-	var chk = PV.make({
+	var chk = PVA.make({
 		cls = "checkbox";
 		text = label;
-		left = PV.left;
+		left = PVA.left;
 		top = y;
-		right = PV.left + 104;
+		right = PVA.left + 104;
 		bottom = y + 20;
 	});
 
 	chk.bgcolor = m3theme.C_BG;
 
-	var ctrl = PV.make(table.assign({}, ctrl_opt, {
-		left = PV.left + 112;
+	var ctrl = PVA.make(table.assign({}, ctrl_opt, {
+		left = PVA.left + 112;
 		top = y;
-		right = PV.right;
-		bottom = y + PV.row_h;
+		right = PVA.right;
+		bottom = y + PVA.row_h;
 	}));
 
 	if (ctrl_opt.cls == "edit") m3theme.field(ctrl);
 
-	PV.y = y + PV.row_step;
+	PVA.y = y + PVA.row_step;
 
 	return ctrl, chk;
 }
-
-PV.section("覆盖项");
 
 var editPvMem, chkMem = pv_row("内存", { cls = "edit"; text = "" });
 var comboPvMode, chkMode = pv_row("窗口模式", { cls = "combobox"; mode = "dropdownlist" });
@@ -492,42 +529,126 @@ var editPvW, chkW = pv_row("宽度", { cls = "edit"; text = "" });
 var editPvH, chkH = pv_row("高度", { cls = "edit"; text = "" });
 var comboPvPri, chkPri = pv_row("进程优先级", { cls = "combobox"; mode = "dropdownlist" });
 
-var chkJvm = PV.make({
+var chkJvm = PVA.make({
 	cls = "checkbox";
 	text = "JVM 参数（每行一条）";
-	left = PV.left;
-	top = PV.y;
-	right = PV.left + 240;
-	bottom = PV.y + 20;
+	left = PVA.left;
+	top = PVA.y;
+	right = PVA.left + 240;
+	bottom = PVA.y + 20;
 });
 
 chkJvm.bgcolor = m3theme.C_BG;
-PV.y = PV.y + PV.row_step;
+PVA.y = PVA.y + PVA.row_step;
 
-var editPvJvm = PV.make({
+var editPvJvm = PVA.make({
 	cls = "edit";
 	multiline = 1;
 	vscroll = 1;
 	autohscroll = false;
-	left = PV.left;
-	top = PV.y;
-	right = PV.right;
-	bottom = PV.y + 64;
+	left = PVA.left;
+	top = PVA.y;
+	right = PVA.right;
+	bottom = PVA.y + 56;
 });
 
 editPvJvm.color = m3theme.C_INK;
 editPvJvm.bgcolor = m3theme.C_FIELD;
 
-PV.y = PV.y + 64 + 8;
+PVA.y = PVA.y + 56 + 8;
 
-PV.text("勾上 = 这个版本用自己的值；不勾 = 跟随全局设置。", true);
-var lblPvHint = PV.text("", true);
+PVA.text("勾上 = 这个版本用自己的值；不勾 = 跟随全局设置。", true);
+var lblPvHint = PVA.text("", true);
 
-PV.finish();
+PVA.finish();
+
+// ---------- 子页二：Mod ----------
+
+var PM = m3layout.create(winform, 232, SUB2_BODY_TOP, 504, { framed = true });
+PM.btn_w = 76;
+
+PM.section("");
+
+var listMods = PM.make({
+	cls = "listview";
+	left = 232;
+	top = PM.y;
+	right = 736;
+	bottom = PM.y + 236;
+});
+
+listMods.fullRow = true;
+
+var mod_cols = {
+	{ "文件名"; 260 };
+	{ "大小"; 80 };
+	{ "状态"; 60 };
+};
+
+m3list.setup(listMods, mod_cols, true);
+m3list.fit(listMods);
+try_thin_scrollbar(listMods);
+
+PM.y = PM.y + 236 + 8;
+
+var mod_tools = PM.tool_row({"启用"; "删除"; "刷新"}, {"打开目录"});
+var lblModHint = PM.text("", true);
+
+PM.finish();
+
+// 两个子页的控件都要进 PV 的清单，切页时才跟着显隐
+for k, c in { PVA } {
+	for n, ctrl in c.controls {
+		table.push(PV.controls, ctrl);
+	}
+}
+for k, c in { PM } {
+	for n, ctrl in c.controls {
+		table.push(PV.controls, ctrl);
+	}
+}
+
+// ---------- 子页切换 ----------
+
+var pv_sub = 1;   // 1 = 设置，2 = Mod
+
+function pv_sub_apply() {
+	var on_cfg = (pv_sub == 1);
+
+	m3layout.batched(winform, function() {
+		for i, c in PVA.controls {
+			c.visible = on_cfg;
+		}
+		for i, c in PM.controls {
+			c.visible = !on_cfg;
+		}
+
+		sub_btn_skin(subCfgBtn, on_cfg);
+		sub_btn_skin(subModBtn, !on_cfg);
+	});
+}
+
+function pv_sub_select(n) {
+	if (pv_sub == n) return;
+
+	pv_sub = n;
+	pv_sub_apply();
+
+	if (n == 2) mods_render();
+}
+
+subCfgBtn.oncommand = function(id, event) {
+	pv_sub_select(1);
+}
+
+subModBtn.oncommand = function(id, event) {
+	pv_sub_select(2);
+}
 
 // ---------- 版本独立设置：数据 ----------
 
 var pv_current = null;     // 页面上正在显示哪个版本
+var pv_versions = {};      // 下拉里各项对应的版本名
 var ver_pending = {};      // 版本名 -> 待保存的覆盖表（点保存才落盘）
 
 function pv_mode_value(i) {
@@ -643,13 +764,15 @@ function pv_stash() {
 	if (pv_current) ver_pending[pv_current] = pv_collect();
 }
 
-// 切版本：先收当前，再按新版本填
+// 切版本：先收当前，再按新版本填（Mod 列表也跟着换）
 function pv_switch_to(name) {
 	if (!name) return;
 	if (name == pv_current) return;
 
 	pv_stash();
 	pv_load(name);
+
+	if (pv_sub == 2) mods_render();
 }
 
 // 重新读一遍版本列表（切路径、增删版本、打开这一页时用）
@@ -659,6 +782,7 @@ function pv_refresh() {
 	if (#names == 0) {
 		pv_current = null;
 		lblPvHint.text = "当前游戏目录下没有版本。";
+		lblModHint.text = "当前游戏目录下没有版本。";
 		return;
 	}
 
@@ -679,7 +803,10 @@ function pv_refresh() {
 
 	if (at > 0) comboOptVer.selIndex = at;
 
+	var changed = (want != pv_current);
 	pv_load(want);
+
+	if (changed and pv_sub == 2) mods_render();
 }
 
 comboOptVer.onSelChange = function() {
@@ -706,7 +833,184 @@ comboPvPri.add("正常");
 comboPvPri.add("较高");
 comboPvPri.add("高");
 
+// ---------- Mod 列表 ----------
+
+var mod_rows = {};        // 与列表顺序一致：scan() 出来的条目
+var mod_selected = null;  // 选中的条目（按 path 记）
+
+// 只有选中"已禁用"的 Mod 时，按钮才叫「启用」；否则叫「禁用」
+function mod_btn_update() {
+	var btn = mod_tools.left[1];
+	if (!btn) return;
+
+	var hit = null;
+	if (mod_selected) {
+		for i, m in mod_rows {
+			if (m.path == mod_selected) {
+				hit = m;
+				break;
+			}
+		}
+	}
+
+	if (hit and !hit.enabled) btn.text = "启用";
+	else btn.text = "禁用";
+}
+
+function mods_render() {
+	listMods.clear();
+	mod_rows = {};
+
+	if (!pv_current) {
+		lblModHint.text = "请先在设置窗口里选择游戏路径。";
+		m3list.renumber(listMods);
+		mod_btn_update();
+		return;
+	}
+
+	var dir = m3mod.dir_of(cfg, pv_current);
+
+	if (!dir or !io.exist(dir)) {
+		lblModHint.text = "这个版本没有 mods 目录：" ++ tostring(dir);
+		m3list.renumber(listMods);
+		mod_btn_update();
+		return;
+	}
+
+	var list = m3mod.scan(dir);
+
+	// 按文件名排序，禁用的排在后面（方便看"现在装了什么"）
+	table.sort(list, function(a, b) {
+		if (a.enabled != b.enabled) return a.enabled;
+		return string.lower(a.name) < string.lower(b.name);
+	});
+
+	var off = 0;
+
+	for i, m in list {
+		var status = "启用";
+		if (!m.enabled) {
+			status = "禁用";
+			off = off + 1;
+		}
+
+		var name = m.name;
+		if (m.folder and #m.folder > 0) name = m.folder ++ "\" ++ name;
+
+		listMods.addItem({ ""; name; m3mod.size_text(m.size); status });
+		table.push(mod_rows, m);
+	}
+
+	m3list.renumber(listMods);
+
+	// 选中项按 path 找回
+	if (mod_selected) {
+		var at = 0;
+		for i, m in mod_rows {
+			if (m.path == mod_selected) {
+				at = i;
+				break;
+			}
+		}
+
+		if (at > 0) listMods.selIndex = at;
+		else mod_selected = null;
+	}
+
+	var total = #mod_rows;
+	if (total == 0) {
+		lblModHint.text = "这个版本还没有安装 Mod。";
+	}
+	else {
+		lblModHint.text = "共 " ++ total ++ " 个 Mod，其中 " ++ off ++ " 个已禁用。禁用即给文件名加 .disabled。";
+	}
+
+	mod_btn_update();
+}
+
+function mod_current() {
+	var i = listMods.selIndex;
+	if (i > 0 and i <= #mod_rows) return mod_rows[i];
+
+	return null;
+}
+
+listMods.onSelChanged = function(sel, item, subItem, nm) {
+	var m = mod_current();
+	if (m) mod_selected = m.path;
+
+	mod_btn_update();
+}
+
+// 启用 / 禁用
+mod_tools.left[1].oncommand = function(id, event) {
+	var m = mod_current();
+	if (!m) {
+		lblModHint.text = "请先选择一个 Mod。";
+		return;
+	}
+
+	var want = !m.enabled;
+	var ok, err = m3mod.set_enabled(m.path, want);
+
+	if (!ok) {
+		lblModHint.text = "改名失败：" ++ tostring(err);
+		return;
+	}
+
+	mod_selected = null;
+	mods_render();
+
+	if (want) lblModHint.text = "已启用：" ++ m.file;
+	else lblModHint.text = "已禁用：" ++ m.file ++ "（文件名加 .disabled，随时可改回来）";
+}
+
+// 删除（回收站）
+mod_tools.left[2].oncommand = function(id, event) {
+	var m = mod_current();
+	if (!m) {
+		lblModHint.text = "请先选择一个 Mod。";
+		return;
+	}
+
+	var frm = winform.loadForm("/dlg/confirm.aardio");
+	frm.lblMsg.text = "确定删除 Mod「" ++ m.file ++ "」吗？" ++ '\r\n\r\n'
+		++ "（文件将被移至回收站，可恢复）";
+
+	if (!frm.doModal(winform)) return;
+
+	if (!fsys.delete(m.path, true)) {
+		lblModHint.text = "删除失败，游戏可能正在运行。";
+		return;
+	}
+
+	mod_selected = null;
+	mods_render();
+
+	lblModHint.text = "已删除：" ++ m.file;
+}
+
+// 刷新
+mod_tools.left[3].oncommand = function(id, event) {
+	mods_render();
+	lblModHint.text = "已刷新。" ++ lblModHint.text;
+}
+
+// 打开 mods 目录
+mod_tools.right[1].oncommand = function(id, event) {
+	if (!pv_current) return;
+
+	var dir = m3mod.dir_of(cfg, pv_current);
+	if (!dir or !io.exist(dir)) {
+		lblModHint.text = "目录不存在：" ++ tostring(dir);
+		return;
+	}
+
+	process.explore(dir);
+}
+
 pv_sync_enabled();
+mod_btn_update();
 
 // ---------- 第六页：关于 ----------
 
@@ -852,9 +1156,10 @@ function show_page(n) {
 		}
 	}
 
-	// 第五页里还有两个子页：上面刚把整页置为可见，
-	// 这里必须再收一次，否则路径与版本两组会同时显示。
+	// 第五页、第六页里都有两个子页：上面刚把整页置为可见，
+	// 这里必须再收一次，否则两组会同时显示。
 	if (n == 5) sub_apply();
+	if (n == 6) pv_sub_apply();
 }
 
 // 页面数据第一次进入时才准备：账户/Java/路径/版本都要读磁盘，
@@ -1066,35 +1371,12 @@ btnAuto.oncommand = function(id, event) {
 
 // 当前版本实际使用的 mods 目录（隔离时在版本目录里）
 function mods_dir() {
-	if (#cfg.game_path == 0) return null;
-
-	if (!cfg.version or #cfg.version == 0) return cfg.game_path ++ "\mods";
-
-	var isolated = m3config.is_isolated(cfg, cfg.game_path, cfg.version);
-	if (isolated) return cfg.game_path ++ "\versions\" ++ cfg.version ++ "\mods";
-
-	return cfg.game_path ++ "\mods";
+	return m3mod.dir_of(cfg, cfg.version);
 }
 
-// 数一遍 .jar（含一层子目录：有的整合包按游戏版本分文件夹）
+// 数一遍 Mod：只数启用的（禁用的不会被加载，不该算进内存估算）
 function count_mods() {
-	var dir = mods_dir();
-	if (!dir or !io.exist(dir)) return 0;
-
-	var n = 0;
-	var files = fsys.list(dir, "*.jar");
-	n = n + #files;
-
-	var _, folders = fsys.list(dir);
-	for i, sub in folders {
-		var subdir = dir ++ "\" ++ sub;
-		if (io.exist(subdir)) {
-			var inner = fsys.list(subdir, "*.jar");
-			if (inner) n = n + #inner;
-		}
-	}
-
-	return n;
+	return m3mod.count_enabled(mods_dir());
 }
 
 // 估算规则：
