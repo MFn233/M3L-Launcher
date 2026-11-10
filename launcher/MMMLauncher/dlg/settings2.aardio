@@ -1091,6 +1091,7 @@ function mods_render_final() {
 
 	// 读元数据：名字 / 版本 / modid（读不到就退回文件名）
 	var meta_fail = 0;
+	var meta_reasons = {};
 
 	for i, m in list {
 		var meta = m3mod.meta_of(m.path);
@@ -1102,7 +1103,15 @@ function mods_render_final() {
 		if (#m.title == 0) m.title = m.name;
 		if (#m.mver == 0) m.mver = "-";
 
-		if (meta.err) meta_fail = meta_fail + 1;
+		if (meta.err) {
+			meta_fail = meta_fail + 1;
+
+			var tag = "解析不出名字";
+			if (string.indexOf(meta.err, "打不开")) tag = "打不开压缩包";
+			elseif (string.indexOf(meta.err, "没有元数据")) tag = "没有元数据条目";
+
+			meta_reasons[tag] = (meta_reasons[tag] or 0) + 1;
+		}
 	}
 
 	// 同一个 modid 出现多次 = 重复安装
@@ -1184,7 +1193,15 @@ function mods_render_final() {
 
 		var tip = "共 " ++ total ++ " 个 Mod，禁用 " ++ off ++ " 个。";
 		if (dups > 0) tip = tip ++ "有 " ++ dups ++ " 个是重复安装（同一个 modid），已标红。";
-		if (meta_fail > 0) tip = tip ++ meta_fail ++ " 个读不到元数据（显示文件名）。";
+		if (meta_fail > 0) {
+			var reasons = "";
+			for k, v in meta_reasons {
+				if (#reasons > 0) reasons = reasons ++ " / ";
+				reasons = reasons ++ k ++ " " ++ v;
+			}
+
+			tip = tip ++ meta_fail ++ " 个读不到元数据（" ++ reasons ++ "）。";
+		}
 		lblModHint.text = tip;
 	}
 

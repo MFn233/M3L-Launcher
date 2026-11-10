@@ -96,52 +96,51 @@ namespace m3mod {
 
 	var meta_cache = {};
 
-	// 元数据可能藏在这些条目里（按优先级排列）
-	var META_ENTRIES = {
+	// 候选条目按「文件名」匹配（压缩包里的条目名带目录，这里只比最后一段）。
+	// 顺序只是优先级，遍历时是一遍扫完的。
+	var META_NAMES = {
 		"fabric.mod.json";
 		"quilt.mod.json";
-		"META-INF/neoforge.mods.toml";
-		"META-INF/mods.toml";
+		"neoforge.mods.toml";
+		"mods.toml";
 		"mcmod.info";
-		"META-INF/MANIFEST.MF";
+		"manifest.mf";
 	};
 
-	// 按名字定位（快）。locate 对个别 jar 不灵，所以只当第一选择。
-	function read_by_locate(zip, names) {
-		var got = {};
-
-		try {
-			for i, n in names {
-				if (!zip.locate(n)) continue;
-
-				var s = zip.readCurrentFile();
-				if (s and #s > 0) got[..string.lower(n)] = s;
-			}
-		}
-		catch(e) {
-		}
-
-		return got;
-	}
-
-	// 兜底：整包遍历一遍，把候选条目都捞出来。
-	function read_by_scan(zip, names) {
+	// 一遍遍历，把候选条目读进内存；6 个都拿齐就停（通常前几个条目就够了）。
+	// 不用 locate()：它第一次没命中之后整个对象就不好用了（踩过）。
+	function read_meta_texts(zip, sample) {
 		var want = {};
-		for i, n in names {
-			want[..string.lower(n)] = true;
+		for i, n in META_NAMES {
+			want[n] = true;
 		}
 
+		var left = #META_NAMES;
 		var got = {};
 
 		try {
 			for pos, dirName, fileName, extractPath, fileInfo in zip.eachFile() {
 				if (!fileName) continue;
 
-				var low = ..string.lower(fileName);
+				if (#sample < 4) table.push(sample, fileName);
+
+				// 手动取最后一段：io.splitpath 只认反斜杠，zip 里可能是正斜杠
+				var base = fileName;
+				var cut = ..string.lastIndexAny(base, "/\\");
+				if (cut) base = ..string.right(base, -(cut + 1));
+
+				var low = ..string.lower(base);
+				if (!want[low]) low = ..string.lower(fileName);
+
 				if (!want[low] or got[low]) continue;
 
 				var s = zip.readCurrentFile();
-				if (s and #s > 0) got[low] = s;
+				if (s and #s > 0) {
+					got[low] = s;
+
+					left = left - 1;
+					if (left <= 0) break;
+				}
 			}
 		}
 		catch(e) {
@@ -181,7 +180,7 @@ namespace m3mod {
 		return out;
 	}
 
-	// 从一堆条目文本里按优先级解析出元数据
+	// 从拿到的条目文本里按优先级解析
 	function pick_meta(texts) {
 		var m = { modid = ""; name = ""; version = ""; loader = "" };
 
@@ -201,7 +200,7 @@ namespace m3mod {
 
 		// Forge 1.13+ / NeoForge
 		if (#m.modid == 0) {
-			s = texts["meta-inf/neoforge.mods.toml"] or texts["meta-inf/mods.toml"];
+			s = texts["neoforge.mods.toml"] or texts["mods.toml"];
 			if (s) {
 				var t = parse_toml(s);
 				m.loader = "Forge";
@@ -235,7 +234,7 @@ namespace m3mod {
 
 		// 兜底：MANIFEST 里的标题与版本
 		if (#m.modid == 0) {
-			s = texts["meta-inf/manifest.mf"];
+			s = texts["manifest.mf"];
 			if (s) {
 				var title = ..string.match(s, "Implementation%-Title:%s*([^\r\n]+)");
 				var ver = ..string.match(s, "Implementation%-Version:%s*([^\r\n]+)");
@@ -275,25 +274,15 @@ namespace m3mod {
 			return bad;
 		}
 
-		// 先按名字定位；一个都没定位到就整包遍历兜底（有的 jar locate 不灵）
-		var texts = read_by_locate(zip, META_ENTRIES);
-
-		var empty = true;
-		for k, v in texts {
-			if (v) {
-				empty = false;
-				break;
-			}
-		}
-
-		if (empty) {
-			texts = read_by_scan(zip, META_ENTRIES);
-		}
+		var sample = {};
+		var texts = read_meta_texts(zip, sample);
 
 		var m = pick_meta(texts);
 
 		if (#m.modid == 0 and #m.name == 0) {
-			m.err = empty ? "没有元数据条目" : "元数据解析不出名字";
+			var hint = "没有元数据条目";
+			if (#sample > 0) hint = hint ++ "（包里是：" ++ ..table.concat(sample, " / ") ++ "）";
+			m.err = hint;
 		}
 
 		zip.close();
