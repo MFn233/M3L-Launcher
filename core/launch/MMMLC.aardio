@@ -127,14 +127,17 @@ namespace MMMLC{
 
 	//版本号比较：只按点分数字比（2.0-beta9 这种尾巴忽略）。
 	function version_newer(a, b) {
+		//for in 后面必须是"表变量"，不能直接写返回表的函数调用（会被当迭代器调用）
 		var x = {};
-		for i, p in string.split(tostring(a or ""), ".") {
+		var ax = string.split(tostring(a or ""), ".");
+		for i, p in ax {
 			var n = tonumber(string.match(p, "^\d+"));
 			table.push(x, n or 0);
 		}
 
 		var y = {};
-		for i, p in string.split(tostring(b or ""), ".") {
+		var ay = string.split(tostring(b or ""), ".");
+		for i, p in ay {
 			var n = tonumber(string.match(p, "^\d+"));
 			table.push(y, n or 0);
 		}
