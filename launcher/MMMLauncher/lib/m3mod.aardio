@@ -102,7 +102,7 @@ namespace m3mod {
 	var meta_cache = {};
 	var cache_file = ..io.fullpath("/mod-meta-cache.json");
 	// 格式版本：解析规则改了就把这个数字 +1，旧缓存自动作废
-	var CACHE_VER = 2;
+	var CACHE_VER = 3;   // 3：改用 string.toml 解析（2 及更早的名字/版本是错的）
 	var cache_loaded = false;
 
 	// 候选条目：key 是内部索引名，name 是压缩包里的条目名。
@@ -444,7 +444,20 @@ namespace m3mod {
 		}
 		table.push(tried, "manifest" ++ (mf ? "+" : "-"));
 
+		// .litemod 里只可能有 litemod.json，把它排最前，省掉几次白跑的 locate
+		var order = {};
+		var is_lite = string.endsWith(string.lower(path), ".litemod");
+
+		if (is_lite) {
+			table.push(order, { key = "litemod.json"; name = "litemod.json" });
+		}
+
 		for i, c in META_CANDIDATES {
+			if (is_lite and c.key == "litemod.json") continue;
+			table.push(order, c);
+		}
+
+		for i, c in order {
 			if (c.key == "manifest.mf") continue;
 
 			var s = read_one(zip, c.name);
