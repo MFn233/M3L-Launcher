@@ -138,12 +138,27 @@ namespace MMMLC{
 			info.java_version = data.javaVersion.majorVersion;
 		}
 
-		//启动参数：优先新格式 arguments，其次旧格式 minecraftArguments
-		if (data.arguments and data.arguments.game) {
-			info.game_args = parse_arguments(data.arguments.game);
+		//启动参数：新格式 arguments.game 与旧格式 minecraftArguments 可能同时存在。
+		//整合包（LiteLoader 那套写法）里，旧的是完整的（账号 + 多个 tweakClass），
+		//新的往往只补了自己的 tweakClass。只取新的就会丢掉 --accessToken 等必需参数。
+		var old_args = {};
+		if (data.minecraftArguments) {
+			old_args = parse_minecraft_arguments(data.minecraftArguments);
 		}
-		elseif (data.minecraftArguments) {
-			info.game_args = parse_minecraft_arguments(data.minecraftArguments);
+
+		var new_args = {};
+		if (data.arguments and data.arguments.game) {
+			new_args = parse_arguments(data.arguments.game);
+		}
+
+		if (#old_args > 0 and #new_args > 0) {
+			info.game_args = merge_game_args(old_args, new_args);
+		}
+		elseif (#old_args > 0) {
+			info.game_args = old_args;
+		}
+		else {
+			info.game_args = new_args;
 		}
 
 		if (data.arguments and data.arguments.jvm) {
@@ -471,6 +486,17 @@ namespace MMMLC{
 			table.push(game_args, string.trim(substitute(a, vars)));
 		}
 
+		//兜底：老版本客户端把这两项当必需参数（缺了直接 MissingRequiredOptionException），
+		//而有些整合包的 JSON 就是没写。值本来也有默认含义，补上即可。
+		if (!has_token(game_args, "--accessToken")) {
+			table.push(game_args, "--accessToken");
+			table.push(game_args, tostring(opts.access_token or "0"));
+		}
+		if (!has_token(game_args, "--userProperties")) {
+			table.push(game_args, "--userProperties");
+			table.push(game_args, "{}");
+		}
+
 		//窗口尺寸。JSON 里已经有的就不再重复加。
 		if (!has_token(game_args, "--width")) {
 			table.push(game_args, "--width");
@@ -604,6 +630,38 @@ namespace MMMLC{
 			if (#part > 0) table.push(args, part);
 		}
 		return args;
+	}
+
+	//老的当基底，新的补漏。
+	//只按「--开关 + 值」成对去重：--tweakClass 可以合法地出现多次，
+	//不能因为 flag 名一样就把后面的值丢掉。
+	function merge_game_args(base, extra) {
+		var out = {};
+		for i, a in base {
+			table.push(out, a);
+		}
+
+		for i, a in extra {
+			var dup = false;
+
+			if (string.startWith(a, "--")) {
+				var next = extra[i + 1];
+
+				for k, b in base {
+					if (b != a) continue;
+
+					// 同一个开关，且值也一样 → 重复
+					if (next === null or base[k + 1] == next) {
+						dup = true;
+						break;
+					}
+				}
+			}
+
+			if (!dup) table.push(out, a);
+		}
+
+		return out;
 	}
 
 	//把 ${name} 换成 vars 里的值。
