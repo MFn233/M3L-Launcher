@@ -1,0 +1,65 @@
+//tools/test-meta.aardio
+
+//用真实的 m3mod 跑一遍 模组样本 目录，每个 Mod 打印：
+//   名字 / 版本 / modid / 加载器 / 耗时 / 试过哪些条目
+//结果写到 模组样本\_result.txt，方便直接查看。
+//
+//用法：在 aardio 里打开本文件按 F5。
+
+import console;
+import fsys;
+import time;
+import m3mod;
+
+var dir = "C:\Users\DELL\Desktop\MMML\模组样本";
+
+console.log("目录: " .. dir);
+
+var out = {};
+table.push(out, "dir=" .. dir);
+
+var count = 0;
+var slow = 0;
+
+fsys.enum(dir, "*.*", function(dirname, filename, fullpath, findData) {
+	if (!filename) return;
+
+	var low = string.lower(filename);
+	if (!string.endsWith(low, ".jar") and !string.endsWith(low, ".litemod")) return;
+
+	var t0 = time.tick();
+	var m = m3mod.meta_of(fullpath);
+	var ms = time.tick() - t0;
+
+	count = count + 1;
+	if (ms >= 50) slow = slow + 1;
+
+	var line = string.format(
+		"%-52s | name=%-26s | ver=%-18s | id=%-20s | loader=%-10s | %4d ms | tried=%s",
+		filename,
+		m.name or "",
+		m.version or "",
+		m.modid or "",
+		m.loader or "",
+		ms,
+		tostring(m.tried));
+
+	table.push(out, line);
+	console.log(line);
+}, false);
+
+table.push(out, "");
+table.push(out, "共 " .. count .. " 个，其中 " .. slow .. " 个耗时 >= 50ms");
+
+var ok_path = "C:\Users\DELL\Desktop\MMML\launcher\MMMLauncher\_meta-test.txt";
+
+try {
+	string.save(ok_path, table.concat(out, "\r\n"));
+	console.log("");
+	console.log("结果已写到: " .. ok_path);
+}
+catch(e) {
+	console.log("写结果文件失败: " .. tostring(e));
+}
+
+console.pause();

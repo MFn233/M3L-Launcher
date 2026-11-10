@@ -241,97 +241,118 @@ namespace m3mod {
 		return out;
 	}
 
-	// 从拿到的条目文本里按优先级解析
+	// 从一个来源里解析出 { modid; name; version }（缺的留空）
+	function meta_from_fabric(s) {
+		var t = safe_json(s);
+		if (type(t) != "table") return null;
+
+		return {
+			modid = ..tostring(t.id or "");
+			name = ..tostring(t.name or "");
+			version = ..tostring(t.version or "");
+			loader = "Fabric";
+		};
+	}
+
+	// Quilt 的信息在 quilt_loader 里，结构完全不同
+	function meta_from_quilt(s) {
+		var t = safe_json(s);
+		if (type(t) != "table") return null;
+
+		var ql = t.quilt_loader;
+		if (type(ql) != "table") return null;
+
+		var name = "";
+		if (type(ql.metadata) == "table") name = ..tostring(ql.metadata.name or "");
+
+		return {
+			modid = ..tostring(ql.id or "");
+			name = name;
+			version = ..tostring(ql.version or "");
+			loader = "Quilt";
+		};
+	}
+
+	function meta_from_toml(s) {
+		var t = parse_toml(s);
+
+		return {
+			modid = ..tostring(t.modid or "");
+			name = ..tostring(t.name or "");
+			version = ..tostring(t.version or "");
+			loader = "Forge";
+		};
+	}
+
+	function meta_from_lite(s) {
+		var t = safe_json(s);
+		if (type(t) != "table") return null;
+
+		return {
+			modid = ..tostring(t.modid or t.name or "");
+			name = ..tostring(t.name or "");
+			version = ..tostring(t.version or t.revision or "");
+			loader = "LiteLoader";
+		};
+	}
+
+	function meta_from_mcmod(s) {
+		var t = safe_json(s);
+		if (type(t) != "table") return null;
+
+		// 有的是数组，有的是 { modList = [...] }
+		var first = null;
+		if (t.modList and t.modList[1]) first = t.modList[1];
+		elseif (t[1]) first = t[1];
+
+		if (type(first) != "table") return null;
+
+		return {
+			modid = ..tostring(first.modid or "");
+			name = ..tostring(first.name or "");
+			version = ..tostring(first.version or "");
+			loader = "Forge";
+		};
+	}
+
+	function meta_from_manifest(s) {
+		if (type(s) != "string") return null;
+
+		var title = ..string.match(s, "Implementation%-Title:%s*([^\r\n]+)");
+		var ver = ..string.match(s, "Implementation%-Version:%s*([^\r\n]+)");
+		var vendor = ..string.match(s, "Implementation%-Vendor%-Id:%s*([^\r\n]+)");
+
+		return {
+			modid = vendor ? ..string.trim(vendor) : "";
+			name = title ? ..string.trim(title) : "";
+			version = ver ? ..string.trim(ver) : "";
+			loader = "";
+		};
+	}
+
+	// 逐字段填缺：先到的来源优先，后面只补空
+	function fill_meta(m, t) {
+		if (type(t) != "table") return;
+
+		if (#m.modid == 0 and #(t.modid or "") > 0) m.modid = t.modid;
+		if (#m.name == 0 and #(t.name or "") > 0) m.name = t.name;
+		if (#m.version == 0 and #(t.version or "") > 0) m.version = t.version;
+		if (#m.loader == 0 and #(t.loader or "") > 0) m.loader = t.loader;
+	}
+
+	// 从拿到的条目文本里解析（顺序就是优先级，缺的由后面的补）
 	function pick_meta(texts) {
 		var m = { modid = ""; name = ""; version = ""; loader = "" };
 
 		if (!texts) return m;
 
-		// Fabric / Quilt
-		var s = texts["fabric.mod.json"] or texts["quilt.mod.json"];
-		if (s) {
-			var t = safe_json(s);
-			if (type(t) == "table") {
-				m.loader = "Fabric";
-				m.modid = ..tostring(t.id or "");
-				m.name = ..tostring(t.name or "");
-				m.version = ..tostring(t.version or "");
-			}
-		}
-
-		// Forge 1.13+ / NeoForge
-		if (#m.modid == 0) {
-			s = texts["neoforge.mods.toml"] or texts["mods.toml"];
-			if (s) {
-				var t = parse_toml(s);
-				m.loader = "Forge";
-				m.modid = ..tostring(t.modid or "");
-				m.name = ..tostring(t.name or "");
-				m.version = ..tostring(t.version or "");
-			}
-		}
-
-		// LiteLoader：litemod.json 里是 name / version / mcversion
-		if (#m.modid == 0) {
-			s = texts["litemod.json"];
-			if (s) {
-				var t = safe_json(s);
-				if (type(t) == "table") {
-					m.loader = "LiteLoader";
-					m.name = ..tostring(t.name or t.modid or "");
-					m.version = ..tostring(t.version or t.revision or "");
-					m.modid = ..tostring(t.modid or t.name or "");
-				}
-			}
-		}
-
-		// 1.12.2 及更早
-		if (#m.modid == 0) {
-			s = texts["mcmod.info"];
-			if (s) {
-				var t = safe_json(s);
-
-				// 有的是数组，有的是 { modList = {...} }
-				var first = null;
-				if (type(t) == "table") {
-					if (t.modList and t.modList[1]) first = t.modList[1];
-					elseif (t[1]) first = t[1];
-				}
-
-				if (type(first) == "table") {
-					m.loader = "Forge";
-					m.modid = ..tostring(first.modid or "");
-					m.name = ..tostring(first.name or "");
-					m.version = ..tostring(first.version or "");
-				}
-			}
-		}
-
-		// forge 的 mods.toml 偶尔没有 version，用 MANIFEST 的版本兜一下
-		if (#m.modid > 0 and #m.version == 0) {
-			var mf = texts["manifest.mf"];
-			if (mf) {
-				var mv = ..string.match(mf, "Implementation%-Version:%s*([^\r\n]+)");
-				if (mv) m.version = ..string.trim(mv);
-			}
-		}
-
-		// 兜底：MANIFEST 里的标题与版本
-		if (#m.modid == 0) {
-			s = texts["manifest.mf"];
-			if (s) {
-				var title = ..string.match(s, "Implementation%-Title:%s*([^\r\n]+)");
-				var ver = ..string.match(s, "Implementation%-Version:%s*([^\r\n]+)");
-				var id = ..string.match(s, "Implementation%-Vendor%-Id:%s*([^\r\n]+)");
-
-				if (title) m.name = ..string.trim(title);
-				if (ver) m.version = ..string.trim(ver);
-				if (id) {
-					m.modid = ..string.trim(id);
-					m.loader = "Forge";
-				}
-			}
-		}
+		if (texts["fabric.mod.json"]) fill_meta(m, meta_from_fabric(texts["fabric.mod.json"]));
+		if (texts["quilt.mod.json"]) fill_meta(m, meta_from_quilt(texts["quilt.mod.json"]));
+		if (texts["neoforge.mods.toml"]) fill_meta(m, meta_from_toml(texts["neoforge.mods.toml"]));
+		if (texts["mods.toml"]) fill_meta(m, meta_from_toml(texts["mods.toml"]));
+		if (texts["litemod.json"]) fill_meta(m, meta_from_lite(texts["litemod.json"]));
+		if (texts["mcmod.info"]) fill_meta(m, meta_from_mcmod(texts["mcmod.info"]));
+		if (texts["manifest.mf"]) fill_meta(m, meta_from_manifest(texts["manifest.mf"]));
 
 		return m;
 	}
@@ -359,13 +380,22 @@ namespace m3mod {
 			return bad;
 		}
 
-		// 按优先级逐个定位，**命中就停**：
-		// 一个 jar 通常只开 1~2 次，不会读后面那些用不上的条目。
+		// MANIFEST 每个包都有，先读它当补缺来源；再按优先级读加载器专属元数据，
+		// 名字与版本都齐了才停 —— 但不因为"命中一个"就停（litemod.json 可能没有 version）。
 		var texts = {};
 		var hit = 0;
 		var tried = {};
 
+		var mf = read_one(zip, "META-INF/MANIFEST.MF");
+		if (mf) {
+			texts["manifest.mf"] = mf;
+			hit = hit + 1;
+		}
+		table.push(tried, "manifest" ++ (mf ? "+" : "-"));
+
 		for i, c in META_CANDIDATES {
+			if (c.key == "manifest.mf") continue;
+
 			var s = read_one(zip, c.name);
 
 			var mark = "-";
@@ -374,11 +404,13 @@ namespace m3mod {
 				texts[c.key] = s;
 				hit = hit + 1;
 			}
-
 			table.push(tried, c.key ++ mark);
 
-			// 命中就停（MANIFEST 排在最后，命中它本来就是兜底）
-			if (s and c.key != "manifest.mf") break;
+			// 名字和版本都拿到了就够用了
+			if (s) {
+				var probe = pick_meta(texts);
+				if (#probe.modid > 0 and #probe.version > 0) break;
+			}
 		}
 
 		var m = pick_meta(texts);
