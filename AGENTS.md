@@ -84,6 +84,8 @@
 
 ### 表操作
 
+- `table.sort` 的比较函数**不是** `function(a, b)`：标准库写法是 `lambda(b) owner.x < b.x`，
+  第一个元素经 `owner` 取、函数只有一个参数。要排序就用"造字符串键 + `table.sort(keys)`"。
 - 不用 `table.remove` 删数组元素（会留下 null 空洞），改成"重建数组"：
 
 ```aardio
