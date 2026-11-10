@@ -6,6 +6,7 @@
 import win.ui;
 import m3theme;
 import m3pack;
+import m3config;
 import process;
 
 /*DSG{{*/
@@ -15,6 +16,7 @@ editLog={cls="richedit";left=16;top=16;right=624;bottom=364;bgcolor=0xFFFFFF;rea
 btnClear={cls="plus";text="清空";left=16;top=374;right=88;bottom=404;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
 btnPack={cls="plus";text="打包日志";left=96;top=374;right=216;bottom=404;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
 btnClose={cls="plus";text="关闭";left=536;top=374;right=624;bottom=404;anchors={right=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=3};
+chkAuto={cls="checkbox";text="自动滚动";left=232;top=378;right=340;bottom=400;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
 )
 /*}}*/
 
@@ -28,6 +30,12 @@ m3theme.button(winform.btnClear);
 m3theme.button(winform.btnPack);
 m3theme.button(winform.btnClose);
 
+winform.chkAuto.bgcolor = m3theme.C_BG;
+
+// 选择记在 config.json 里，下次打开还是上次的样子
+var cfg = m3config.read();
+winform.chkAuto.checked = (cfg.log_autoscroll !== false);
+
 // 给 m3log 会话用的两个接口
 winform.append = function(text, is_error) {
 	winform.editLog.readonly = false;
@@ -38,6 +46,11 @@ winform.append = function(text, is_error) {
 		winform.editLog.appendText(text ++ '\r\n');
 	}
 	winform.editLog.readonly = true;
+
+	// 自动滚到底；关掉后视图停在当前位置，方便往回翻
+	if (winform.chkAuto.checked) {
+		::SendMessageInt(winform.editLog.hwnd, 0x0115 /*_WM_VSCROLL*/, 7 /*_SB_BOTTOM*/, 0);
+	}
 }
 
 winform.clear_all = function() {
@@ -55,6 +68,11 @@ winform.bind = function(sess, owner_inst) {
 	inst = owner_inst;
 
 	if (sess) sess.attach(winform);
+}
+
+winform.chkAuto.oncommand = function(id, event) {
+	cfg.log_autoscroll = winform.chkAuto.checked;
+	m3config.save_keys(cfg, {"log_autoscroll"});
 }
 
 winform.btnClear.oncommand = function(id, event) {

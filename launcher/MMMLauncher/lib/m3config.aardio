@@ -114,6 +114,7 @@ namespace m3config{
 			height = 480;
 			window_mode = "manual";
 			log = true;
+	log_autoscroll = true;   // 日志窗口是否自动滚到底
 			hide_after_launch = false;
 			status_bar = true;
 			debug = false;
@@ -223,6 +224,7 @@ namespace m3config{
 			if (data.debug !== null) cfg.debug = data.debug;
 			if (data.allow_multi !== null) cfg.allow_multi = data.allow_multi;
 			if (data.shot_tip !== null) cfg.shot_tip = data.shot_tip;
+		if (data.log_autoscroll !== null) cfg.log_autoscroll = data.log_autoscroll;
 			if (data.priority !== null) cfg.priority = data.priority;
 			if (data.shared) cfg.shared = data.shared;
 		if (data.fav_paths) cfg.fav_paths = data.fav_paths;
