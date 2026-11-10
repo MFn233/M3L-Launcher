@@ -189,10 +189,10 @@ namespace m3mod {
 	}
 
 	// 计量：open / locate / read / parse 四段各自的总耗时（毫秒），只做整数累加
-	var st = { open = 0; scan = 0; read = 0; parse = 0; hit = 0; miss = 0 };
+	var st = { open = 0; scan = 0; read = 0; parse = 0; hit = 0; miss = 0; fallback = 0 };
 
 	function stats_reset() {
-		st = { open = 0; scan = 0; read = 0; parse = 0; hit = 0; miss = 0 };
+		st = { open = 0; scan = 0; read = 0; parse = 0; hit = 0; miss = 0; fallback = 0 };
 	}
 
 	function stats_get() {
@@ -519,6 +519,8 @@ namespace m3mod {
 		// 少数非标准包（加密、分卷之类）退回 zlib.unzip 遍历。
 		// 注意不能用 #texts 判断：texts 是**字符串键**的表，# 永远是 0。
 		if (zerr) {
+			st.fallback = st.fallback + 1;
+
 			var ts2 = ..time.tick();
 			texts, sample = collect_via_unzip(path, names);
 			st.open = st.open + (..time.tick() - ts2);
