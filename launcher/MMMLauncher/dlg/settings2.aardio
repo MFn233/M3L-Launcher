@@ -1873,14 +1873,26 @@ select_page(start_page);
 
 diag("page_selected");
 
-// 全部搭完再解冻，一次性画出来
-m3layout.resume(winform);
+// 先不解冻：窗口显示后系统会按实际 DPI 缩放（125% 时 766x603 -> 956x745），
+// 等那次 WM_SIZE 过去再解冻，第一帧就是最终尺寸，看不到跳变。
+var resumed = false;
 
-diag("resumed");
+function resume_after_scale() {
+	if (resumed) return;
+	resumed = true;
 
-// 显示之后如果还有尺寸变化，这里会记下来
+	m3layout.resume(winform);
+	diag("resumed_after_scale");
+}
+
 winform.onSize = function(width, height, wParam) {
 	diag("onsize " ++ tostring(width) ++ "x" ++ tostring(height));
+	resume_after_scale();
 }
+
+// 兜底：100% 缩放下可能不会有尺寸变化，60ms 后直接解冻，别让窗口一直冻着
+winform.setTimeout(function() {
+	resume_after_scale();
+}, 60);
 
 return winform;
