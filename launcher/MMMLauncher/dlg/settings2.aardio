@@ -1890,9 +1890,9 @@ winform.onSize = function(width, height, wParam) {
 	resume_after_scale();
 }
 
-// 兜底：100% 缩放下可能不会有尺寸变化，60ms 后直接解冻，别让窗口一直冻着
+// 兜底：100% 缩放下可能不会有尺寸变化，30ms 后直接解冻，别让窗口一直冻着
 winform.setTimeout(function() {
 	resume_after_scale();
-}, 60);
+}, 30);
 
 return winform;
