@@ -879,11 +879,28 @@ function mods_render() {
 
 	var list = m3mod.scan(dir);
 
-	// 按文件名排序，禁用的排在后面（方便看"现在装了什么"）
-	table.sort(list, function(a, b) {
-		if (a.enabled != b.enabled) return a.enabled;
-		return string.lower(a.name) < string.lower(b.name);
-	});
+	// 排序：启用在前、禁用在后的文件名升序。
+	// 不用 table.sort 的比较函数——aardio 里那是 lambda(b) owner.x < b.x 的写法，
+	// 第一个元素叫 owner、只有一个参数 b；写成 function(a,b) 会拿到 b = null。
+	// 这里改成"造字符串键再排序"，纯字符串比较，最稳。
+	var keyed = {};
+	var keys = {};
+
+	for i, m in list {
+		var prefix = "1";          // 1 = 禁用，排在后面
+		if (m.enabled) prefix = "0";
+
+		var k = prefix ++ string.lower(m.name) ++ "\t" ++ tostring(i);
+		keyed[k] = m;
+		table.push(keys, k);
+	}
+
+	table.sort(keys);
+
+	list = {};
+	for i, k in keys {
+		table.push(list, keyed[k]);
+	}
 
 	var off = 0;
 
