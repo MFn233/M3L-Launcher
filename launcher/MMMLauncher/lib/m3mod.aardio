@@ -50,10 +50,14 @@ namespace m3mod {
 				var enabled = false;
 				var base = filename;
 
+				// .jar 与 .litemod 都是 Mod；禁用状态的判断靠 .disabled 后缀
 				if (string.endsWith(low, ".jar.disabled")) {
 					base = string.left(filename, #filename - 9);
 				}
-				elseif (string.endsWith(low, ".jar")) {
+				elseif (string.endsWith(low, ".litemod.disabled")) {
+					base = string.left(filename, #filename - 9);
+				}
+				elseif (string.endsWith(low, ".jar") or string.endsWith(low, ".litemod")) {
 					enabled = true;
 				}
 				else {
@@ -96,57 +100,80 @@ namespace m3mod {
 
 	var meta_cache = {};
 
-	// 候选条目按「文件名」匹配（压缩包里的条目名带目录，这里只比最后一段）。
-	// 顺序只是优先级，遍历时是一遍扫完的。
-	var META_NAMES = {
-		"fabric.mod.json";
-		"quilt.mod.json";
-		"neoforge.mods.toml";
-		"mods.toml";
-		"mcmod.info";
-		"manifest.mf";
+	// 候选条目：key 是内部索引名，name 是压缩包里的条目名。
+	// 顺序 = 优先级：Fabric/Quilt 先看，其次 Forge 新版、LiteLoader、老版，最后 MANIFEST。
+	var META_CANDIDATES = {
+		{ key = "fabric.mod.json"; name = "fabric.mod.json" };
+		{ key = "quilt.mod.json"; name = "quilt.mod.json" };
+		{ key = "neoforge.mods.toml"; name = "META-INF/neoforge.mods.toml" };
+		{ key = "mods.toml"; name = "META-INF/mods.toml" };
+		{ key = "litemod.json"; name = "litemod.json" };
+		{ key = "mcmod.info"; name = "mcmod.info" };
+		{ key = "manifest.mf"; name = "META-INF/MANIFEST.MF" };
 	};
 
-	// 一遍遍历，把候选条目读进内存；6 个都拿齐就停（通常前几个条目就够了）。
-	// 不用 locate()：它第一次没命中之后整个对象就不好用了（踩过）。
-	function read_meta_texts(zip, sample) {
-		var want = {};
-		for i, n in META_NAMES {
-			want[n] = true;
+	// 按名字跳读一个条目。zip 里用正斜杠，但有的实现按反斜杠比较，两种都试。
+	// 这是"随机读取"：不遍历整个压缩包，一个 jar 只读几条。
+	function read_one(zip, name) {
+		var variants = { name; ..string.replace(name, "/", "\\") };
+
+		for i, v in variants {
+			var ok = false;
+
+			try {
+				ok = zip.locate(v);
+			}
+			catch(e) {
+				ok = false;
+			}
+
+			if (!ok) continue;
+
+			var s = null;
+			try {
+				s = zip.readCurrentFile();
+			}
+			catch(e) {
+				s = null;
+			}
+
+			if (s and #s > 0) return s;
 		}
 
-		var left = #META_NAMES;
-		var got = {};
+		return null;
+	}
+
+	// 兜底：随机读取一个都没命中时才遍历（很慢，只当最后手段）。
+	function read_by_scan(zip, texts, errout) {
+		var by_base = {};
+		for i, c in META_CANDIDATES {
+			var base = c.name;
+			var cut = ..string.lastIndexAny(base, "/\\");
+			if (cut) base = ..string.right(base, -(cut + 1));
+
+			by_base[..string.lower(base)] = c.key;
+		}
 
 		try {
 			for pos, dirName, fileName, extractPath, fileInfo in zip.eachFile() {
 				if (!fileName) continue;
 
-				if (#sample < 4) table.push(sample, fileName);
-
-				// 手动取最后一段：io.splitpath 只认反斜杠，zip 里可能是正斜杠
 				var base = fileName;
 				var cut = ..string.lastIndexAny(base, "/\\");
 				if (cut) base = ..string.right(base, -(cut + 1));
 
-				var low = ..string.lower(base);
-				if (!want[low]) low = ..string.lower(fileName);
-
-				if (!want[low] or got[low]) continue;
+				var key = by_base[..string.lower(base)];
+				if (!key or texts[key]) continue;
 
 				var s = zip.readCurrentFile();
-				if (s and #s > 0) {
-					got[low] = s;
-
-					left = left - 1;
-					if (left <= 0) break;
-				}
+				if (s and #s > 0) texts[key] = s;
 			}
 		}
 		catch(e) {
+			if (errout) errout[1] = ..tostring(e);
 		}
 
-		return got;
+		return texts;
 	}
 
 	// 有的整合包里的 mcmod.info 不是合法 JSON（带注释、少逗号），
@@ -207,6 +234,20 @@ namespace m3mod {
 				m.modid = ..tostring(t.modid or "");
 				m.name = ..tostring(t.name or "");
 				m.version = ..tostring(t.version or "");
+			}
+		}
+
+		// LiteLoader：litemod.json 里是 name / version / mcversion
+		if (#m.modid == 0) {
+			s = texts["litemod.json"];
+			if (s) {
+				var t = safe_json(s);
+				if (type(t) == "table") {
+					m.loader = "LiteLoader";
+					m.name = ..tostring(t.name or t.modid or "");
+					m.version = ..tostring(t.version or t.revision or "");
+					m.modid = ..tostring(t.modid or t.name or "");
+				}
 			}
 		}
 
@@ -274,15 +315,31 @@ namespace m3mod {
 			return bad;
 		}
 
-		var sample = {};
-		var texts = read_meta_texts(zip, sample);
+		// 随机读取：一个 jar 只读几条，不遍历
+		var texts = {};
+		var hit = 0;
+
+		for i, c in META_CANDIDATES {
+			var s = read_one(zip, c.name);
+			if (s) {
+				texts[c.key] = s;
+				hit = hit + 1;
+			}
+		}
+
+		// 一条都没命中才遍历兜底（慢，正常情况走不到）
+		var scan_err = { null };
+
+		if (hit == 0) {
+			texts = read_by_scan(zip, texts, scan_err);
+		}
 
 		var m = pick_meta(texts);
 
 		if (#m.modid == 0 and #m.name == 0) {
-			var hint = "没有元数据条目";
-			if (#sample > 0) hint = hint ++ "（包里是：" ++ ..table.concat(sample, " / ") ++ "）";
-			m.err = hint;
+			if (scan_err[1]) m.err = "遍历失败：" ++ scan_err[1];
+			elseif (hit == 0) m.err = "没有元数据条目";
+			else m.err = "元数据解析不出名字";
 		}
 
 		zip.close();
