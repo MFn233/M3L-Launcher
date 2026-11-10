@@ -970,6 +970,10 @@ function mod_scan_cancel() {
 function mod_fill_row(idx, meta) {
 	if (!mod_rows[idx]) return;
 
+	// 诊断信息挂到行上（读不到元数据时落盘用）
+	m.err = meta.err or "";
+	m.tried = meta.tried or "";
+
 	// 失败原因计数（底部提示用）
 	if (meta.err) {
 		var tag = "解析不出名字";
@@ -1219,6 +1223,36 @@ function mods_render_final() {
 	}
 
 	mod_btn_update();
+
+	// 有读不到的就把细节写到 exe 旁边的 mod-diag.txt（排查用，能自动清理）
+	if (#mod_meta_reasons > 0) mod_dump_diag();
+}
+
+// 把"读不到元数据"的细节写到 mod-diag.txt：文件名 / 原因 / 试过哪些条目
+function mod_dump_diag() {
+	var lines = {};
+
+	table.push(lines, "rows=" ++ #mod_rows);
+	table.push(lines, "--- 读不到元数据的行（最多 15 条） ---");
+
+	var n = 0;
+
+	for i, m in mod_rows {
+		if (#m.err == 0) continue;
+
+		n = n + 1;
+		if (n > 15) continue;
+
+		table.push(lines, m.file ++ "  | err=" ++ m.err ++ " | tried=" ++ tostring(m.tried));
+	}
+
+	table.push(lines, "--- 共 " ++ n ++ " 条 ---");
+
+	try {
+		string.save(io.fullpath("/mod-diag.txt"), table.concat(lines, "\r\n"));
+	}
+	catch(e) {
+	}
 }
 
 // 重复安装的行标红。

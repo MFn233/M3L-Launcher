@@ -142,7 +142,12 @@ namespace m3mod {
 	function cache_peek(path) {
 		if (!path) return null;
 
-		return meta_cache[..string.lower(path)];
+		var v = meta_cache[..string.lower(path)];
+
+		// 失败的结果不能"卡"在缓存里：返回 null 让调用方重新读一次
+		if (v and v.err) return null;
+
+		return v;
 	}
 
 	// 写一条缓存（UI 线程解析完就存，不等最后统一存）
@@ -349,21 +354,27 @@ namespace m3mod {
 		// 一个 jar 通常只开 1~2 次，不会读后面那些用不上的条目。
 		var texts = {};
 		var hit = 0;
+		var tried = {};
 
 		for i, c in META_CANDIDATES {
 			var s = read_one(zip, c.name);
 
+			var mark = "-";
 			if (s) {
+				mark = "+";
 				texts[c.key] = s;
 				hit = hit + 1;
-
-				// Fabric/Forge 新版的元数据是权威的，拿到就能停；
-				// MANIFEST 是最后兜底，拿到也别停（可能有更权威的排在后面？没有，它排最后）
-				if (c.key != "manifest.mf") break;
 			}
+
+			table.push(tried, c.key ++ mark);
+
+			// 命中就停（MANIFEST 排在最后，命中它本来就是兜底）
+			if (s and c.key != "manifest.mf") break;
 		}
 
 		var m = pick_meta(texts);
+
+		m.tried = table.concat(tried, ",");
 
 		if (#m.modid == 0 and #m.name == 0) {
 			if (hit == 0) m.err = "没有元数据条目";
