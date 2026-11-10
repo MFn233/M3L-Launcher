@@ -11,6 +11,7 @@ namespace m3mod {
 	import string;
 	import json;
 	import zlib.unzip;
+import m3toml;
 	import table;     // 命名空间里访问 table.push 必须先 import，否则报 _get table
 	import m3config;
 
@@ -232,18 +233,53 @@ namespace m3mod {
 		return t;
 	}
 
-	// mods.toml / neoforge.mods.toml：取第一组 modId / displayName / version
+	// TOML → table。优先用标准扩展库 string.toml（装了就用它），
+	// 没装就退回自带的 m3toml（子集实现，够读 mods.toml）。
+	var toml_lib_ok = null;
+
+	function toml_parse(text) {
+		if (toml_lib_ok == null) {
+			toml_lib_ok = false;
+
+			try {
+				import string.toml;
+				toml_lib_ok = true;
+			}
+			catch(e) {
+				toml_lib_ok = false;
+			}
+		}
+
+		if (toml_lib_ok) {
+			var t = null;
+
+			try {
+				t = string.toml.parse(text);
+			}
+			catch(e) {
+				t = null;
+			}
+
+			if (type(t) == "table") return t;
+		}
+
+		return m3toml.parse(text);
+	}
+
+	// mods.toml / neoforge.mods.toml：信息在第一组 [[mods]] 里
 	function parse_toml(text) {
+		var t = toml_parse(text);
 		var out = { modid = ""; name = ""; version = "" };
 
-		for line in ..string.gmatch(text, '[^\r\n]+') {
-			var k, v = ..string.match(..string.trim(line), '^(%w+)%s*=%s*"([^"]*)"');
+		if (type(t) != "table") return out;
 
-			if (!k) continue;
-			if (k == "modId" and #out.modid == 0) out.modid = v;
-			elseif (k == "displayName" and #out.name == 0) out.name = v;
-			elseif (k == "version" and #out.version == 0) out.version = v;
-		}
+		// [[mods]] 是数组；没有就退回根表
+		var mod = t;
+		if (type(t.mods) == "table" and type(t.mods[1]) == "table") mod = t.mods[1];
+
+		out.modid = ..tostring(mod.modId or mod.modid or "");
+		out.name = ..tostring(mod.displayName or mod.displayname or "");
+		out.version = ..tostring(mod.version or "");
 
 		return out;
 	}
