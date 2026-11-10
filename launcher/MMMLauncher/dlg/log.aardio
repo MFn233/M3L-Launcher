@@ -215,7 +215,7 @@ function render_all() {
 
 	winform.editLog.readonly = false;
 
-	::SendMessageInt(winform.editLog.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
+	winform.editLog.setRedraw(false);
 
 	//清两遍：一次 text 置空，一次选中全部删除。richedit 在某些状态下只吃其中一种。
 	winform.editLog.text = "";
@@ -231,10 +231,10 @@ function render_all() {
 		shown = shown + 1;
 	}
 
-	::SendMessageInt(winform.editLog.hwnd, 0x000B, 1, 0);
+	winform.editLog.setRedraw(true);
 
 	//打开重绘后强制刷一次，否则内容多的时候会残留旧画面
-	::InvalidateRect(winform.editLog.hwnd, null, true);
+	winform.editLog.redraw();
 
 	winform.editLog.readonly = true;
 
