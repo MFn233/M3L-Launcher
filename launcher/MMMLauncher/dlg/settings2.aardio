@@ -127,12 +127,20 @@ P2.section("窗口大小设置");
 var comboMode, btnDefault = P2.row("窗口模式", { cls = "combobox"; mode = "dropdownlist" }, "默认大小");
 var editW = P2.row("宽度", { cls = "edit"; text = "854" });
 var editH = P2.row("高度", { cls = "edit"; text = "480" });
-P2.text("手动设置时才需要填宽度与高度；全屏与「与启动器一致」会忽略这两个值。");
 
 P2.section("分配内存");
 var editMem, btnAuto = P2.row("内存", { cls = "edit"; text = "4096"; num = 1 }, "自动配置");
 
-// 滑条：512 MB ~ 32 GB，吸附到 128 MB 一档（直接用数值不好拖准）
+// 滑条上限取物理内存（按 256 取整），下限 1 GB、上限 32 GB：
+// 允许分配超过物理内存没有意义，只会让系统疯狂换页。
+var mem_status = sys.mem.getStatus();
+var mem_total_mb = math.floor(mem_status.totalPhys / 1048576);
+
+var MEM_MAX = math.floor(mem_total_mb / 256) * 256;
+if (MEM_MAX < 1024) MEM_MAX = 1024;
+if (MEM_MAX > 32768) MEM_MAX = 32768;
+
+// 吸附到 128 MB 一档（直接用数值不好拖准）
 var sliderMem = P2.make({
 	cls = "plus";
 	left = P2.left;
@@ -142,13 +150,12 @@ var sliderMem = P2.make({
 });
 
 m3theme.slider(sliderMem);
-sliderMem.setTrackbarRange(512, 32768);
+sliderMem.setTrackbarRange(512, MEM_MAX);
 
 P2.y = P2.y + 22 + 4;
 
-var lblMemRange = P2.text("512 MB ～ 32 GB　（拖动滑条，或直接改上面的数字）", true);
-
-P2.text("单位 MB。建议取物理内存的 1/4，并按已装 Mod 数量与当前可用内存调整。");
+var lblMemRange = P2.text("512 MB ～ " ++ string.format("%.1f GB", MEM_MAX / 1024) ++ "　（拖动滑条，或直接改上面的数字）", true);
+var lblMemStats = P2.text("", true);
 
 P2.section("进程优先级");
 var comboPri = P2.row("优先级", { cls = "combobox"; mode = "dropdownlist" });
@@ -185,7 +192,7 @@ P3.y = P3.y + 150 + 8;
 P3.section("编辑");
 var editName = P3.row("用户名", { cls = "edit" });
 var editUuid = P3.row("UUID", { cls = "edit" });
-P3.text("UUID 留空 = 按用户名自动生成；填写时必须是 32 位十六进制（可带横线）。", true);
+P3.text("UUID 留空则按用户名自动生成；必须填写 32 位十六进制的 UUID （可带横线）。", true);
 var lblAccHint = P3.text("", true);
 var acc_btns = P3.buttons({"添加账号"; "删除"; "应用修改"; "设为当前"});
 
@@ -557,7 +564,7 @@ editPvJvm.bgcolor = m3theme.C_FIELD;
 
 PVA.y = PVA.y + 56 + 8;
 
-PVA.text("勾上 = 这个版本用自己的值；不勾 = 跟随全局设置。", true);
+PVA.text("勾选的设置项将覆盖全局设置。", true);
 var lblPvHint = PVA.text("", true);
 
 PVA.finish();
@@ -871,7 +878,7 @@ function mods_render() {
 	var dir = m3mod.dir_of(cfg, pv_current);
 
 	if (!dir or !io.exist(dir)) {
-		lblModHint.text = "这个版本没有 mods 目录：" ++ tostring(dir);
+		lblModHint.text = "此版本没有 mods 文件夹：" ++ tostring(dir);
 		m3list.renumber(listMods);
 		mod_btn_update();
 		return;
@@ -936,10 +943,10 @@ function mods_render() {
 
 	var total = #mod_rows;
 	if (total == 0) {
-		lblModHint.text = "这个版本还没有安装 Mod。";
+		lblModHint.text = "此版本未安装 Mod。";
 	}
 	else {
-		lblModHint.text = "共 " ++ total ++ " 个 Mod，其中 " ++ off ++ " 个已禁用。禁用即给文件名加 .disabled。";
+		lblModHint.text = "共 " ++ total ++ " 个 Mod，禁用 " ++ off ++ " 个。";
 	}
 
 	mod_btn_update();
@@ -979,7 +986,7 @@ mod_tools.left[1].oncommand = function(id, event) {
 	mods_render();
 
 	if (want) lblModHint.text = "已启用：" ++ m.file;
-	else lblModHint.text = "已禁用：" ++ m.file ++ "（文件名加 .disabled，随时可改回来）";
+	else lblModHint.text = "已禁用：" ++ m.file;
 }
 
 // 删除（回收站）
@@ -1287,7 +1294,7 @@ function collect_draft() {
 
 	var mb = tonumber(string.trim(editMem.text)) or c.memory;
 	if (mb < 512) mb = 512;
-	if (mb > 32768) mb = 32768;
+	if (mb > MEM_MAX) mb = MEM_MAX;
 
 	var w = tonumber(string.trim(editW.text)) or c.width;
 	var h = tonumber(string.trim(editH.text)) or c.height;
@@ -1332,7 +1339,9 @@ editMem.onChange = function() {
 	if (!v) return;
 
 	if (v < 512) v = 512;
-	if (v > 32768) v = 32768;
+	if (v > MEM_MAX) v = MEM_MAX;
+
+	mem_refresh_stats();
 }
 
 // 滑条吸附到 128 MB 一档；用户拖动时同步到数值框
@@ -1352,6 +1361,7 @@ sliderMem.onPosChanged = function(pos, triggeredByUser) {
 
 	if (triggeredByUser) {
 		editMem.text = tostring(v);
+		mem_refresh_stats();
 		mem_slider_debounce();
 	}
 }
@@ -1374,6 +1384,7 @@ btnAuto.oncommand = function(id, event) {
 	editMem.text = tostring(r.memory);
 	sliderMem.progressPos = r.memory;
 
+	mem_refresh_stats();
 	mark_dirty();
 
 	var why = "按内存 1/4 + " ++ r.mods ++ " 个 Mod 估算：" ++ r.memory ++ " MB"
@@ -1434,16 +1445,39 @@ function memory_suggest() {
 	};
 }
 
+// 底下的百分比说明：已用 / 游戏占用 / 剩余，都按物理内存总量算
+function mem_stats_text() {
+	var st = sys.mem.getStatus();
+
+	var total = math.floor(st.totalPhys / 1048576);
+	var avail = math.floor(st.availPhys / 1048576);
+	if (total <= 0) return "";
+
+	var v = tonumber(string.trim(editMem.text)) or cfg.memory;
+
+	var used_pct = (total - avail) / total * 100;
+	var game_pct = v / total * 100;
+	var left_pct = (avail - v) / total * 100;
+
+	return string.format("已用 %.0f%%　游戏占用 %.0f%%　剩余 %.0f%%", used_pct, game_pct, left_pct);
+}
+
+function mem_refresh_stats() {
+	if (lblMemStats) lblMemStats.text = mem_stats_text();
+}
+
 // 数值写回滑条（不触发"用户拖动"那条路径）
 function mem_to_slider() {
 	var v = tonumber(string.trim(editMem.text));
 	if (!v) return;
 
 	if (v < 512) v = 512;
-	if (v > 32768) v = 32768;
+	if (v > MEM_MAX) v = MEM_MAX;
 
 	editMem.text = tostring(v);
 	sliderMem.progressPos = v;
+
+	mem_refresh_stats();
 }
 
 // 拖滑条时别每动一像素就写一次草稿：停手 250ms 再写
@@ -2520,6 +2554,7 @@ winform.onCancel = function() {
 
 editMem.text = tostring(cfg.memory);
 sliderMem.progressPos = cfg.memory;      // 滑条跟着数值走
+mem_refresh_stats();
 editJvm.text = cfg.jvm_args or "";
 editW.text = tostring(cfg.width);
 editH.text = tostring(cfg.height);
