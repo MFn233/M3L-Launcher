@@ -154,15 +154,21 @@ namespace MMMLC{
 		return false;
 	}
 
-	//同一个 group:artifact 只留一份，取**版本号更大**的那个。
-	//整合包的 JSON 常把原版 guava 15.0 与 Forge 的 guava 17.0 都写进来，
-	//两份都在 classpath 里时 Java 取第一个命中的，于是拿到旧版，报 NoSuchMethodError。
+	//同一个 group:artifact 只留一份，取**版本号更大**的那个；
+	//但**位置必须沿用第一次出现的那次**。
+	//整合包的 JSON 常常先写官方条目、后面再追加一份更高版本（如 log4j 2.8.1 + 2.15.0），
+	//把高版本挪到末尾会改变类加载顺序：实测 1.12.2 上 Forge 的 DeobfuscationTransformer
+	//会因此被判定"重入"并永久停用，随后所有 mixin 的命名类查找失败、启动崩溃。
 	function dedupe_by_key(paths, metas) {
 		if (#metas != #paths) return paths;
 
-		var best = {};
+		var first = {};   // key → 第一次出现的下标
+		var best = {};    // key → 版本最高的下标
+
 		for i, m in metas {
 			if (!m or !m.key) continue;
+
+			if (!first[m.key]) first[m.key] = i;
 
 			var j = best[m.key];
 			if (!j) best[m.key] = i;
@@ -171,6 +177,7 @@ namespace MMMLC{
 
 		var out = {};
 		var seen = {};
+
 		for i, p in paths {
 			var m = metas[i];
 			if (!m or !m.key) {
@@ -179,10 +186,10 @@ namespace MMMLC{
 			}
 
 			if (seen[m.key]) continue;
-			if (best[m.key] != i) continue;
-
 			seen[m.key] = true;
-			table.push(out, p);
+
+			//位置用首次出现，实际文件用版本最高的那份
+			table.push(out, paths[best[m.key]] or p);
 		}
 
 		return out;
