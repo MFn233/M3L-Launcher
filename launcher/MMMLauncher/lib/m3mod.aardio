@@ -96,15 +96,58 @@ namespace m3mod {
 
 	var meta_cache = {};
 
-	function read_first(zip, names) {
-		for i, n in names {
-			if (zip.locate(n)) {
+	// 元数据可能藏在这些条目里（按优先级排列）
+	var META_ENTRIES = {
+		"fabric.mod.json";
+		"quilt.mod.json";
+		"META-INF/neoforge.mods.toml";
+		"META-INF/mods.toml";
+		"mcmod.info";
+		"META-INF/MANIFEST.MF";
+	};
+
+	// 按名字定位（快）。locate 对个别 jar 不灵，所以只当第一选择。
+	function read_by_locate(zip, names) {
+		var got = {};
+
+		try {
+			for i, n in names {
+				if (!zip.locate(n)) continue;
+
 				var s = zip.readCurrentFile();
-				if (s and #s > 0) return s;
+				if (s and #s > 0) got[..string.lower(n)] = s;
 			}
 		}
+		catch(e) {
+		}
 
-		return null;
+		return got;
+	}
+
+	// 兜底：整包遍历一遍，把候选条目都捞出来。
+	function read_by_scan(zip, names) {
+		var want = {};
+		for i, n in names {
+			want[..string.lower(n)] = true;
+		}
+
+		var got = {};
+
+		try {
+			for pos, dirName, fileName, extractPath, fileInfo in zip.eachFile() {
+				if (!fileName) continue;
+
+				var low = ..string.lower(fileName);
+				if (!want[low] or got[low]) continue;
+
+				var s = zip.readCurrentFile();
+				if (s and #s > 0) got[low] = s;
+			}
+		}
+		catch(e) {
+		}
+
+		return got;
 	}
 
 	// 有的整合包里的 mcmod.info 不是合法 JSON（带注释、少逗号），
@@ -124,7 +167,7 @@ namespace m3mod {
 
 	// mods.toml / neoforge.mods.toml：取第一组 modId / displayName / version
 	function parse_toml(text) {
-		var out = {};
+		var out = { modid = ""; name = ""; version = "" };
 
 		for line in ..string.gmatch(text, "[^\r\n]+") {
 			var k, v = ..string.match(..string.trim(line), '^(%w+)%s*=%s*"([^"]*)"');
@@ -138,28 +181,14 @@ namespace m3mod {
 		return out;
 	}
 
-	// 读一个 Mod 的元数据；失败返回空表（调用方按文件名兜底）
-	function meta_of(path) {
-		if (!path) return {};
-
-		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
-		if (meta_cache[key]) return meta_cache[key];
-
+	// 从一堆条目文本里按优先级解析出元数据
+	function pick_meta(texts) {
 		var m = { modid = ""; name = ""; version = ""; loader = "" };
 
-		var zip = null;
-
-		try {
-			zip = zlib.unzip(path, false);
-		}
-		catch(e) {
-			zip = null;
-		}
-
-		if (!zip) return m;
+		if (!texts) return m;
 
 		// Fabric / Quilt
-		var s = read_first(zip, {"fabric.mod.json"; "quilt.mod.json"});
+		var s = texts["fabric.mod.json"] or texts["quilt.mod.json"];
 		if (s) {
 			var t = safe_json(s);
 			if (type(t) == "table") {
@@ -172,7 +201,7 @@ namespace m3mod {
 
 		// Forge 1.13+ / NeoForge
 		if (#m.modid == 0) {
-			s = read_first(zip, {"META-INF/neoforge.mods.toml"; "META-INF/mods.toml"});
+			s = texts["meta-inf/neoforge.mods.toml"] or texts["meta-inf/mods.toml"];
 			if (s) {
 				var t = parse_toml(s);
 				m.loader = "Forge";
@@ -184,7 +213,7 @@ namespace m3mod {
 
 		// 1.12.2 及更早
 		if (#m.modid == 0) {
-			s = read_first(zip, {"mcmod.info"});
+			s = texts["mcmod.info"];
 			if (s) {
 				var t = safe_json(s);
 
@@ -206,7 +235,7 @@ namespace m3mod {
 
 		// 兜底：MANIFEST 里的标题与版本
 		if (#m.modid == 0) {
-			s = read_first(zip, {"META-INF/MANIFEST.MF"});
+			s = texts["meta-inf/manifest.mf"];
 			if (s) {
 				var title = ..string.match(s, "Implementation%-Title:%s*([^\r\n]+)");
 				var ver = ..string.match(s, "Implementation%-Version:%s*([^\r\n]+)");
@@ -219,6 +248,52 @@ namespace m3mod {
 					m.loader = "Forge";
 				}
 			}
+		}
+
+		return m;
+	}
+
+	// 读一个 Mod 的元数据；失败返回空表（调用方按文件名兜底）
+	function meta_of(path) {
+		if (!path) return { modid = ""; name = ""; version = ""; loader = "" };
+
+		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
+		if (meta_cache[key]) return meta_cache[key];
+
+		var zip = null;
+
+		try {
+			zip = zlib.unzip(path, false);
+		}
+		catch(e) {
+			zip = null;
+		}
+
+		if (!zip) {
+			var bad = { modid = ""; name = ""; version = ""; loader = ""; err = "打不开压缩包" };
+			meta_cache[key] = bad;
+			return bad;
+		}
+
+		// 先按名字定位；一个都没定位到就整包遍历兜底（有的 jar locate 不灵）
+		var texts = read_by_locate(zip, META_ENTRIES);
+
+		var empty = true;
+		for k, v in texts {
+			if (v) {
+				empty = false;
+				break;
+			}
+		}
+
+		if (empty) {
+			texts = read_by_scan(zip, META_ENTRIES);
+		}
+
+		var m = pick_meta(texts);
+
+		if (#m.modid == 0 and #m.name == 0) {
+			m.err = empty ? "没有元数据条目" : "元数据解析不出名字";
 		}
 
 		zip.close();

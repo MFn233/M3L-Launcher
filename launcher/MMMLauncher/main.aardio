@@ -197,9 +197,23 @@ function load_version_combo() {
 	var vdir = io.joinpath(cfg.game_path, "versions");
 	if (io.exist(vdir)) {
 		var files, folders = fsys.list(vdir);
+
+		// 当前版本排第一：下拉展开会滚到选中项，它在中间的话，
+		// 前面那些版本就被滚出视野，看着像"版本不见了"。
+		var names = {};
 		for(i = 1; #folders; 1) {
 			var name = folders[i];
-			if (name) winform.comboVer.add(name);
+			if (name) table.push(names, name);
+		}
+
+		if (cfg.version) {
+			for i, name in names {
+				if (name == cfg.version) winform.comboVer.add(name);
+			}
+		}
+
+		for i, name in names {
+			if (name != cfg.version) winform.comboVer.add(name);
 		}
 	}
 

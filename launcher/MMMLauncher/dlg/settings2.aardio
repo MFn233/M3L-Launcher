@@ -26,6 +26,7 @@ import fsys.version;
 import m3app;
 import string;
 import math;
+import time;
 /*DSG{{*/
 var winform = win.form(text="设置";right=759;bottom=567;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
@@ -1026,8 +1027,11 @@ function mods_render() {
 	step = function() {
 		if (gen != mod_scan_gen) return;   // 被切页 / 切版本作废
 
-		var n = 0;
-		while (i <= #mod_rows and n < 4) {
+		// 按时间片跑：一次最多占用 25ms，剩下的下一拍继续。
+		// 固定"每拍 4 个"在 150 个 Mod 时太慢，固定"每拍 30 个"又会卡界面。
+		var deadline = ..time.tick() + 25;
+
+		while (i <= #mod_rows and ..time.tick() < deadline) {
 			var m = mod_rows[i];
 			var meta = m3mod.meta_of(m.path);
 
@@ -1043,7 +1047,6 @@ function mods_render() {
 			listMods.setItemText(m.mver, i, 3);
 
 			i = i + 1;
-			n = n + 1;
 		}
 
 		mod_scan_done = i - 1;
@@ -1051,7 +1054,7 @@ function mods_render() {
 
 		if (i <= #mod_rows) {
 			lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
-			winform.setTimeout(step, 20);
+			winform.setTimeout(step, 1);
 		}
 		else {
 			mod_prog_hide();
@@ -1087,6 +1090,8 @@ function mods_render_final() {
 	var list = m3mod.scan(dir);
 
 	// 读元数据：名字 / 版本 / modid（读不到就退回文件名）
+	var meta_fail = 0;
+
 	for i, m in list {
 		var meta = m3mod.meta_of(m.path);
 
@@ -1096,6 +1101,8 @@ function mods_render_final() {
 
 		if (#m.title == 0) m.title = m.name;
 		if (#m.mver == 0) m.mver = "-";
+
+		if (meta.err) meta_fail = meta_fail + 1;
 	}
 
 	// 同一个 modid 出现多次 = 重复安装
@@ -1177,6 +1184,7 @@ function mods_render_final() {
 
 		var tip = "共 " ++ total ++ " 个 Mod，禁用 " ++ off ++ " 个。";
 		if (dups > 0) tip = tip ++ "有 " ++ dups ++ " 个是重复安装（同一个 modid），已标红。";
+		if (meta_fail > 0) tip = tip ++ meta_fail ++ " 个读不到元数据（显示文件名）。";
 		lblModHint.text = tip;
 	}
 
