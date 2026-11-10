@@ -490,11 +490,30 @@ namespace MMMLC{
 		return false;
 	}
 
+	//OptiFine 的 jar 里带着 net/minecraftforge/client/model/* 这些**deobf 命名**的接口。
+	//它若排在 forge 前面，会把 forge 自己的同名类遮蔽掉，1.8.9 上表现为
+	//NoSuchMethodError: RegistryDelegate.getResourceName()Lnet/minecraft/util/ResourceLocation;
+	//（实测：同一个实例、同一组 jar，只有 OptiFine 的位置不同，另一个启动器把它排在最后就能进游戏）
+	//所以把 optifine 的条目挪到末尾。
+	function order_classpath(list) {
+		var normal = {};
+		var optifine = {};
+
+		for i, p in list {
+			if (string.indexOf(string.lower(p), "optifine")) table.push(optifine, p);
+			else table.push(normal, p);
+		}
+
+		for i, p in optifine table.push(normal, p);
+
+		return normal;
+	}
+
 	function build_args(info, opts) {
 		if (#info.main_class == 0) return null, "版本 JSON 里没有 mainClass";
 		if (#info.classpath == 0) return null, "classpath 为空，库文件可能一个都没下载";
 
-		var classpath = table.concat(info.classpath, ";");
+		var classpath = table.concat(order_classpath(info.classpath), ";");
 
 		//JSON 参数里的占位符 → 真实值
 		var vars = {
