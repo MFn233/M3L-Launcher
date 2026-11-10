@@ -46,7 +46,7 @@ namespace m3layout {
 
 		batch_depth = batch_depth + 1;
 		if (batch_depth == 1) {
-			::SendMessage(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
+			::SendMessageInt(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
 		}
 
 		var err = null;
@@ -59,7 +59,7 @@ namespace m3layout {
 
 		batch_depth = batch_depth - 1;
 		if (batch_depth == 0) {
-			::SendMessage(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 1, 0);
+			::SendMessageInt(form.hwnd, 0x000B /*_WM_SETREDRAW*/, 1, 0);
 			form.redraw();
 		}
 
