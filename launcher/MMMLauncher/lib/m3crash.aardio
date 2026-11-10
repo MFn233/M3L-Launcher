@@ -371,7 +371,7 @@ namespace m3crash {
 
 		var latest = io.joinpath(work_dir, "logs", "latest.log");
 		var log_tail = tail(latest, 200);
-		if (#log_tail > 0) text = text ++ "\n" ++ log_tail;
+		if (#log_tail > 0) text = text ++ '\n' ++ log_tail;
 
 		out.reasons = analyze_text(text);
 		out.suspects = display_suspects(suspected_mods(out.report_text), work_dir);

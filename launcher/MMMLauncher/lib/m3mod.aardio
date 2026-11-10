@@ -100,6 +100,8 @@ namespace m3mod {
 
 	var meta_cache = {};
 	var cache_file = ..io.fullpath("/mod-meta-cache.json");
+	// 格式版本：解析规则改了就把这个数字 +1，旧缓存自动作废
+	var CACHE_VER = 2;
 	var cache_loaded = false;
 
 	// 候选条目：key 是内部索引名，name 是压缩包里的条目名。
@@ -132,8 +134,13 @@ namespace m3mod {
 
 		if (type(data) != "table") return;
 
+		// 版本对不上就整份丢掉，重新读
+		if (tostring(data["!ver"] or "") != tostring(CACHE_VER)) return;
+
 		for k, v in data {
+			if (k == "!ver") continue;
 			if (type(v) != "table") continue;
+
 			meta_cache[k] = v;
 		}
 	}
@@ -158,7 +165,7 @@ namespace m3mod {
 	}
 
 	function cache_save() {
-		var out = {};
+		var out = { ["!ver"] = CACHE_VER };
 
 		for k, v in meta_cache {
 			if (type(v) != "table") continue;
@@ -229,7 +236,7 @@ namespace m3mod {
 	function parse_toml(text) {
 		var out = { modid = ""; name = ""; version = "" };
 
-		for line in ..string.gmatch(text, "[^\r\n]+") {
+		for line in ..string.gmatch(text, '[^\r\n]+') {
 			var k, v = ..string.match(..string.trim(line), '^(%w+)%s*=%s*"([^"]*)"');
 
 			if (!k) continue;
@@ -318,9 +325,9 @@ namespace m3mod {
 	function meta_from_manifest(s) {
 		if (type(s) != "string") return null;
 
-		var title = ..string.match(s, "Implementation%-Title:%s*([^\r\n]+)");
-		var ver = ..string.match(s, "Implementation%-Version:%s*([^\r\n]+)");
-		var vendor = ..string.match(s, "Implementation%-Vendor%-Id:%s*([^\r\n]+)");
+		var title = ..string.match(s, 'Implementation%-Title:%s*([^\r\n]+)');
+		var ver = ..string.match(s, 'Implementation%-Version:%s*([^\r\n]+)');
+		var vendor = ..string.match(s, 'Implementation%-Vendor%-Id:%s*([^\r\n]+)');
 
 		return {
 			modid = vendor ? ..string.trim(vendor) : "";

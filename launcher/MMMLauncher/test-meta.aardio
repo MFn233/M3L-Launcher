@@ -54,7 +54,7 @@ table.push(out, "共 " .. count .. " 个，其中 " .. slow .. " 个耗时 >= 50
 var ok_path = "C:\Users\DELL\Desktop\MMML\launcher\MMMLauncher\_meta-test.txt";
 
 try {
-	string.save(ok_path, table.concat(out, "\r\n"));
+	string.save(ok_path, table.concat(out, '\r\n'));
 	console.log("");
 	console.log("结果已写到: " .. ok_path);
 }

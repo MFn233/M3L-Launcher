@@ -1156,7 +1156,7 @@ function mods_render_final() {
 		var prefix = "1";          // 1 = 禁用，排在后面
 		if (m.enabled) prefix = "0";
 
-		var k = prefix ++ string.lower(m.title) ++ "\t" ++ tostring(i);
+		var k = prefix ++ string.lower(m.title) ++ '\t' ++ tostring(i);
 		keyed[k] = m;
 		table.push(keys, k);
 	}
@@ -1257,7 +1257,7 @@ function mod_dump_diag() {
 	table.push(lines, "--- 共 " ++ n ++ " 条 ---");
 
 	try {
-		string.save(io.fullpath("/mod-diag.txt"), table.concat(lines, "\r\n"));
+		string.save(io.fullpath("/mod-diag.txt"), table.concat(lines, '\r\n'));
 	}
 	catch(e) {
 	}
