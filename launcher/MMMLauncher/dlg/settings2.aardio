@@ -278,29 +278,38 @@ var listPaths = SP.make({
 	left = 232;
 	top = SP.y;
 	right = 736;
-	bottom = SP.y + 280;
+	bottom = SP.y + 260;
 });
 
 listPaths.fullRow = true;
 
+// 第一列固定是序号「#」；旧配置里存的是没有序号列的版本，这里补上
+var path_cols = { { "#"; 40 } };
 var saved_path_cols = cfg.paths_columns;
 if (type(saved_path_cols) == "table" and #saved_path_cols >= 2) {
-	listPaths.columns = saved_path_cols;
+	if (saved_path_cols[1] and saved_path_cols[1][1] == "#") {
+		path_cols = saved_path_cols;
+	}
+	else {
+		for i, c in saved_path_cols {
+			table.push(path_cols, c);
+		}
+	}
 }
 else {
-	listPaths.columns = {
-		{ "名称"; 150 };
-		{ "路径"; 700 };
-	};
+	table.push(path_cols, { "名称"; 120 });
+	table.push(path_cols, { "路径"; 340 });
 }
+
+listPaths.columns = path_cols;
 
 m3list.fit(listPaths);
 try_thin_scrollbar(listPaths);
 
-SP.y = SP.y + 280 + 8;
+SP.y = SP.y + 260 + 8;
 
 var editPathName, btnPathRename = SP.row("名称", { cls = "edit" }, "重命名");
-var path_tools = SP.tool_row({"添加"; "删除"}, {"设为当前"; "打开目录"});
+var path_tools = SP.tool_row({"添加"; "删除"; "刷新"}, {"设为当前"; "打开目录"});
 
 SP.finish();
 
@@ -316,31 +325,40 @@ var listVers = SV.make({
 	left = 232;
 	top = SV.y;
 	right = 736;
-	bottom = SV.y + 280;
+	bottom = SV.y + 260;
 });
 
 listVers.fullRow = true;
 
+// 同上：第一列固定是序号「#」
+var ver_cols = { { "#"; 40 } };
 var saved_ver_cols = cfg.version_columns;
 if (type(saved_ver_cols) == "table" and #saved_ver_cols >= 4) {
-	listVers.columns = saved_ver_cols;
+	if (saved_ver_cols[1] and saved_ver_cols[1][1] == "#") {
+		ver_cols = saved_ver_cols;
+	}
+	else {
+		for i, c in saved_ver_cols {
+			table.push(ver_cols, c);
+		}
+	}
 }
 else {
-	listVers.columns = {
-		{ "版本名"; 220 };
-		{ "游戏版本"; 100 };
-		{ "加载器"; 170 };
-		{ "隔离"; 90 };
-	};
+	table.push(ver_cols, { "版本名"; 180 });
+	table.push(ver_cols, { "游戏版本"; 80 });
+	table.push(ver_cols, { "加载器"; 140 });
+	table.push(ver_cols, { "隔离"; 70 });
 }
+
+listVers.columns = ver_cols;
 
 m3list.fit(listVers);
 try_thin_scrollbar(listVers);
 
-SV.y = SV.y + 280 + 8;
+SV.y = SV.y + 260 + 8;
 
 var editVerNew, btnVerRename = SV.row("新名称", { cls = "edit" }, "重命名");
-var ver_tools = SV.tool_row({"切换隔离"; "删除"}, {"设为当前"; "打开目录"});
+var ver_tools = SV.tool_row({"切换隔离"; "删除"; "刷新"}, {"设为当前"; "打开目录"});
 
 SV.finish();
 
@@ -357,9 +375,9 @@ var lblP5Hint = winform.add({
 	cls = "static";
 	text = "";
 	left = 232;
-	top = 476;
+	top = 468;
 	right = 736;
-	bottom = 476 + 18;
+	bottom = 468 + 18;
 	font = LOGFONT(name='Microsoft YaHei'; h=-11);
 });
 
@@ -405,20 +423,15 @@ function sub_select(n) {
 }
 
 subPathBtn.oncommand = function(id, event) {
-	if (sub_current == 1) {
-		sub_apply();
-		return;
-	}
+	// 已经在这一页：什么都不做（重复 sub_apply 会让整页控件重画一次，看着像闪）
+	if (sub_current == 1) return;
 
 	sub_select(1);
 	lblP5Hint.text = "游戏路径共 " ++ #cfg.game_paths ++ " 条。官方目录不能删除。";
 }
 
 subVerBtn.oncommand = function(id, event) {
-	if (sub_current == 2) {
-		sub_apply();
-		return;
-	}
+	if (sub_current == 2) return;
 
 	sub_select(2);
 	lblP5Hint.text = ver_hint_text();
@@ -1203,6 +1216,7 @@ var path_selected = null;
 function paths_render() {
 	listPaths.clear();
 	path_rows = {};
+	var path_seq = 0;
 
 	for i, p in cfg.game_paths {
 		var name = p.name;
@@ -1212,7 +1226,8 @@ function paths_render() {
 		if (p.official) mark = mark ++ "[官方] ";
 		if (cfg.game_path == p.dir) mark = mark ++ "[当前] ";
 
-		listPaths.addItem({ mark ++ name; p.dir });
+		path_seq = path_seq + 1;
+		listPaths.addItem({ tostring(path_seq); mark ++ name; p.dir });
 		table.push(path_rows, i);
 	}
 
@@ -1367,6 +1382,13 @@ path_tools.right[1].oncommand = function(id, event) {
 	lblP5Hint.text = "当前游戏路径：" ++ cfg.game_path;
 }
 
+// 刷新：重读配置再重画（外部改过 config 或磁盘上的版本目录时用）
+path_tools.left[3].oncommand = function(id, event) {
+	cfg = m3config.read();
+	paths_render();
+	lblP5Hint.text = "已刷新。游戏路径共 " ++ #cfg.game_paths ++ " 条。";
+}
+
 // 打开所选路径
 path_tools.right[2].oncommand = function(id, event) {
 	var i = path_index();
@@ -1444,6 +1466,7 @@ function list_version_names() {
 function vers_render() {
 	listVers.clear();
 	ver_rows = {};
+	var ver_seq = 0;
 
 	var names = list_version_names();
 
@@ -1457,7 +1480,8 @@ function vers_render() {
 		// 真正的游戏版本 + 加载器：读版本 JSON 判断，不靠文件夹名
 		var info = m3version.describe(cfg.game_path, name);
 
-		listVers.addItem({ mark ++ name; info.game; info.loader; isolate_text });
+		ver_seq = ver_seq + 1;
+		listVers.addItem({ tostring(ver_seq); mark ++ name; info.game; info.loader; isolate_text });
 		table.push(ver_rows, name);
 	}
 
@@ -1692,6 +1716,13 @@ ver_tools.left[2].oncommand = function(id, event) {
 	lblP5Hint.text = "已删除版本：" ++ short_name(name);
 }
 
+// 刷新：重读配置与磁盘上的版本目录
+ver_tools.left[3].oncommand = function(id, event) {
+	cfg = m3config.read();
+	vers_render();
+	lblP5Hint.text = "已刷新。" ++ ver_hint_text();
+}
+
 // 打开所选版本的文件夹
 ver_tools.right[2].oncommand = function(id, event) {
 	var name = ver_current();
@@ -1726,6 +1757,8 @@ winform.btnSave.oncommand = function(id, event) {
 
 	// 列宽不是"值类设置"（拖列头改的），单独带上
 	c.java_columns = listJava.columns;
+	c.paths_columns = listPaths.columns;
+	c.version_columns = listVers.columns;
 
 	m3config.save(c);
 	m3config.clear_draft();
