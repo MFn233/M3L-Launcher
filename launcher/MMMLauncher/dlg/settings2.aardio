@@ -271,17 +271,17 @@ table.push(P5.controls, subVerBtn);
 
 // ---------- 子页一：游戏路径 ----------
 
-var SP = m3layout.create(winform, 232, 88, 504, { framed = true });
+var SP = m3layout.create(winform, 232, 92, 504, { framed = true });
 SP.btn_w = 76;
 
-SP.section("游戏路径");
+SP.section("");
 
 var listPaths = SP.make({
 	cls = "listview";
 	left = 232;
 	top = SP.y;
 	right = 736;
-	bottom = SP.y + 260;
+	bottom = SP.y + 296;
 });
 
 listPaths.fullRow = true;
@@ -301,7 +301,7 @@ m3list.setup(listPaths, path_cols, true);
 m3list.fit(listPaths);
 try_thin_scrollbar(listPaths);
 
-SP.y = SP.y + 260 + 8;
+SP.y = SP.y + 296 + 8;
 
 var editPathName, btnPathRename = SP.row("名称", { cls = "edit" }, "重命名");
 var path_tools = SP.tool_row({"添加"; "删除"; "刷新"}, {"设为当前"; "打开目录"});
@@ -311,17 +311,17 @@ SP.finish();
 
 // ---------- 子页二：版本 ----------
 
-var SV = m3layout.create(winform, 232, 88, 504, { framed = true });
+var SV = m3layout.create(winform, 232, 92, 504, { framed = true });
 SV.btn_w = 76;
 
-SV.section("版本");
+SV.section("");
 
 var listVers = SV.make({
 	cls = "listview";
 	left = 232;
 	top = SV.y;
 	right = 736;
-	bottom = SV.y + 260;
+	bottom = SV.y + 296;
 });
 
 listVers.fullRow = true;
@@ -331,7 +331,7 @@ var ver_cols = {
 	{ "版本名"; 180 };
 	{ "游戏版本"; 80 };
 	{ "加载器"; 140 };
-	{ "隔离"; 70 };
+	{ "隔离"; 60 };
 };
 var saved_ver_cols = cfg.version_columns;
 if (type(saved_ver_cols) == "table" and #saved_ver_cols >= 4) {
@@ -343,7 +343,7 @@ m3list.setup(listVers, ver_cols, true);
 m3list.fit(listVers);
 try_thin_scrollbar(listVers);
 
-SV.y = SV.y + 260 + 8;
+SV.y = SV.y + 296 + 8;
 
 var editVerNew, btnVerRename = SV.row("新名称", { cls = "edit" }, "重命名");
 var ver_tools = SV.tool_row({"切换隔离"; "删除"; "刷新"}, {"设为当前"; "打开目录"});
@@ -1475,8 +1475,9 @@ function vers_render() {
 		var mark = "";
 		if (name == cfg.version) mark = "[当前] ";
 
+		// 文案要短：这一列只有 60px，写「共用根目录」会被截成「共用根…」
 		var isolate_text = "隔离";
-		if (!is_isolated(name)) isolate_text = "共用根目录";
+		if (!is_isolated(name)) isolate_text = "共用";
 
 		// 真正的游戏版本 + 加载器：读版本 JSON 判断，不靠文件夹名
 		var info = m3version.describe(cfg.game_path, name);

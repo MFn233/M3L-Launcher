@@ -119,6 +119,8 @@ namespace m3layout {
 				table.push(L.controls, frame);
 			}
 
+			if (!s.has_title) return;
+
 			// 标题在框外、内容之上；比正文大一号，当小标题用
 			var cap = L.make({
 				cls = "static";
@@ -135,6 +137,8 @@ namespace m3layout {
 
 		// 分组标题：关闭上一节、记下新节的起点
 		// plain = true 时这一节不画框
+		// has_title 为 false 时这一节不写标题，也不占标题那一段高度——
+		// 用于外面已经有页签/标题的场景，避免同一个词重复两三次。
 		L.section = function(title, plain) {
 			L.close_section();
 
@@ -143,9 +147,19 @@ namespace m3layout {
 			var y = L.y;
 			L.first_section = false;
 
-			L.open_section = { title = title; caption_top = y; y0 = y + L.section_h + L.section_gap; plain = plain };
+			var has_title = (title and #title > 0);
+			var content_top = y;
+			if (has_title) content_top = y + L.section_h + L.section_gap;
 
-			L.y = L.open_section.y0;
+			L.open_section = {
+				title = title;
+				has_title = has_title;
+				caption_top = y;
+				y0 = content_top;
+				plain = plain;
+			};
+
+			L.y = content_top;
 
 			return y;
 		};
