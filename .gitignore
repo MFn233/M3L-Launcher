@@ -13,6 +13,7 @@ launchertest/
 # 本地运行时配置（含用户名、路径、账号，不进仓库）
 launcher/MMMLauncher/config.json
 launcher/MMMLauncher/config.txt
+launcher/MMMLauncher/config.pending.json
 
 # 临时文件
 *.tmp
