@@ -1671,7 +1671,8 @@ function credits_fill() {
 	credit("DeepSeek · 代码实现、文档整理与测试");
 	credit("");
 	credit("参与测试", true);
-	credit("（名单待补充）");
+	credit("煤辰呀 · 多版本启动测试与问题反馈");
+	credit("维夏_Vivia · 多版本启动测试与问题反馈");
 	credit("");
 	credit("本项目为个人非营利项目，与上述公司、项目无隶属关系。", true);
 	credit("「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。", true);
