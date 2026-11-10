@@ -124,6 +124,65 @@ namespace m3zip {
 		return null;
 	}
 
+
+	// 诊断：把读中央目录过程中的关键数值吐出来
+	function probe(path) {
+		var d = { path = path };
+
+		var file = ..fsys.file(path, "rb");
+		if (!file) {
+			d.err = "打不开文件";
+			return d;
+		}
+
+		d.total = file.size();
+		if (!d.total or d.total < 22) {
+			d.err = "文件太小";
+			file.close();
+			return d;
+		}
+
+		d.tailLen = d.total;
+		if (d.tailLen > 66000) d.tailLen = 66000;
+
+		d.seekRet = file.seek("set", d.total - d.tailLen);
+
+		var tail = file.read(d.tailLen);
+		d.tailRead = tail and #tail or -1;
+
+		if (!tail) {
+			d.err = "读取尾部失败";
+			file.close();
+			return d;
+		}
+
+		d.at = rfind_sig(tail, 80, 75, 5, 6);
+
+		if (!d.at) {
+			d.err = "不是 ZIP 文件";
+			file.close();
+			return d;
+		}
+
+		d.count = u16(tail, d.at + 10);
+		d.cdSize = u32(tail, d.at + 12);
+		d.cdOff = u32(tail, d.at + 16);
+
+		d.seekRet2 = file.seek("set", d.cdOff);
+
+		var cd = file.read(d.cdSize);
+		d.cdRead = cd and #cd or -1;
+
+		if (cd) {
+			d.b1 = cd[1]; d.b2 = cd[2]; d.b3 = cd[3]; d.b4 = cd[4];
+			d.firstEntrySig = tostring(d.b1) ++ "," ++ tostring(d.b2) ++ "," ++ tostring(d.b3) ++ "," ++ tostring(d.b4);
+		}
+
+		file.close();
+
+		return d;
+	}
+
 	// 读出 names 里能匹配到的条目，返回 { 文件名小写 = 内容 }
 	function read(path, names) {
 		var got = {};

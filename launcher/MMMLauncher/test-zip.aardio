@@ -42,6 +42,7 @@ for di, dir in dirs {
 	table.push(out, "#目录：" ++ dir);
 
 	var limit = 0;
+	var probe_n = 0;
 
 	fsys.enum(dir, "*.*", function(dirname, filename, fullpath, findData) {
 		if (!filename) return;
@@ -71,6 +72,17 @@ for di, dir in dirs {
 		total_bytes = total_bytes + bytes;
 
 		table.push(out, string.format("%-46s | %5d ms | %6d B | %s", filename, ms, bytes, keys));
+
+		// 前 3 个文件额外打诊断数值，用来定位"中央目录读不对"的问题
+		if (probe_n < 3) {
+			probe_n = probe_n + 1;
+
+			var d = m3zip.probe(fullpath);
+			table.push(out, string.format("      probe: total=%s tailLen=%s seekRet=%s tailRead=%s at=%s count=%s cdSize=%s cdOff=%s seekRet2=%s cdRead=%s sig=%s err=%s",
+				tostring(d.total), tostring(d.tailLen), tostring(d.seekRet), tostring(d.tailRead),
+				tostring(d.at), tostring(d.count), tostring(d.cdSize), tostring(d.cdOff),
+				tostring(d.seekRet2), tostring(d.cdRead), tostring(d.firstEntrySig), tostring(d.err)));
+		}
 	}, false);
 }
 
