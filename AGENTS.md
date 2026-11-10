@@ -131,6 +131,8 @@ arr = list;
 
 1. **括号平衡**：`{}` `()` 配平（注意 `/**intellisense ... **/` 块里还有 `/*参数*/`，普通词法分析会误判）
 2. **控件交叉检查**：`winform.xxx` 用到但没在 `winform.add(...)` 里声明的，报出来
+   - 库文件另跑 `python tools/check-namespace.py`：查 namespace 内有没有未 import 就裸用的全局库
+     （`table.push` / `math.max` 这类；踩过两次，报的都是 `_get table`）
 3. **不能编译**：DSH 里跑不了 aardio，静态检查过了也要提醒用户在 IDE 里跑一遍
 4. 涉及窗体的改动，给出**具体验证路径**（"设置 → 版本管理 → 删除"），不要只说"跑一下看看"
 
