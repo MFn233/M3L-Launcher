@@ -154,7 +154,7 @@ sliderMem.setTrackbarRange(512, MEM_MAX);
 
 P2.y = P2.y + 22 + 4;
 
-var lblMemRange = P2.text("512 MB ～ " ++ string.format("%.1f GB", MEM_MAX / 1024) ++ "　（拖动滑条，或直接改上面的数字）", true);
+var lblMemRange = P2.text("512 MB ～ " ++ string.format("%.1f GB", MEM_MAX / 1024), true);
 var lblMemStats = P2.text("", true);
 
 P2.section("进程优先级");
@@ -564,7 +564,10 @@ editPvJvm.bgcolor = m3theme.C_FIELD;
 
 PVA.y = PVA.y + 56 + 8;
 
-PVA.text("勾选的设置项将覆盖全局设置。", true);
+// 版本级开关（没有全局对应项）：勾上就写进这个版本的覆盖文件
+var chkSkip = PVA.check("关闭文件校验（跳过「缺少库文件」的检查）", false);
+
+PVA.text("勾选的设置项将覆盖全局设置；不勾 = 跟随全局。", true);
 var lblPvHint = PVA.text("", true);
 
 PVA.finish();
@@ -719,6 +722,8 @@ function pv_load(name) {
 	chkJvm.checked = has_jvm;
 	editPvJvm.text = has_jvm ? ov.jvm_args : (cfg.jvm_args or "");
 
+	chkSkip.checked = (ov.skip_check === true);
+
 	pv_sync_enabled();
 
 	var n = 0;
@@ -727,7 +732,7 @@ function pv_load(name) {
 	}
 
 	if (n == 0) {
-		lblPvHint.text = "这个版本没有独立设置，全部跟随全局。";
+		lblPvHint.text = "此版本没有独立设置。";
 	}
 	else {
 		lblPvHint.text = "这个版本有 " ++ n ++ " 项独立设置。";
@@ -762,6 +767,8 @@ function pv_collect() {
 	if (chkPri.checked) t.priority = priority_value(comboPvPri.selIndex);
 
 	if (chkJvm.checked) t.jvm_args = editPvJvm.text;
+
+	if (chkSkip.checked) t.skip_check = true;
 
 	return t;
 }
@@ -829,6 +836,10 @@ for i, c in { chkMem; chkMode; chkW; chkH; chkPri; chkJvm } {
 		mark_dirty();
 	};
 }
+
+chkSkip.oncommand = function(id, event) {
+	mark_dirty();
+};
 
 comboPvMode.add("手动设置");
 comboPvMode.add("全屏");

@@ -17,7 +17,7 @@ namespace m3opts {
 	import string;
 
 	// 允许按版本覆盖的键（白名单）。加键之前先想清楚：它是否真的"每个版本可以不同"。
-	KEYS = { "memory"; "width"; "height"; "window_mode"; "priority"; "jvm_args" };
+	KEYS = { "memory"; "width"; "height"; "window_mode"; "priority"; "jvm_args"; "skip_check" };
 
 	function path_of(minecraft_dir, name) {
 		if (!minecraft_dir or !name) return null;

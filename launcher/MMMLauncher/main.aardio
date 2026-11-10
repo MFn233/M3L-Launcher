@@ -627,7 +627,8 @@ function start_game(retried, inst) {
 		return;
 	}
 
-	if (#info.missing > 0) {
+	// 这个版本勾了「关闭文件校验」：明知可能缺文件也照常启动，不再报这一条
+	if (!eff.skip_check and #info.missing > 0) {
 		log("[警告] 缺少 " ++ #info.missing ++ " 个库文件，可能导致游戏无法正常启动：", true);
 		for i, p in info.missing {
 			if (i > 6) {
