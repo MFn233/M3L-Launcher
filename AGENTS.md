@@ -100,6 +100,11 @@ for k, item in arr {
 arr = list;
 ```
 
+### 文件操作
+
+- `fsys.list(dir)` 返回 `files, folders, alldirs`，后两者里的元素是**完整路径**不是名字；
+  要名字用 `io.splitpath(p).name`，别再 `dir ++ "\\" ++ 元素` 拼一次（会拼出畸形路径）。
+
 ### 界面
 
 - 颜色和 skin **一律走 `lib/m3theme.aardio`**，不要在新窗口里再定义 `A_WHITE / A_INK`
