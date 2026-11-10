@@ -121,6 +121,8 @@ namespace m3config{
 			shot_tip = true;      // 弹日志窗口时提醒「不要截图分享」，新用户默认开
 			priority = "normal";
 			shared = {};
+	fav_paths = {};      // 收藏的游戏路径：键 = 小写目录
+	fav_versions = {};   // 收藏的版本：键 = 小写游戏目录|版本名
 			accounts = {};
 			account = "";
 		};
@@ -223,6 +225,8 @@ namespace m3config{
 			if (data.shot_tip !== null) cfg.shot_tip = data.shot_tip;
 			if (data.priority !== null) cfg.priority = data.priority;
 			if (data.shared) cfg.shared = data.shared;
+		if (data.fav_paths) cfg.fav_paths = data.fav_paths;
+		if (data.fav_versions) cfg.fav_versions = data.fav_versions;
 			if (data.accounts) cfg.accounts = data.accounts;
 			if (data.account !== null) cfg.account = data.account;
 			if (data.width !== null) cfg.width = data.width;
