@@ -981,7 +981,12 @@ function mods_render() {
 
 	var i = 1;
 
-	var step = function() {
+	// 先声明再赋值。直接写 var step = function() 的话，函数体里那句 step
+	// 在声明之前就被编译，会解析成全局（nil），setTimeout(step, 20) 就报
+	// 未指定回调函数。
+	var step;
+
+	step = function() {
 		if (gen != mod_scan_gen) return;   // 被切页 / 切版本作废
 
 		var n = 0;
