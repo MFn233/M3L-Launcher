@@ -609,33 +609,8 @@ PM.y = PM.y + 236 + 8;
 
 var mod_tools = PM.tool_row({"启用"; "删除"; "刷新"}, {"打开目录"});
 
-// 扫描进度：轨道 + 填充两根 static。
-// 不用 plus 的 trackbar——它自带滑块，用户能拖；static 没有交互，拖不动。
-var PROG_H = 4;
-var PROG_GAP = 8;
-
-var progTrack = PM.make({
-	cls = "static";
-	left = PM.left;
-	top = PM.y;
-	right = PM.right;
-	bottom = PM.y + PROG_H;
-	bgcolor = m3theme.C_LINE;
-});
-
-var progFill = PM.make({
-	cls = "static";
-	left = PM.left;
-	top = PM.y;
-	right = PM.left + 1;
-	bottom = PM.y + PROG_H;
-	bgcolor = m3theme.C_INK;
-});
-
-progTrack.visible = false;
-progFill.visible = false;
-
-PM.y = PM.y + PROG_H + PROG_GAP;
+// 扫描进度条已删除：实测它对速度没有帮助，反而每次改宽度都要重画。
+// 现在扫描期间只显示一行提示，结果一次性铺进列表。
 
 var lblModHint = PM.text("", true);
 
@@ -939,29 +914,6 @@ function mod_btn_update() {
 var mod_scan_gen = 0;     // 每次重画 +1，用来作废旧任务
 var mod_scan_done = 0;    // 已完成数（进度条被误拖时用它复位）
 
-// 进度条：显得/更新/收起
-function mod_prog_show(total) {
-	progFill.width = 1;
-	progTrack.visible = true;
-	progFill.visible = true;
-}
-
-function mod_prog_update(done, total) {
-	if (total <= 0) return;
-
-	var full = progTrack.width;
-	var w = ..math.floor(full * done / total);
-	if (w < 0) w = 0;
-	if (w > full) w = full;
-
-	progFill.width = w;
-}
-
-function mod_prog_hide() {
-	progTrack.visible = false;
-	progFill.visible = false;
-}
-
 function mod_scan_cancel() {
 	mod_scan_gen = mod_scan_gen + 1;
 }
@@ -1005,8 +957,18 @@ function mod_fill_row(idx, meta) {
 	// 最后由 mods_render_final() 一次性填充。
 }
 
-// 同步读取，按时间片跑：已缓存的瞬间出结果，没缓存的才开压缩包。
-// 不用后台线程：线程在部分环境里加载不到项目库，而且异常是静默的（踩过）。
+// 扫描结果先落盘（mod-scan.txt），再读回来一次性显示。
+// 为什么这样做：listview 每改一格都会整表重绘，扫描期间边读边填实测是分钟级的元凶；
+// 落盘还能顺便把耗时统计留下来，排查时直接看文件。
+var mod_scan_stats = null;
+var mod_scan_file_path = null;
+
+function mod_scan_file() {
+	if (!mod_scan_file_path) mod_scan_file_path = ..io.fullpath("/mod-scan.txt");
+
+	return mod_scan_file_path;
+}
+
 function mods_render() {
 	mod_scan_cancel();
 	var gen = mod_scan_gen;
@@ -1015,12 +977,12 @@ function mods_render() {
 	mod_rows = {};
 	mod_dup_rows = {};
 	mod_todo = {};
+	mod_scan_stats = null;
 
 	mod_scan_done = 0;
 	mod_meta_reasons = {};
 
 	if (!pv_current) {
-		mod_prog_hide();
 		lblModHint.text = "请先在设置窗口里选择游戏路径。";
 		m3list.renumber(listMods);
 		mod_btn_update();
@@ -1030,7 +992,6 @@ function mods_render() {
 	var dir = m3mod.dir_of(cfg, pv_current);
 
 	if (!dir or !io.exist(dir)) {
-		mod_prog_hide();
 		lblModHint.text = "此版本没有 mods 文件夹：" ++ tostring(dir);
 		m3list.renumber(listMods);
 		mod_btn_update();
@@ -1046,23 +1007,17 @@ function mods_render() {
 		m.title = m.name;
 		m.mver = "-";
 
-		var status = "启用";
-		if (!m.enabled) status = "禁用";
-
-		listMods.addItem({ ""; m.title; m.mver; m.file; status });
 		table.push(mod_rows, m);
 	}
 
-	m3list.renumber(listMods);
-
 	if (#mod_rows == 0) {
-		mod_prog_hide();
 		lblModHint.text = "此版本未安装 Mod。";
+		m3list.renumber(listMods);
 		mod_btn_update();
 		return;
 	}
 
-	// 缓存里有的先填上，剩下的排队
+	// 缓存里有的先用上，剩下的排队
 	for i, m in mod_rows {
 		var meta = m3mod.cache_peek(m.path);
 
@@ -1075,56 +1030,149 @@ function mods_render() {
 		}
 	}
 
-	mod_prog_show(#mod_rows);
-	mod_prog_update(mod_scan_done, #mod_rows);
-
 	if (#mod_todo == 0) {
-		mod_prog_hide();
-		mods_render_final();
+		mod_write_scan_file(dir);
+		mod_show_scan_file();
 		return;
 	}
 
-	lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
+	lblModHint.text = "正在读取 Mod 信息…";
 
 	var at = 1;
+	var t_start = ..time.tick();
+	var t_meta = 0;
+	var slow = {};
 
 	var step;
 	step = function() {
 		if (gen != mod_scan_gen) return;
 
-		// 时间片：一次最多占 20ms，剩下的下一拍继续，界面保持可操作
-		var deadline = ..time.tick() + 20;
+		// 时间片：一次最多占 50ms，剩下的下一拍继续
+		var deadline = ..time.tick() + 50;
 
 		while (at <= #mod_todo and ..time.tick() < deadline) {
 			var idx = mod_todo[at];
+			var t1 = ..time.tick();
 
 			var meta = m3mod.meta_of(mod_rows[idx].path);
-			m3mod.cache_put(mod_rows[idx].path, meta);
 
+			var ms = ..time.tick() - t1;
+			t_meta = t_meta + ms;
+
+			if (ms >= 30 and #slow < 6) {
+				table.push(slow, ms ++ "ms  " ++ mod_rows[idx].file);
+			}
+
+			m3mod.cache_put(mod_rows[idx].path, meta);
 			mod_fill_row(idx, meta);
 
 			mod_scan_done = mod_scan_done + 1;
 			at = at + 1;
 		}
 
-		mod_prog_update(mod_scan_done, #mod_rows);
+		lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
 
 		if (at <= #mod_todo) {
-			lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
 			winform.setTimeout(step, 1);
+			return;
 		}
-		else {
-			m3mod.cache_save();
-			mods_render_final();
-		}
+
+		m3mod.cache_save();
+
+		mod_scan_stats = {
+			total = ..time.tick() - t_start;
+			meta = t_meta;
+			slow = slow;
+		};
+
+		mod_write_scan_file(dir);
+		mod_show_scan_file();
 	};
 
 	step();
 }
 
+// 写成一行一条，行首 # 是统计信息（读回来时跳过）
+function mod_write_scan_file(dir) {
+	var lines = {};
+
+	table.push(lines, "#dir=" ++ tostring(dir));
+	table.push(lines, "#rows=" ++ #mod_rows);
+
+	if (mod_scan_stats) {
+		table.push(lines, "#ms_total=" ++ mod_scan_stats.total ++ "  #ms_meta=" ++ mod_scan_stats.meta);
+
+		for i, s in mod_scan_stats.slow {
+			table.push(lines, "#slow=" ++ s);
+		}
+	}
+
+	for i, m in mod_rows {
+		var en = "0";
+		if (m.enabled) en = "1";
+
+		table.push(lines, table.concat({
+			m.path or "";
+			m.file or "";
+			m.name or "";
+			m.title or "";
+			m.mver or "-";
+			m.modid or "";
+			en;
+		}, '\t'));
+	}
+
+	try {
+		string.save(mod_scan_file(), table.concat(lines, '\r\n'));
+	}
+	catch(e) {
+	}
+}
+
+// 读回临时文件 → 重建 mod_rows → 一次性铺进列表
+function mod_show_scan_file() {
+	var text = null;
+
+	try {
+		text = string.load(mod_scan_file());
+	}
+	catch(e) {
+		text = null;
+	}
+
+	if (!text) {
+		// 读不出来就退化为直接用内存里的结果，别让列表空着
+		mods_render_final();
+		return;
+	}
+
+	var rows = {};
+
+	for line in ..string.gmatch(text, '[^\r\n]+') {
+		if (#line == 0) continue;
+		if (..string.left(line, 1) == "#") continue;
+
+		var f = ..string.split(line, '\t');
+		if (#f < 7) continue;
+
+		table.push(rows, {
+			path = f[1];
+			file = f[2];
+			name = f[3];
+			title = f[4];
+			mver = f[5];
+			modid = f[6];
+			enabled = (f[7] == "1");
+		});
+	}
+
+	mod_rows = rows;
+
+	mods_render_final();
+}
+
 // 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
 function mods_render_final() {
-	mod_prog_hide();
 
 	if (#mod_rows == 0) {
 		listMods.clear();

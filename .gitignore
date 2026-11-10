@@ -35,3 +35,4 @@ _backup/
 # 用户提供的 Mod 样本（二进制，不进仓库）
 模组样本/
 launcher/MMMLauncher/_meta-test.txt
+launcher/MMMLauncher/mod-scan.txt
