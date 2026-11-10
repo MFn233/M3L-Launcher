@@ -9,6 +9,7 @@ namespace m3mod {
 	import io;
 	import fsys;
 	import string;
+	import table;     // 命名空间里访问 table.push 必须先 import，否则报 _get table
 	import m3config;
 
 	// 某个版本实际使用的 mods 目录：隔离时在版本目录里，否则在游戏目录根下

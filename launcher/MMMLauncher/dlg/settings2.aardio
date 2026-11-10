@@ -29,9 +29,9 @@ import math;
 /*DSG{{*/
 var winform = win.form(text="设置";right=759;bottom=567;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-btnCancel={cls="plus";text="取消";left=576;top=524;right=656;bottom=556;font=LOGFONT(h=-13;name='Microsoft YaHei');z=3};
-btnSave={cls="plus";text="保存";left=664;top=524;right=744;bottom=556;font=LOGFONT(h=-13;name='Microsoft YaHei');z=4};
-lblHint={cls="static";left=16;top=524;right=556;bottom=552;font=LOGFONT(h=-11;name='Microsoft YaHei');z=2};
+btnCancel={cls="plus";text="取消";left=576;top=518;right=656;bottom=550;font=LOGFONT(h=-13;name='Microsoft YaHei');z=3};
+btnSave={cls="plus";text="保存";left=664;top=518;right=744;bottom=550;font=LOGFONT(h=-13;name='Microsoft YaHei');z=4};
+lblHint={cls="static";left=16;top=512;right=556;bottom=548;font=LOGFONT(h=-11;name='Microsoft YaHei');z=2};
 lblPageTitle={cls="static";left=232;top=14;right=680;bottom=42;font=LOGFONT(h=-16;name='Microsoft YaHei';weight=700);z=1}
 )
 /*}}*/
@@ -46,7 +46,7 @@ var NAV_SEL = m3theme.SIDEBAR_SEL;
 var FOOT_BG = m3theme.FOOTER;
 var DIVIDE = m3theme.DIVIDE;
 
-var FOOT_TOP = 516;
+var FOOT_TOP = 508;   // 底部条 52px：提示可能有两行
 
 winform.add({
 	cls = "bkplus"; left = 0; top = 0; right = 200; bottom = FOOT_TOP;
@@ -1359,10 +1359,10 @@ btnAuto.oncommand = function(id, event) {
 
 	mark_dirty();
 
-	var why = "按物理内存的 1/4 加已装 " ++ r.mods ++ " 个 Mod 估算："
-		++ r.memory ++ " MB（本机共 " ++ r.total ++ " MB，当前可用 " ++ r.avail ++ " MB）";
+	var why = "按内存 1/4 + " ++ r.mods ++ " 个 Mod 估算：" ++ r.memory ++ " MB"
+		++ "（本机 " ++ r.total ++ " MB，可用 " ++ r.avail ++ " MB）。";
 
-	if (r.capped) why = why ++ "。受当前可用内存限制，已下调。";
+	if (r.capped) why = why ++ "受可用内存限制，已下调。";
 
 	winform.lblHint.text = why;
 }
