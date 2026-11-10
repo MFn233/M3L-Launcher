@@ -313,8 +313,11 @@ namespace MMMLC{
 				native_jar = jar;
 			}
 		}
-		elseif (#parted >= 3) {
-			//个别 JSON 不写 downloads，只能按坐标推路径
+
+		//downloads 里没有 artifact.path 时，按坐标推标准 maven 路径，文件在就用。
+		//不少自定义加载器的 JSON 就是这样（例如 cleanroom 只写 name 不写 downloads），
+		//漏掉这种条目会丢关键库，表现为 ClassNotFoundException 找不到 tweaker。
+		if (!jar and #parted >= 3) {
 			jar = library_path(minecraft_dir, maven_relative_path(parted));
 		}
 
