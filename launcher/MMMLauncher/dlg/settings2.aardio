@@ -310,6 +310,7 @@ SP.y = SP.y + 260 + 8;
 
 var editPathName, btnPathRename = SP.row("名称", { cls = "edit" }, "重命名");
 var path_tools = SP.tool_row({"添加"; "删除"; "刷新"}, {"设为当前"; "打开目录"});
+var lblPathHint = SP.text("", true);
 
 SP.finish();
 
@@ -359,6 +360,7 @@ SV.y = SV.y + 260 + 8;
 
 var editVerNew, btnVerRename = SV.row("新名称", { cls = "edit" }, "重命名");
 var ver_tools = SV.tool_row({"切换隔离"; "删除"; "刷新"}, {"设为当前"; "打开目录"});
+var lblVerHint = SV.text("", true);
 
 SV.finish();
 
@@ -369,20 +371,6 @@ for k, c in SP.controls {
 for k, c in SV.controls {
 	table.push(P5.controls, c);
 }
-
-// 提示行共用（不属于任何一个子页，切子页时保持可见）
-var lblP5Hint = winform.add({
-	cls = "static";
-	text = "";
-	left = 232;
-	top = 468;
-	right = 736;
-	bottom = 468 + 18;
-	font = LOGFONT(name='Microsoft YaHei'; h=-11);
-});
-
-m3theme.note(lblP5Hint);
-table.push(P5.controls, lblP5Hint);
 
 // ---------- 子页切换 ----------
 
@@ -427,14 +415,12 @@ subPathBtn.oncommand = function(id, event) {
 	if (sub_current == 1) return;
 
 	sub_select(1);
-	lblP5Hint.text = "游戏路径共 " ++ #cfg.game_paths ++ " 条。官方目录不能删除。";
 }
 
 subVerBtn.oncommand = function(id, event) {
 	if (sub_current == 2) return;
 
 	sub_select(2);
-	lblP5Hint.text = ver_hint_text();
 }
 
 sub_apply();
@@ -1246,7 +1232,7 @@ function paths_render() {
 		else path_selected = null;
 	}
 
-	lblP5Hint.text = "游戏路径共 " ++ #cfg.game_paths ++ " 条。官方目录不能删除。";
+	lblPathHint.text = "游戏路径共 " ++ #cfg.game_paths ++ " 条。官方目录不能删除。";
 }
 
 function path_index() {
@@ -1283,7 +1269,7 @@ path_tools.left[1].oncommand = function(id, event) {
 
 	for i, p in cfg.game_paths {
 		if (p.dir == dir) {
-			lblP5Hint.text = "此游戏路径已在列表当中。";
+			lblPathHint.text = "此游戏路径已在列表当中。";
 			return;
 		}
 	}
@@ -1294,20 +1280,20 @@ path_tools.left[1].oncommand = function(id, event) {
 
 	m3config.save_keys(cfg, {"game_paths"; "game_path"});
 	paths_render();
-	lblP5Hint.text = "已添加路径：" ++ dir;
+	lblPathHint.text = "已添加路径：" ++ dir;
 }
 
 // 删除路径
 path_tools.left[2].oncommand = function(id, event) {
 	var i = path_index();
 	if (i == 0) {
-		lblP5Hint.text = "请先选择一条游戏路径。";
+		lblPathHint.text = "请先选择一条游戏路径。";
 		return;
 	}
 
 	var p = cfg.game_paths[i];
 	if (p.official) {
-		lblP5Hint.text = "官方目录不允许删除。";
+		lblPathHint.text = "官方目录不允许删除。";
 		return;
 	}
 
@@ -1336,34 +1322,34 @@ path_tools.left[2].oncommand = function(id, event) {
 	m3config.save_keys(cfg, {"game_paths"; "game_path"});
 	paths_render();
 	vers_render();
-	lblP5Hint.text = "已删除路径：" ++ show_name;
+	lblPathHint.text = "已删除路径：" ++ show_name;
 }
 
 // 重命名路径
 btnPathRename.oncommand = function(id, event) {
 	var i = path_index();
 	if (i == 0) {
-		lblP5Hint.text = "请先选择一条游戏路径。";
+		lblPathHint.text = "请先选择一条游戏路径。";
 		return;
 	}
 
 	var name = string.trim(editPathName.text);
 	if (#name == 0) {
-		lblP5Hint.text = "请先填写名称。";
+		lblPathHint.text = "请先填写名称。";
 		return;
 	}
 
 	cfg.game_paths[i].name = name;
 	m3config.save_keys(cfg, {"game_paths"; "game_path"});
 	paths_render();
-	lblP5Hint.text = "已重命名为：" ++ name;
+	lblPathHint.text = "已重命名为：" ++ name;
 }
 
 // 设为当前路径
 path_tools.right[1].oncommand = function(id, event) {
 	var i = path_index();
 	if (i == 0) {
-		lblP5Hint.text = "请先选择一条游戏路径。";
+		lblPathHint.text = "请先选择一条游戏路径。";
 		return;
 	}
 
@@ -1379,27 +1365,27 @@ path_tools.right[1].oncommand = function(id, event) {
 	m3config.save_keys(cfg, {"game_path"; "version"});
 	paths_render();
 	vers_render();
-	lblP5Hint.text = "当前游戏路径：" ++ cfg.game_path;
+	lblPathHint.text = "当前游戏路径：" ++ cfg.game_path;
 }
 
 // 刷新：重读配置再重画（外部改过 config 或磁盘上的版本目录时用）
 path_tools.left[3].oncommand = function(id, event) {
 	cfg = m3config.read();
 	paths_render();
-	lblP5Hint.text = "已刷新。游戏路径共 " ++ #cfg.game_paths ++ " 条。";
+	lblPathHint.text = "已刷新。游戏路径共 " ++ #cfg.game_paths ++ " 条。";
 }
 
 // 打开所选路径
 path_tools.right[2].oncommand = function(id, event) {
 	var i = path_index();
 	if (i == 0) {
-		lblP5Hint.text = "请先选择一条游戏路径。";
+		lblPathHint.text = "请先选择一条游戏路径。";
 		return;
 	}
 
 	var dir = cfg.game_paths[i].dir;
 	if (!io.exist(dir)) {
-		lblP5Hint.text = "该目录已被删除或迁移：" ++ dir;
+		lblPathHint.text = "该目录已被删除或迁移：" ++ dir;
 		return;
 	}
 
@@ -1499,7 +1485,7 @@ function vers_render() {
 		else ver_selected = null;
 	}
 
-	lblP5Hint.text = ver_hint_text();
+	lblVerHint.text = ver_hint_text();
 }
 
 // 版本页的提示文字（子页按钮也要用，所以做成全局函数：
@@ -1529,21 +1515,21 @@ listVers.onSelChanged = function(sel, item, subItem, nm) {
 ver_tools.right[1].oncommand = function(id, event) {
 	var name = ver_current();
 	if (!name) {
-		lblP5Hint.text = "请先选择一个版本。";
+		lblVerHint.text = "请先选择一个版本。";
 		return;
 	}
 
 	cfg.version = name;
 	m3config.save_keys(cfg, {"version"});
 	vers_render();
-	lblP5Hint.text = "已设为当前版本：" ++ short_name(name);
+	lblVerHint.text = "已设为当前版本：" ++ short_name(name);
 }
 
 // 切换隔离
 ver_tools.left[1].oncommand = function(id, event) {
 	var name = ver_current();
 	if (!name) {
-		lblP5Hint.text = "请先选择一个版本。";
+		lblVerHint.text = "请先选择一个版本。";
 		return;
 	}
 
@@ -1557,10 +1543,10 @@ ver_tools.left[1].oncommand = function(id, event) {
 	vers_render();
 
 	if (is_isolated(name)) {
-		lblP5Hint.text = short_name(name) ++ "：开启隔离（用 versions" ++ '\\' ++ short_name(name) ++ " 作为游戏目录）";
+		lblVerHint.text = short_name(name) ++ "：开启隔离（用 versions" ++ '\\' ++ short_name(name) ++ " 作为游戏目录）";
 	}
 	else {
-		lblP5Hint.text = short_name(name) ++ "：关闭隔离（与其它版本共用 .minecraft 根目录）";
+		lblVerHint.text = short_name(name) ++ "：关闭隔离（与其它版本共用 .minecraft 根目录）";
 	}
 }
 
@@ -1631,13 +1617,13 @@ function rename_version(old, new) {
 btnVerRename.oncommand = function(id, event) {
 	var name = ver_current();
 	if (!name) {
-		lblP5Hint.text = "请先选择一个版本。";
+		lblVerHint.text = "请先选择一个版本。";
 		return;
 	}
 
 	var new_name = string.trim(editVerNew.text);
 	if (#new_name == 0 or new_name == name) {
-		lblP5Hint.text = "请输入一个新名字。";
+		lblVerHint.text = "请输入一个新名字。";
 		return;
 	}
 
@@ -1645,24 +1631,24 @@ btnVerRename.oncommand = function(id, event) {
 	var bad_chars = '\\/:*?"<>|';
 	for i = 1; #bad_chars; 1 {
 		if (string.indexOf(new_name, string.slice(bad_chars, i, i))) {
-			lblP5Hint.text = '版本名里不可包含 \\ / : * ? " < > | 。';
+			lblVerHint.text = '版本名里不可包含 \\ / : * ? " < > | 。';
 			return;
 		}
 	}
 
 	var limit = max_name_length();
 	if (limit <= 0) {
-		lblP5Hint.text = "游戏目录路径太长，无法重命名版本。";
+		lblVerHint.text = "游戏目录路径太长，无法重命名版本。";
 		return;
 	}
 	if (#new_name > limit) {
-		lblP5Hint.text = "名称过长：当前游戏目录下最多 " ++ limit ++ " 字符（Windows 路径上限 260）。";
+		lblVerHint.text = "名称过长：当前游戏目录下最多 " ++ limit ++ " 字符（Windows 路径上限 260）。";
 		return;
 	}
 
 	var ok, err = rename_version(name, new_name);
 	if (!ok) {
-		lblP5Hint.text = "重命名失败：" ++ err;
+		lblVerHint.text = "重命名失败：" ++ err;
 		return;
 	}
 
@@ -1679,14 +1665,14 @@ btnVerRename.oncommand = function(id, event) {
 
 	m3config.save_keys(cfg, {"version"; "shared"});
 	vers_render();
-	lblP5Hint.text = "已重命名为：" ++ short_name(new_name);
+	lblVerHint.text = "已重命名为：" ++ short_name(new_name);
 }
 
 // 删除版本（移到回收站）
 ver_tools.left[2].oncommand = function(id, event) {
 	var name = ver_current();
 	if (!name) {
-		lblP5Hint.text = "请先选择一个版本。";
+		lblVerHint.text = "请先选择一个版本。";
 		return;
 	}
 
@@ -1696,12 +1682,12 @@ ver_tools.left[2].oncommand = function(id, event) {
 
 	var dir = io.joinpath(cfg.game_path, "versions", name);
 	if (!dir) {
-		lblP5Hint.text = "路径太长，无法删除该版本。";
+		lblVerHint.text = "路径太长，无法删除该版本。";
 		return;
 	}
 
 	if (!fsys.delete(dir, true)) {
-		lblP5Hint.text = "删除失败，游戏可能正在运行。";
+		lblVerHint.text = "删除失败，游戏可能正在运行。";
 		return;
 	}
 
@@ -1713,27 +1699,27 @@ ver_tools.left[2].oncommand = function(id, event) {
 
 	m3config.save_keys(cfg, {"version"; "shared"});
 	vers_render();
-	lblP5Hint.text = "已删除版本：" ++ short_name(name);
+	lblVerHint.text = "已删除版本：" ++ short_name(name);
 }
 
 // 刷新：重读配置与磁盘上的版本目录
 ver_tools.left[3].oncommand = function(id, event) {
 	cfg = m3config.read();
 	vers_render();
-	lblP5Hint.text = "已刷新。" ++ ver_hint_text();
+	lblVerHint.text = "已刷新。" ++ ver_hint_text();
 }
 
 // 打开所选版本的文件夹
 ver_tools.right[2].oncommand = function(id, event) {
 	var name = ver_current();
 	if (!name) {
-		lblP5Hint.text = "请先选择一个版本。";
+		lblVerHint.text = "请先选择一个版本。";
 		return;
 	}
 
 	var dir = io.joinpath(cfg.game_path, "versions", name);
 	if (!io.exist(dir)) {
-		lblP5Hint.text = "此版本目录已被删除或迁移。";
+		lblVerHint.text = "此版本目录已被删除或迁移。";
 		return;
 	}
 
