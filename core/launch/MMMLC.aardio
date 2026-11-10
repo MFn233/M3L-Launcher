@@ -550,6 +550,19 @@ namespace MMMLC{
 			}
 		}
 
+		//模组环境的标准参数：前两个让 FML 放行签名检查（否则报 missing signature data），
+		//第三个关掉 log4j 的 ${} 查找替换（Log4Shell）。用户自己写了就不再重复加。
+		for i, flag in {
+			"-Dfml.ignoreInvalidMinecraftCertificates=true";
+			"-Dfml.ignorePatchDiscrepancies=true";
+			"-Dlog4j2.formatMsgNoLookups=true";
+		} {
+			var tag = string.match(flag, "^[^=]+");
+			if (!has_token_prefix(args, tag ++ "=") and !has_token_prefix(extra, tag ++ "=")) {
+				table.push(args, flag);
+			}
+		}
+
 		if (!has_token_prefix(args, "-Djava.library.path=")) {
 			table.push(args, "-Djava.library.path=" + info.natives);
 		}
@@ -591,6 +604,8 @@ namespace MMMLC{
 			table.push(game_args, "--height");
 			table.push(game_args, tostring(opts.height));
 		}
+
+		game_args = order_tweak_classes(game_args);
 
 		for i, a in game_args { table.push(args, a); }
 
@@ -746,6 +761,55 @@ namespace MMMLC{
 			}
 
 			if (!dup) table.push(out, a);
+		}
+
+		return out;
+	}
+
+	//--tweakClass 的顺序会影响"谁是主 tweak"。
+	//Forge + LiteLoader + OptiFine 的组合里 FML 必须排第一：
+	//排第二之后 FML 就不算主 tweak，加载管线走岔，
+	//表现为进游戏第一帧就 NPE at Profiler.func_76320_a（踩过）。
+	//做法：把 tweakClass 成对摘出来，按 FML → LiteLoader → 其它 的顺序放到最后，
+	//其余参数保持原顺序。
+	function order_tweak_classes(args) {
+		var rest = {};
+		var fml = {};
+		var lite = {};
+		var other = {};
+
+		var i = 1;
+		while (i <= #args) {
+			var a = args[i];
+
+			if (a == "--tweakClass" and args[i + 1]) {
+				var cls = args[i + 1];
+
+				if (string.indexOf(cls, "fml.common.launcher.FMLTweaker")) table.push(fml, cls);
+				elseif (string.indexOf(cls, "liteloader.launch.LiteLoaderTweaker")) table.push(lite, cls);
+				else table.push(other, cls);
+
+				i = i + 2;
+			}
+			else {
+				table.push(rest, a);
+				i = i + 1;
+			}
+		}
+
+		var out = rest;
+
+		for i, cls in fml {
+			table.push(out, "--tweakClass");
+			table.push(out, cls);
+		}
+		for i, cls in lite {
+			table.push(out, "--tweakClass");
+			table.push(out, cls);
+		}
+		for i, cls in other {
+			table.push(out, "--tweakClass");
+			table.push(out, cls);
 		}
 
 		return out;
