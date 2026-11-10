@@ -54,50 +54,31 @@ namespace m3zip {
 		var cands = {};
 
 		for i, n in names {
-			var base = ..string.lower(base_of(n));
-			var bytes = {};
-
-			for b = 1; #base; 1 {
-				bytes[b] = base[b];
-			}
-
-			..table.push(cands, { key = ..string.lower(base_of(n)); len = #base; bytes = bytes });
+			..table.push(cands, { name = ..string.lower(base_of(n)) });
 		}
 
 		return cands;
 	}
 
-	// 在中央目录的某一条上，判断"条目名的最后一段"是否命中候选
-	// 返回命中的 key（文件名小写）或 null
+	// 用**有界** slice 取"条目名最后一段"，再小写比较。
+	// 之前按字节比：`base[b]` 拿到的可能不是数字而是字符，比较恒不相等，
+	// 于是所有包都匹配不上（probe 显示中央目录本身是好的，坏在比对）。
 	function match_cand(cd, nameStart, nameLen, cands) {
 		for ci, c in cands {
-			var lenC = c.len;
+			var lenC = #c.name;
 			if (nameLen < lenC) continue;
 
 			var start = nameStart + nameLen - lenC;
-			var ok = true;
-
-			for b = 1; lenC; 1 {
-				var v = cd[start + b - 1] or 0;
-
-				// 比较前统一转小写（ZIP 里 MANIFEST.MF 是大写）
-				if (v >= 65 and v <= 90) v = v + 32;
-
-				if (v != c.bytes[b]) {
-					ok = false;
-					break;
-				}
-			}
-
-			if (!ok) continue;
 
 			// 前面必须是路径分隔符（否则 "mymods.toml" 也会命中）
 			if (nameLen > lenC) {
-				var prev = cd[start - 1] or 0;
-				if (prev != 47/*'/'*/ and prev != 92/*'\'*/) continue;
+				var prev = ..string.slice(cd, start - 1, start - 1, false);
+				if (prev != "/" and prev != '\\') continue;
 			}
 
-			return c.key;
+			var tail = ..string.lower(..string.slice(cd, start, start + lenC - 1, false));
+
+			if (tail == c.name) return c.name;
 		}
 
 		return null;
@@ -176,6 +157,13 @@ namespace m3zip {
 		if (cd) {
 			d.b1 = cd[1]; d.b2 = cd[2]; d.b3 = cd[3]; d.b4 = cd[4];
 			d.firstEntrySig = tostring(d.b1) ++ "," ++ tostring(d.b2) ++ "," ++ tostring(d.b3) ++ "," ++ tostring(d.b4);
+
+			// 第一条的条目名：验证 slice(…, …, false) 的字节语义
+			var nl = u16(cd, 1 + 28);
+
+			if (nl > 0 and nl < 300) {
+				d.firstName = ..string.slice(cd, 1 + 46, 1 + 46 + nl - 1, false);
+			}
 		}
 
 		file.close();

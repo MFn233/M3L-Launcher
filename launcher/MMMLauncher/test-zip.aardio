@@ -78,10 +78,10 @@ for di, dir in dirs {
 			probe_n = probe_n + 1;
 
 			var d = m3zip.probe(fullpath);
-			table.push(out, string.format("      probe: total=%s tailLen=%s seekRet=%s tailRead=%s at=%s count=%s cdSize=%s cdOff=%s seekRet2=%s cdRead=%s sig=%s err=%s",
-				tostring(d.total), tostring(d.tailLen), tostring(d.seekRet), tostring(d.tailRead),
-				tostring(d.at), tostring(d.count), tostring(d.cdSize), tostring(d.cdOff),
-				tostring(d.seekRet2), tostring(d.cdRead), tostring(d.firstEntrySig), tostring(d.err)));
+			table.push(out, string.format("      probe: total=%s at=%s count=%s cdSize=%s cdOff=%s cdRead=%s sig=%s name=[%s] err=%s",
+				tostring(d.total), tostring(d.at), tostring(d.count),
+				tostring(d.cdSize), tostring(d.cdOff), tostring(d.cdRead),
+				tostring(d.firstEntrySig), tostring(d.firstName), tostring(d.err)));
 		}
 	}, false);
 }
