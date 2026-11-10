@@ -101,22 +101,6 @@ namespace m3theme {
 	// 滑条。plus 的滑块形状只看 border.radius：
 	//   <0 画正圆、>0 画圆角矩形、没有就画方块。
 	// 三个状态必须都写死，否则鼠标移入移出后形状会变不回来。
-	// 进度条：细长条，不响应拖动（调用方自己复位位置）
-	function progress(ctrl) {
-		if (!ctrl) return;
-
-		ctrl.skin({
-			background = { default = TRACK };
-			foreground = { default = INK };
-			color = { default = INK };
-			border = {
-				default = { radius = 0 };
-				hover = { radius = 0 };
-				active = { radius = 0 };
-			};
-		});
-	}
-
 	function slider(ctrl) {
 		if (!ctrl) return;
 

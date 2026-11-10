@@ -608,21 +608,33 @@ PM.y = PM.y + 236 + 8;
 
 var mod_tools = PM.tool_row({"启用"; "删除"; "刷新"}, {"打开目录"});
 
-// 扫描进度：细条，只在"正在读元数据"时出现
-var progMods = PM.make({
-	cls = "plus";
+// 扫描进度：轨道 + 填充两根 static。
+// 不用 plus 的 trackbar——它自带滑块，用户能拖；static 没有交互，拖不动。
+var PROG_H = 4;
+var PROG_GAP = 8;
+
+var progTrack = PM.make({
+	cls = "static";
 	left = PM.left;
 	top = PM.y;
 	right = PM.right;
-	bottom = PM.y + 5;
+	bottom = PM.y + PROG_H;
+	bgcolor = m3theme.C_LINE;
 });
 
-m3theme.progress(progMods);
-progMods.setTrackbarRange(0, 100);
-progMods.progressPos = 0;
-progMods.visible = false;
+var progFill = PM.make({
+	cls = "static";
+	left = PM.left;
+	top = PM.y;
+	right = PM.left + 1;
+	bottom = PM.y + PROG_H;
+	bgcolor = m3theme.C_INK;
+});
 
-PM.y = PM.y + 5 + 4;
+progTrack.visible = false;
+progFill.visible = false;
+
+PM.y = PM.y + PROG_H + PROG_GAP;
 
 var lblModHint = PM.text("", true);
 
@@ -701,15 +713,25 @@ function pv_sync_enabled() {
 function pv_fill_versions() {
 	var names = list_version_names();
 
+	// 当前版本排最前：下拉列表展开时会自动滚到"选中项"，
+	// 它要是在中间，前面那些版本就被滚出视野了（用户以为"版本不见了"）。
+	var ordered = {};
+	if (cfg.version and has_version(cfg.game_path, cfg.version)) {
+		table.push(ordered, cfg.version);
+	}
+	for i, name in names {
+		if (name != cfg.version) table.push(ordered, name);
+	}
+
 	comboOptVer.clear();
 	pv_versions = {};
 
-	for i, name in names {
+	for i, name in ordered {
 		comboOptVer.add(name);
 		table.push(pv_versions, name);
 	}
 
-	return names;
+	return ordered;
 }
 
 // 把某个版本的值填进控件（先看有没有待保存的覆盖，再看磁盘上的文件）
@@ -910,15 +932,31 @@ function mod_btn_update() {
 var mod_scan_gen = 0;     // 每次重画 +1，用来作废旧任务
 var mod_scan_done = 0;    // 已完成数（进度条被误拖时用它复位）
 
-function mod_scan_cancel() {
-	mod_scan_gen = mod_scan_gen + 1;
+// 进度条：显得/更新/收起
+function mod_prog_show(total) {
+	progFill.width = 1;
+	progTrack.visible = true;
+	progFill.visible = true;
 }
 
-// 进度条不是滑条：用户点了就复位，别让人以为能拖
-progMods.onPosChanged = function(pos, byUser) {
-	if (!byUser) return;
+function mod_prog_update(done, total) {
+	if (total <= 0) return;
 
-	progMods.progressPos = mod_scan_done;
+	var full = progTrack.width;
+	var w = ..math.floor(full * done / total);
+	if (w < 0) w = 0;
+	if (w > full) w = full;
+
+	progFill.width = w;
+}
+
+function mod_prog_hide() {
+	progTrack.visible = false;
+	progFill.visible = false;
+}
+
+function mod_scan_cancel() {
+	mod_scan_gen = mod_scan_gen + 1;
 }
 
 function mods_render() {
@@ -932,7 +970,7 @@ function mods_render() {
 	mod_scan_done = 0;
 
 	if (!pv_current) {
-		progMods.visible = false;
+		mod_prog_hide();
 		lblModHint.text = "请先在设置窗口里选择游戏路径。";
 		m3list.renumber(listMods);
 		mod_btn_update();
@@ -942,7 +980,7 @@ function mods_render() {
 	var dir = m3mod.dir_of(cfg, pv_current);
 
 	if (!dir or !io.exist(dir)) {
-		progMods.visible = false;
+		mod_prog_hide();
 		lblModHint.text = "此版本没有 mods 文件夹：" ++ tostring(dir);
 		m3list.renumber(listMods);
 		mod_btn_update();
@@ -967,15 +1005,14 @@ function mods_render() {
 	m3list.renumber(listMods);
 
 	if (#mod_rows == 0) {
-		progMods.visible = false;
+		mod_prog_hide();
 		lblModHint.text = "此版本未安装 Mod。";
 		mod_btn_update();
 		return;
 	}
 
-	progMods.setTrackbarRange(0, #mod_rows);
-	progMods.progressPos = 0;
-	progMods.visible = true;
+	mod_prog_show(#mod_rows);
+	mod_prog_update(0, #mod_rows);
 
 	lblModHint.text = "正在读取 Mod 信息… 0/" ++ #mod_rows;
 
@@ -1010,14 +1047,14 @@ function mods_render() {
 		}
 
 		mod_scan_done = i - 1;
-		progMods.progressPos = mod_scan_done;
+		mod_prog_update(mod_scan_done, #mod_rows);
 
 		if (i <= #mod_rows) {
 			lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
 			winform.setTimeout(step, 20);
 		}
 		else {
-			progMods.visible = false;
+			mod_prog_hide();
 			mods_render_final();
 		}
 	};
@@ -1027,7 +1064,7 @@ function mods_render() {
 
 // 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
 function mods_render_final() {
-	progMods.visible = false;
+	mod_prog_hide();
 	listMods.clear();
 	mod_rows = {};
 
