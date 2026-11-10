@@ -609,8 +609,34 @@ PM.y = PM.y + 236 + 8;
 
 var mod_tools = PM.tool_row({"启用"; "删除"; "刷新"}, {"打开目录"});
 
-// 扫描进度条已删除：实测它对速度没有帮助，反而每次改宽度都要重画。
-// 现在扫描期间只显示一行提示，结果一次性铺进列表。
+// 扫描进度：轨道 + 填充两根 static。
+// 不用 plus 的 trackbar——它自带滑块、用户能拖；static 没有交互，拖不动。
+// 读取已经压到毫秒级，这里只是给"逐条补全"一个可见的进度。
+var PROG_H = 4;
+var PROG_GAP = 8;
+
+var progTrack = PM.make({
+	cls = "static";
+	left = PM.left;
+	top = PM.y;
+	right = PM.right;
+	bottom = PM.y + PROG_H;
+	bgcolor = m3theme.C_LINE;
+});
+
+var progFill = PM.make({
+	cls = "static";
+	left = PM.left;
+	top = PM.y;
+	right = PM.left + 1;
+	bottom = PM.y + PROG_H;
+	bgcolor = m3theme.C_INK;
+});
+
+progTrack.visible = false;
+progFill.visible = false;
+
+PM.y = PM.y + PROG_H + PROG_GAP;
 
 var lblModHint = PM.text("", true);
 
@@ -952,9 +978,32 @@ function mod_fill_row(idx, meta) {
 	if (#m.title == 0) m.title = m.name;
 	if (#m.mver == 0) m.mver = "-";
 
-	// 这里**不**改列表：每改一格都会触发整表重绘，
-	// 157 行 × 5 列走自定义绘制就是分钟级。扫描只推进度，
-	// 最后由 mods_render_final() 一次性填充。
+	// 就地只改两格（不重排）：先铺文件名、再逐条补全真名就是这个效果
+	listMods.setItemText(m.title, idx, 2);
+	listMods.setItemText(m.mver, idx, 3);
+}
+
+// 进度条：显示 / 更新 / 收起
+function mod_prog_show(total) {
+	progFill.width = 1;
+	progTrack.visible = true;
+	progFill.visible = true;
+}
+
+function mod_prog_update(done, total) {
+	if (total <= 0) return;
+
+	var full = progTrack.width;
+	var w = ..math.floor(full * done / total);
+	if (w < 1) w = 1;
+	if (w > full) w = full;
+
+	progFill.width = w;
+}
+
+function mod_prog_hide() {
+	progTrack.visible = false;
+	progFill.visible = false;
 }
 
 // 扫描结果先落盘（mod-scan.txt），再读回来一次性显示。
@@ -1002,22 +1051,33 @@ function mods_render() {
 
 	var list = m3mod.scan(dir);
 
-	for i, m in list {
-		m.modid = "";
-		m.title = m.name;
-		m.mver = "-";
+	// 先把列表铺出来（名字先用文件名），再逐条补全真名。
+	// 一次性 addItem 比"边读边插行"稳，且不会让行号乱跳。
+	m3layout.batched(winform, function() {
+		for i, m in list {
+			m.modid = "";
+			m.title = m.name;
+			m.mver = "-";
+			m.err = "";
+			m.tried = "";
 
-		table.push(mod_rows, m);
-	}
+			var status = "启用";
+			if (!m.enabled) status = "禁用";
+
+			listMods.addItem({ ""; m.title; m.mver; m.file; status });
+			table.push(mod_rows, m);
+		}
+
+		m3list.renumber(listMods);
+	});
 
 	if (#mod_rows == 0) {
 		lblModHint.text = "此版本未安装 Mod。";
-		m3list.renumber(listMods);
 		mod_btn_update();
 		return;
 	}
 
-	// 缓存里有的先用上，剩下的排队
+	// 缓存里有的先填上（第二次进页面基本全命中），剩下的排队
 	for i, m in mod_rows {
 		var meta = m3mod.cache_peek(m.path);
 
@@ -1030,13 +1090,17 @@ function mods_render() {
 		}
 	}
 
+	mod_prog_show(#mod_rows);
+	mod_prog_update(mod_scan_done, #mod_rows);
+
 	if (#mod_todo == 0) {
+		mod_prog_hide();
 		mod_write_scan_file(dir);
-		mod_show_scan_file();
+		mods_render_final();
 		return;
 	}
 
-	lblModHint.text = "正在读取 Mod 信息…";
+	lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
 
 	var at = 1;
 	var t_start = ..time.tick();
@@ -1049,8 +1113,8 @@ function mods_render() {
 	step = function() {
 		if (gen != mod_scan_gen) return;
 
-		// 时间片：一次最多占 50ms，剩下的下一拍继续
-		var deadline = ..time.tick() + 50;
+		// 时间片：一次最多占 40ms，剩下的下一拍继续
+		var deadline = ..time.tick() + 40;
 
 		while (at <= #mod_todo and ..time.tick() < deadline) {
 			var idx = mod_todo[at];
@@ -1073,6 +1137,7 @@ function mods_render() {
 			at = at + 1;
 		}
 
+		mod_prog_update(mod_scan_done, #mod_rows);
 		lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
 
 		if (at <= #mod_todo) {
@@ -1103,8 +1168,9 @@ function mods_render() {
 			st = m3mod.stats_get();
 		};
 
+		mod_prog_hide();
 		mod_write_scan_file(dir);
-		mod_show_scan_file();
+		mods_render_final();
 	};
 
 	step();
@@ -1154,49 +1220,6 @@ function mod_write_scan_file(dir) {
 	}
 }
 
-// 读回临时文件 → 重建 mod_rows → 一次性铺进列表
-function mod_show_scan_file() {
-	var text = null;
-
-	try {
-		text = string.load(mod_scan_file());
-	}
-	catch(e) {
-		text = null;
-	}
-
-	if (!text) {
-		// 读不出来就退化为直接用内存里的结果，别让列表空着
-		mods_render_final();
-		return;
-	}
-
-	var rows = {};
-
-	for line in ..string.gmatch(text, '[^\r\n]+') {
-		if (#line == 0) continue;
-		if (..string.left(line, 1) == "#") continue;
-
-		var f = ..string.split(line, '\t');
-		if (#f < 7) continue;
-
-		table.push(rows, {
-			path = f[1];
-			file = f[2];
-			name = f[3];
-			title = f[4];
-			mver = f[5];
-			modid = f[6];
-			enabled = (f[7] == "1");
-		});
-	}
-
-	mod_rows = rows;
-
-	mods_render_final();
-}
-
-// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
 function mods_render_final() {
 
 	if (#mod_rows == 0) {
