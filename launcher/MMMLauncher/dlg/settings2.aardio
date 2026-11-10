@@ -25,6 +25,7 @@ import sys.mem;
 import fsys;
 import fsys.version;
 import m3app;
+import m3credits;
 import string;
 import math;
 import time;
@@ -1662,20 +1663,24 @@ function credit(text, is_heading) {
 }
 
 function credits_fill() {
-	credit("第三方", true);
-	credit("aardio · 开发工具与运行时");
-	credit("Mojang · Minecraft 本体与版本清单格式");
-	credit("HMCL · 崩溃原因分析规则的参考实现（GPL-3.0）");
-	credit("");
-	credit("实现协作", true);
-	credit("DeepSeek · 代码实现、文档整理与测试");
-	credit("");
-	credit("参与测试", true);
-	credit("煤辰呀 · 多版本启动测试与问题反馈");
-	credit("维夏_Vivia · 多版本启动测试与问题反馈");
-	credit("");
-	credit("本项目为个人非营利项目，与上述公司、项目无隶属关系。", true);
-	credit("「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。", true);
+	//正文在 lib/m3credits.aardio 里，改名单只改那个文件
+	var sections = m3credits.SECTIONS;
+
+	for i, s in sections {
+		credit(s.title, true);
+
+		for j, line in s.items {
+			credit(line);
+		}
+
+		credit("");
+	}
+
+	var notes = m3credits.NOTES;
+
+	for i, line in notes {
+		credit(line, true);
+	}
 }
 
 P7.finish();
