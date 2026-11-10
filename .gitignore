@@ -15,6 +15,7 @@ launcher/MMMLauncher/config.json
 launcher/MMMLauncher/config.txt
 launcher/MMMLauncher/config.pending.json
 launcher/MMMLauncher/mod-meta-cache.json
+launcher/MMMLauncher/mod-diag.txt
 
 # 临时文件
 *.tmp
