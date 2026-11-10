@@ -43,6 +43,53 @@ namespace m3config{
 		if (io.exist(f)) fsys.delete(f);
 	}
 
+
+	// ---------- 版本隔离 ----------
+	//
+	// 键必须是「游戏目录 + 版本名」：只用版本名的话，
+	// 不同 .minecraft 里同名版本的隔离状态会互相干扰（踩过）。
+	// 表里只记「关掉隔离」的版本（值恒为 true），没有记录 = 隔离。
+
+	function shared_key(minecraft_dir, name) {
+		return string.lower(minecraft_dir or "") ++ "|" ++ (name or "");
+	}
+
+	function is_isolated(cfg, minecraft_dir, name) {
+		if (!cfg.shared) return true;
+		if (cfg.shared[shared_key(minecraft_dir, name)]) return false;
+		return true;
+	}
+
+	function set_isolated(cfg, minecraft_dir, name, boolIsolated) {
+		cfg.shared = cfg.shared or {};
+
+		var k = shared_key(minecraft_dir, name);
+		if (boolIsolated) cfg.shared[k] = null;
+		else cfg.shared[k] = true;
+	}
+
+	// 旧配置里 shared 的键是裸版本名，迁到当前游戏目录上
+	function normalize_shared(cfg) {
+		cfg.shared = cfg.shared or {};
+
+		var out = {};
+		var changed = false;
+
+		for k, v in cfg.shared {
+			if (!v) continue;
+
+			if (string.indexOf(k, "|")) {
+				out[k] = true;
+			}
+			else {
+				out[shared_key(cfg.game_path, k)] = true;
+				changed = true;
+			}
+		}
+
+		if (changed) cfg.shared = out;
+	}
+
 	// 官方 .minecraft 目录（不允许删除的那一个）
 	function official_dir() {
 		var appdata = string.getenv("APPDATA");
@@ -154,6 +201,7 @@ namespace m3config{
 			cfg = migrate_from_txt(cfg);
 			ensure_official(cfg);
 			normalize_accounts(cfg);
+			normalize_shared(cfg);
 			save(cfg);
 			return cfg;
 		}
@@ -190,6 +238,7 @@ namespace m3config{
 		}
 
 		normalize_accounts(cfg);
+		normalize_shared(cfg);
 		return cfg;
 	}
 

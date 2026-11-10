@@ -490,9 +490,9 @@ function start_game(retried, inst) {
 	}
 
 	// 版本隔离：默认每个版本用自己的目录（versions\<版本>）；
-	// shared 里记着「关掉隔离」的版本，它们改用 .minecraft 根目录
-	var isolated = true;
-	if (cfg.shared and cfg.shared[cfg.version]) isolated = false;
+	// 关掉隔离的版本改用 .minecraft 根目录。判断要带上游戏目录，
+	// 否则不同 .minecraft 里的同名版本会共用同一份设置。
+	var isolated = m3config.is_isolated(cfg, cfg.game_path, cfg.version);
 
 	var work_dir = isolated
 		? io.joinpath(cfg.game_path, "versions", cfg.version)
