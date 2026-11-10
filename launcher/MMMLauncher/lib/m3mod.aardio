@@ -289,6 +289,11 @@ namespace m3mod {
 		out.name = ..tostring(mod.displayName or mod.displayname or "");
 		out.version = ..tostring(mod.version or "");
 
+		// 有的 mod 写的是构建期模板变量：version="${file.jarVersion}"，
+		// 这种值当空处理，让 MANIFEST 的 Implementation-Version 兜底
+		if (#out.version > 2 and ..string.left(out.version, 2) == "${") out.version = "";
+		if (#out.name > 2 and ..string.left(out.name, 2) == "${") out.name = "";
+
 		return out;
 	}
 

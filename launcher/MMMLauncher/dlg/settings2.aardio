@@ -1000,8 +1000,9 @@ function mod_fill_row(idx, meta) {
 	if (#m.title == 0) m.title = m.name;
 	if (#m.mver == 0) m.mver = "-";
 
-	listMods.setItemText(m.title, idx, 2);
-	listMods.setItemText(m.mver, idx, 3);
+	// 这里**不**改列表：每改一格都会触发整表重绘，
+	// 157 行 × 5 列走自定义绘制就是分钟级。扫描只推进度，
+	// 最后由 mods_render_final() 一次性填充。
 }
 
 // 同步读取，按时间片跑：已缓存的瞬间出结果，没缓存的才开压缩包。
@@ -1121,7 +1122,7 @@ function mods_render() {
 	step();
 }
 
-// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
+// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
 function mods_render_final() {
 	mod_prog_hide();
 
@@ -1163,33 +1164,35 @@ function mods_render_final() {
 
 	table.sort(keys);
 
-	// 一次性重建列表
-	listMods.clear();
-	mod_rows = {};
-	mod_dup_rows = {};
-
+	// 一次性重建列表（关掉中间重绘，最后只画一次）
 	var off = 0;
 
-	for i, k in keys {
-		var m = keyed[k];
+	m3layout.batched(winform, function() {
+		listMods.clear();
+		mod_rows = {};
+		mod_dup_rows = {};
 
-		var status = "启用";
-		if (!m.enabled) {
-			status = "禁用";
-			off = off + 1;
+		for i, k in keys {
+			var m = keyed[k];
+
+			var status = "启用";
+			if (!m.enabled) {
+				status = "禁用";
+				off = off + 1;
+			}
+
+			var dup = (#m.modid > 0 and seen[m.modid] > 1);
+			if (dup) {
+				status = status ++ " 重复";
+				mod_dup_rows[i] = true;
+			}
+
+			listMods.addItem({ ""; m.title; m.mver; m.file; status });
+			table.push(mod_rows, m);
 		}
 
-		var dup = (#m.modid > 0 and seen[m.modid] > 1);
-		if (dup) {
-			status = status ++ " 重复";
-			mod_dup_rows[i] = true;
-		}
-
-		listMods.addItem({ ""; m.title; m.mver; m.file; status });
-		table.push(mod_rows, m);
-	}
-
-	m3list.renumber(listMods);
+		m3list.renumber(listMods);
+	});
 
 	// 选中项按 path 找回
 	if (mod_selected) {
@@ -1295,6 +1298,19 @@ listMods.onnotify = function(id, code, ptr) {
 
 		return 0/*_CDRF_DODEFAULT*/;
 	}
+}
+
+// 当前选中的那一行对应的 Mod（没选中返回 null）
+function mod_current() {
+	var sel = listMods.selIndex;
+	var at = 0;
+
+	if (type(sel) == "table") at = sel[1] or 0;
+	elseif (type(sel) == "number") at = sel;
+
+	if (at < 1) return null;
+
+	return mod_rows[at] or null;
 }
 
 listMods.onSelChanged = function(sel, item, subItem, nm) {
