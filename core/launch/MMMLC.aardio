@@ -96,7 +96,7 @@ namespace MMMLC{
 		info.minecraft_dir = minecraft_dir;
 		info.version_dir = version_dir;
 		info.java_version = info.java_version or 8;
-		info.classpath = dedupe_by_key(info.classpath, info.class_meta);
+		info.classpath, info.class_meta = dedupe_by_key(info.classpath, info.class_meta);
 		info.classpath, info.class_meta = dedupe(info.classpath, info.class_meta);
 
 		//Cleanroom / lwjgl3ify 这类版本用 LWJGL3 + lwjglxx 在 Java 层模拟 LWJGL2。
@@ -183,8 +183,10 @@ namespace MMMLC{
 	//整合包的 JSON 常常先写官方条目、后面再追加一份更高版本（如 log4j 2.8.1 + 2.15.0），
 	//把高版本挪到末尾会改变类加载顺序：实测 1.12.2 上 Forge 的 DeobfuscationTransformer
 	//会因此被判定"重入"并永久停用，随后所有 mixin 的命名类查找失败、启动崩溃。
+	//注意：必须**同时**返回过滤后的 metas，否则 class_meta 与 classpath 会错位，
+	//后面按 meta 判断（比如"有没有 LWJGL3"）就会得出错误结论。
 	function dedupe_by_key(paths, metas) {
-		if (#metas != #paths) return paths;
+		if (#metas != #paths) return paths, metas;
 
 		var first = {};   // key → 第一次出现的下标
 		var best = {};    // key → 版本最高的下标
@@ -200,12 +202,14 @@ namespace MMMLC{
 		}
 
 		var out = {};
+		var out_meta = {};
 		var seen = {};
 
 		for i, p in paths {
 			var m = metas[i];
 			if (!m or !m.key) {
 				table.push(out, p);
+				table.push(out_meta, m);
 				continue;
 			}
 
@@ -213,10 +217,13 @@ namespace MMMLC{
 			seen[m.key] = true;
 
 			//位置用首次出现，实际文件用版本最高的那份
-			table.push(out, paths[best[m.key]] or p);
+			var bi = best[m.key] or i;
+
+			table.push(out, paths[bi] or p);
+			table.push(out_meta, metas[bi] or m);
 		}
 
-		return out;
+		return out, out_meta;
 	}
 
 	//解析单个版本的 JSON，不做继承
