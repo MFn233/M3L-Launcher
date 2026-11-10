@@ -3,8 +3,10 @@
 //日志窗口：一个窗口显示一个会话（一个游戏实例）。
 //主窗口 loadForm 之后调 bind(会话)，这里不自己挂。
 //
-//日志带级别与筛选：正文按级别用不同灰阶（项目只允许黑白灰，不用红/黄），
-//顶部一行筛选按钮带实时计数，点一下只看某一级。
+//要点：
+//1) 按级别上色 + 错误加粗，误差要小（游戏日志的 ERROR/WARN、栈帧都要认出来）；
+//2) 顶部四个筛选按钮带实时计数，切换时整段重设文本，不会残留旧内容；
+//3) 追加只写命中当前筛选的行，但计数始终更新。
 
 import win.ui;
 import m3theme;
@@ -27,20 +29,19 @@ chkAuto={cls="checkbox";text="自动滚动";left=232;top=412;right=340;bottom=43
 )
 /*}}*/
 
-//级别与灰阶：错误最深、调试最浅，全部落在黑白灰里
-var C_FATAL = 0x000000;
-var C_ERROR = 0x101010;
-var C_WARN  = 0x202020;
-var C_INFO  = 0x333333;
+//级别配色：错误用红（这是唯一例外，因为必须一眼看见），其余靠深浅与加粗区分
+var C_FATAL = m3theme.C_RED;
+var C_ERROR = m3theme.C_RED;
+var C_WARN = 0x000000;   // 纯黑 + 加粗
+var C_INFO = 0x333333;
 var C_DEBUG = 0x8C8C8C;
 
-function level_color(lv) {
-	if (lv == "fatal") return C_FATAL;
-	if (lv == "error") return C_ERROR;
-	if (lv == "warn") return C_WARN;
-	if (lv == "debug") return C_DEBUG;
+function level_style(lv) {
+	if (lv == "fatal" or lv == "error") return { textColor = C_ERROR; bold = true };
+	if (lv == "warn") return { textColor = C_WARN; bold = true };
+	if (lv == "debug") return { textColor = C_DEBUG };
 
-	return C_INFO;
+	return { textColor = C_INFO };
 }
 
 winform.editLog.color = C_INFO;
@@ -69,16 +70,54 @@ var MAX_LINES = 5000;
 
 var counts = { fatal = 0; error = 0; warn = 0; info = 0; debug = 0 };
 var filter = "all";
+var last_level = "info";   // 栈帧继承上一行的级别
 
-//日志行自己带前缀（[错误] / [警告] / [提示] / [调试]），直接按前缀判级
+//判断一行是什么级别。
+//除了我们自己的 [错误] [警告] [调试] 前缀，还要认游戏/Forge 原生日志：
+//  [21:22:12] [main/ERROR] [FML]: ...      → error
+//  [21:22:12] [main/WARN]: ...             → warn
+//      at net.minecraft...                  → 跟上一行同级（栈帧）
 function level_of(line, is_error) {
-	if (string.indexOf(line, "[致命]")) return "fatal";
-	if (string.indexOf(line, "[错误]")) return "error";
-	if (string.indexOf(line, "[警告]")) return "warn";
-	if (string.indexOf(line, "[调试]")) return "debug";
-	if (is_error) return "error";
+	var low = string.lower(tostring(line));
+	var lv = null;
 
-	return "info";
+	if (string.indexOf(low, "[致命]") or string.indexOf(low, "fatal")) {
+		lv = "fatal";
+	}
+	elseif (string.indexOf(low, "[错误]")
+		or string.indexOf(low, "/error]")
+		or string.indexOf(low, "[error]")
+		or string.indexOf(low, "error:")
+		or string.indexOf(low, "exception")
+		or string.indexOf(low, "caused by")) {
+		lv = "error";
+	}
+	elseif (string.indexOf(low, "[警告]")
+		or string.indexOf(low, "/warn]")
+		or string.indexOf(low, "[warn]")
+		or string.indexOf(low, "warning")) {
+		lv = "warn";
+	}
+	elseif (string.indexOf(low, "[调试]")
+		or string.indexOf(low, "/debug]")
+		or string.indexOf(low, "[debug]")
+		or string.indexOf(low, "[trace]")) {
+		lv = "debug";
+	}
+	elseif (is_error) {
+		lv = "error";
+	}
+	else {
+		//栈帧与 "..." 续行跟着上一行走
+		var t = string.trim(tostring(line));
+
+		if (string.startsWith(t, "at ") or string.startsWith(t, "...")) lv = last_level;
+		else lv = "info";
+	}
+
+	last_level = lv;
+
+	return lv;
 }
 
 function count_text(label, n) {
@@ -131,18 +170,26 @@ function passed(lv) {
 	return (lv == filter);
 }
 
-//按当前筛选重建全部内容（切筛选、清空后用）
+//按当前筛选重建全部内容。
+//用逐行 appendText（控件自己维护插入点），不用 setSel 手算区间：
+//richedit 的位置是 UTF-16 字符数，而 aardio 的 #s 是字节数，中文行会算错。
 function render_all() {
 	winform.editLog.readonly = false;
-	winform.editLog.text = "";
 
-	//一次贴完，别让它每加一行都重绘
 	::SendMessageInt(winform.editLog.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
+
+	//清两遍：一次 text 置空，一次选中全部删除。richedit 在某些状态下只吃其中一种。
+	winform.editLog.text = "";
+	winform.editLog.setSel(0, -1);
+	winform.editLog.selText = "";
+
+	var shown = 0;
 
 	for i, ln in lines {
 		if (!passed(ln.level)) continue;
 
-		winform.editLog.appendText({ textColor = level_color(ln.level) }, ln.text ++ '\r\n');
+		winform.editLog.appendText(level_style(ln.level), ln.text ++ '\r\n');
+		shown = shown + 1;
 	}
 
 	::SendMessageInt(winform.editLog.hwnd, 0x000B, 1, 0);
@@ -155,9 +202,10 @@ function render_all() {
 
 //给会话用的接口
 winform.append = function(text, is_error) {
-	var lv = level_of(tostring(text), is_error);
+	var line = tostring(text);
+	var lv = level_of(line, is_error);
 
-	table.push(lines, { level = lv; text = tostring(text) });
+	table.push(lines, { level = lv; text = line });
 	counts[lv] = (counts[lv] or 0) + 1;
 
 	//超长会话整段裁掉最老的一批（不用 table.remove 删数组头，会留空洞）
@@ -173,7 +221,7 @@ winform.append = function(text, is_error) {
 
 	if (passed(lv)) {
 		winform.editLog.readonly = false;
-		winform.editLog.appendText({ textColor = level_color(lv) }, tostring(text) ++ '\r\n');
+		winform.editLog.appendText(level_style(lv), line ++ '\r\n');
 		winform.editLog.readonly = true;
 
 		scroll_bottom();
@@ -185,8 +233,12 @@ winform.append = function(text, is_error) {
 winform.clear_all = function() {
 	lines = {};
 	counts = { fatal = 0; error = 0; warn = 0; info = 0; debug = 0 };
+	last_level = "info";
 
+	winform.editLog.readonly = false;
 	winform.editLog.text = "";
+	winform.editLog.readonly = true;
+
 	update_buttons();
 }
 
