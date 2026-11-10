@@ -9,6 +9,8 @@ namespace m3mod {
 	import io;
 	import fsys;
 	import string;
+	import json;
+	import zlib.unzip;
 	import table;     // 命名空间里访问 table.push 必须先 import，否则报 _get table
 	import m3config;
 
@@ -83,6 +85,147 @@ namespace m3mod {
 		}
 
 		return out;
+	}
+
+
+	// ---------- 元数据 ----------
+	//
+	// 只看压缩包里的一两个条目，不解压到磁盘：zlib.unzip(path, false) 是纯内存模式。
+	// 各加载器的元数据位置不一样，按顺序试即可；读不到也不算错误（只是列表里显示文件名）。
+	// 结果按 路径+大小 缓存：同一个 Mod 反复重画列表时不用再开一次压缩包。
+
+	var meta_cache = {};
+
+	function read_first(zip, names) {
+		for i, n in names {
+			if (zip.locate(n)) {
+				var s = zip.readCurrentFile();
+				if (s and #s > 0) return s;
+			}
+		}
+
+		return null;
+	}
+
+	// 有的整合包里的 mcmod.info 不是合法 JSON（带注释、少逗号），
+	// 解析失败只当"读不到元数据"，不能让整个列表崩掉。
+	function safe_json(s) {
+		var t = null;
+
+		try {
+			t = json.parse(s);
+		}
+		catch(e) {
+			t = null;
+		}
+
+		return t;
+	}
+
+	// mods.toml / neoforge.mods.toml：取第一组 modId / displayName / version
+	function parse_toml(text) {
+		var out = {};
+
+		for line in ..string.gmatch(text, "[^\r\n]+") {
+			var k, v = ..string.match(..string.trim(line), '^(%w+)%s*=%s*"([^"]*)"');
+
+			if (!k) continue;
+			if (k == "modId" and #out.modid == 0) out.modid = v;
+			elseif (k == "displayName" and #out.name == 0) out.name = v;
+			elseif (k == "version" and #out.version == 0) out.version = v;
+		}
+
+		return out;
+	}
+
+	// 读一个 Mod 的元数据；失败返回空表（调用方按文件名兜底）
+	function meta_of(path) {
+		if (!path) return {};
+
+		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
+		if (meta_cache[key]) return meta_cache[key];
+
+		var m = { modid = ""; name = ""; version = ""; loader = "" };
+
+		var zip = null;
+
+		try {
+			zip = zlib.unzip(path, false);
+		}
+		catch(e) {
+			zip = null;
+		}
+
+		if (!zip) return m;
+
+		// Fabric / Quilt
+		var s = read_first(zip, {"fabric.mod.json"; "quilt.mod.json"});
+		if (s) {
+			var t = safe_json(s);
+			if (type(t) == "table") {
+				m.loader = "Fabric";
+				m.modid = ..tostring(t.id or "");
+				m.name = ..tostring(t.name or "");
+				m.version = ..tostring(t.version or "");
+			}
+		}
+
+		// Forge 1.13+ / NeoForge
+		if (#m.modid == 0) {
+			s = read_first(zip, {"META-INF/neoforge.mods.toml"; "META-INF/mods.toml"});
+			if (s) {
+				var t = parse_toml(s);
+				m.loader = "Forge";
+				m.modid = ..tostring(t.modid or "");
+				m.name = ..tostring(t.name or "");
+				m.version = ..tostring(t.version or "");
+			}
+		}
+
+		// 1.12.2 及更早
+		if (#m.modid == 0) {
+			s = read_first(zip, {"mcmod.info"});
+			if (s) {
+				var t = safe_json(s);
+
+				// 有的是数组，有的是 { modList = {...} }
+				var first = null;
+				if (type(t) == "table") {
+					if (t.modList and t.modList[1]) first = t.modList[1];
+					elseif (t[1]) first = t[1];
+				}
+
+				if (type(first) == "table") {
+					m.loader = "Forge";
+					m.modid = ..tostring(first.modid or "");
+					m.name = ..tostring(first.name or "");
+					m.version = ..tostring(first.version or "");
+				}
+			}
+		}
+
+		// 兜底：MANIFEST 里的标题与版本
+		if (#m.modid == 0) {
+			s = read_first(zip, {"META-INF/MANIFEST.MF"});
+			if (s) {
+				var title = ..string.match(s, "Implementation%-Title:%s*([^\r\n]+)");
+				var ver = ..string.match(s, "Implementation%-Version:%s*([^\r\n]+)");
+				var id = ..string.match(s, "Implementation%-Vendor%-Id:%s*([^\r\n]+)");
+
+				if (title) m.name = ..string.trim(title);
+				if (ver) m.version = ..string.trim(ver);
+				if (id) {
+					m.modid = ..string.trim(id);
+					m.loader = "Forge";
+				}
+			}
+		}
+
+		zip.close();
+
+		meta_cache[key] = m;
+
+		return m;
 	}
 
 	// 只数启用的（内存估算用：禁用的 Mod 不会被加载）

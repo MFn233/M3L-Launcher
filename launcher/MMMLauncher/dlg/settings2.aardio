@@ -592,10 +592,12 @@ var listMods = PM.make({
 
 listMods.fullRow = true;
 
+// # 由 m3list.setup 补在最前面；这四列 468 + 36 = 504，正好占满
 var mod_cols = {
-	{ "文件名"; 260 };
-	{ "大小"; 80 };
-	{ "状态"; 60 };
+	{ "名字"; 200 };
+	{ "版本"; 90 };
+	{ "文件名"; 130 };
+	{ "状态"; 48 };
 };
 
 m3list.setup(listMods, mod_cols, true);
@@ -857,6 +859,7 @@ comboPvPri.add("高");
 // ---------- Mod 列表 ----------
 
 var mod_rows = {};        // 与列表顺序一致：scan() 出来的条目
+var mod_dup_rows = {};    // 重复安装的行号（1 基），自定义绘制时标红
 var mod_selected = null;  // 选中的条目（按 path 记）
 
 // 只有选中"已禁用"的 Mod 时，按钮才叫「启用」；否则叫「禁用」
@@ -900,6 +903,25 @@ function mods_render() {
 
 	var list = m3mod.scan(dir);
 
+	// 读元数据：名字 / 版本 / modid（读不到就退回文件名）
+	for i, m in list {
+		var meta = m3mod.meta_of(m.path);
+
+		m.modid = meta.modid or "";
+		m.title = meta.name or "";
+		m.mver = meta.version or "";
+
+		if (#m.title == 0) m.title = m.name;
+		if (#m.mver == 0) m.mver = "-";
+	}
+
+	// 同一个 modid 出现多次 = 重复安装
+	var seen = {};
+	for i, m in list {
+		if (#m.modid == 0) continue;
+		seen[m.modid] = (seen[m.modid] or 0) + 1;
+	}
+
 	// 排序：启用在前、禁用在后的文件名升序。
 	// 不用 table.sort 的比较函数——aardio 里那是 lambda(b) owner.x < b.x 的写法，
 	// 第一个元素叫 owner、只有一个参数 b；写成 function(a,b) 会拿到 b = null。
@@ -911,7 +933,7 @@ function mods_render() {
 		var prefix = "1";          // 1 = 禁用，排在后面
 		if (m.enabled) prefix = "0";
 
-		var k = prefix ++ string.lower(m.name) ++ "\t" ++ tostring(i);
+		var k = prefix ++ string.lower(m.title) ++ "\t" ++ tostring(i);
 		keyed[k] = m;
 		table.push(keys, k);
 	}
@@ -924,6 +946,7 @@ function mods_render() {
 	}
 
 	var off = 0;
+	mod_dup_rows = {};
 
 	for i, m in list {
 		var status = "启用";
@@ -932,10 +955,14 @@ function mods_render() {
 			off = off + 1;
 		}
 
-		var name = m.name;
-		if (m.folder and #m.folder > 0) name = m.folder ++ "\" ++ name;
+		// 同 modid 多份：状态列加「重复」，整行标红
+		var dup = (#m.modid > 0 and seen[m.modid] > 1);
+		if (dup) {
+			status = status ++ " 重复";
+			mod_dup_rows[i] = true;
+		}
 
-		listMods.addItem({ ""; name; m3mod.size_text(m.size); status });
+		listMods.addItem({ ""; m.title; m.mver; m.file; status });
 		table.push(mod_rows, m);
 	}
 
@@ -960,7 +987,14 @@ function mods_render() {
 		lblModHint.text = "此版本未安装 Mod。";
 	}
 	else {
-		lblModHint.text = "共 " ++ total ++ " 个 Mod，禁用 " ++ off ++ " 个。";
+		var dups = 0;
+		for k, v in mod_dup_rows {
+			if (v) dups = dups + 1;
+		}
+
+		var tip = "共 " ++ total ++ " 个 Mod，禁用 " ++ off ++ " 个。";
+		if (dups > 0) tip = tip ++ "有 " ++ dups ++ " 个是重复安装（同一个 modid），已标红。";
+		lblModHint.text = tip;
 	}
 
 	mod_btn_update();
@@ -971,6 +1005,36 @@ function mod_current() {
 	if (i > 0 and i <= #mod_rows) return mod_rows[i];
 
 	return null;
+}
+
+// 重复安装的行标红。
+// 协议：PREPAINT 先要求 ITEMDRAW，ITEM 阶段再要求 SUBITEMDRAW，
+// 到 SUBITEM 阶段改 clrText 并 update() 写回。
+listMods.onnotify = function(id, code, ptr) {
+	if (code != 0xFFFFFFF4/*_NM_CUSTOMDRAW*/) return;
+
+	var lvcd = listMods.getNotifyCustomDraw(code, ptr);
+	if (!lvcd) return;
+
+	var stage = lvcd.nmcd.dwDrawStage;
+
+	if (stage == 1/*_CDDS_PREPAINT*/) {
+		return 0x20/*_CDRF_NOTIFYITEMDRAW*/;
+	}
+
+	if (stage == 0x10001/*_CDDS_ITEMPREPAINT*/) {
+		return 0x20/*_CDRF_NOTIFYSUBITEMDRAW*/;
+	}
+
+	if (stage == (0x10001/*_CDDS_ITEMPREPAINT*/ | 0x20000/*_CDDS_SUBITEM*/)) {
+		// dwItemSpec 从 0 开始，标红表按 1 基记，所以 +1
+		if (mod_dup_rows[lvcd.nmcd.dwItemSpec + 1]) {
+			lvcd.clrText = 0x0000FF;   // COLORREF：红
+			lvcd.update();
+		}
+
+		return 0/*_CDRF_DODEFAULT*/;
+	}
 }
 
 listMods.onSelChanged = function(sel, item, subItem, nm) {
