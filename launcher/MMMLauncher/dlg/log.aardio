@@ -69,6 +69,8 @@ var lines = {};
 var MAX_LINES = 5000;
 
 var counts = { fatal = 0; error = 0; warn = 0; info = 0; debug = 0 };
+var rendering = false;   // 正在整表重建
+var pending = {};        // 重建期间攒下的新行
 var filter = "all";
 var last_level = "info";   // 栈帧继承上一行的级别
 
@@ -124,12 +126,31 @@ function count_text(label, n) {
 	return label ++ " " ++ n;
 }
 
-function update_buttons() {
+function update_counts() {
 	winform.btnAll.text = count_text("全部", #lines);
 	winform.btnError.text = count_text("错误", counts.fatal + counts.error);
 	winform.btnWarn.text = count_text("警告", counts.warn);
 	winform.btnDebug.text = count_text("调试", counts.debug);
+}
 
+//高频追加时不要每行都改按钮文字（更不要每行都 skin），
+//攒到下一拍统一刷新，否则日志一快界面就卡住，看着像"筛选没反应"。
+var counts_pending = false;
+
+function schedule_counts() {
+	if (counts_pending) return;
+	counts_pending = true;
+
+	winform.setTimeout(
+		function() {
+			counts_pending = false;
+			update_counts();
+		}, 150
+	);
+}
+
+//只在切换筛选时调用：给四个按钮换皮肤（选中反色）
+function apply_skin() {
 	//选中的那个反色（和设置里的子页签一致）
 	var pairs = {
 		{ winform.btnAll; "all" };
@@ -163,6 +184,21 @@ function scroll_bottom() {
 	}
 }
 
+//滚到底也节流：日志一秒几百行时，每行发一次 WM_VSCROLL 会把界面拖住
+var scroll_pending = false;
+
+function schedule_scroll() {
+	if (scroll_pending) return;
+	scroll_pending = true;
+
+	winform.setTimeout(
+		function() {
+			scroll_pending = false;
+			scroll_bottom();
+		}, 120
+	);
+}
+
 function passed(lv) {
 	if (filter == "all") return true;
 	if (filter == "error") return (lv == "error" or lv == "fatal");
@@ -174,6 +210,9 @@ function passed(lv) {
 //用逐行 appendText（控件自己维护插入点），不用 setSel 手算区间：
 //richedit 的位置是 UTF-16 字符数，而 aardio 的 #s 是字节数，中文行会算错。
 function render_all() {
+	//重建期间会话还在往里写：先攒起来，重建完再补，避免"清掉又立刻塞回来"的错乱观感
+	rendering = true;
+
 	winform.editLog.readonly = false;
 
 	::SendMessageInt(winform.editLog.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
@@ -194,9 +233,26 @@ function render_all() {
 
 	::SendMessageInt(winform.editLog.hwnd, 0x000B, 1, 0);
 
+	//打开重绘后强制刷一次，否则内容多的时候会残留旧画面
+	::InvalidateRect(winform.editLog.hwnd, null, true);
+
 	winform.editLog.readonly = true;
 
-	update_buttons();
+	rendering = false;
+
+	//把重建期间攒下的行补上（只补命中筛选的）
+	for i, ln in pending {
+		if (!passed(ln.level)) continue;
+
+		winform.editLog.readonly = false;
+		winform.editLog.appendText(level_style(ln.level), ln.text ++ '\r\n');
+		winform.editLog.readonly = true;
+	}
+
+	pending = {};
+
+	update_counts();
+	apply_skin();
 	scroll_bottom();
 }
 
@@ -219,15 +275,18 @@ winform.append = function(text, is_error) {
 		lines = kept;
 	}
 
-	if (passed(lv)) {
+	if (rendering) {
+		table.push(pending, { level = lv; text = line });
+	}
+	elseif (passed(lv)) {
 		winform.editLog.readonly = false;
 		winform.editLog.appendText(level_style(lv), line ++ '\r\n');
 		winform.editLog.readonly = true;
 
-		scroll_bottom();
+		schedule_scroll();
 	}
 
-	update_buttons();
+	schedule_counts();
 }
 
 winform.clear_all = function() {
@@ -237,9 +296,13 @@ winform.clear_all = function() {
 
 	winform.editLog.readonly = false;
 	winform.editLog.text = "";
+	winform.editLog.setSel(0, -1);
+	winform.editLog.selText = "";
 	winform.editLog.readonly = true;
 
-	update_buttons();
+	pending = {};
+
+	update_counts();
 }
 
 // ---------- 筛选按钮 ----------
@@ -324,7 +387,8 @@ winform.onClose = function(hwnd, message, wParam, lParam) {
 	if (session) session.detach(winform);
 }
 
-update_buttons();
+update_counts();
+apply_skin();
 
 winform.show();
 return winform;
