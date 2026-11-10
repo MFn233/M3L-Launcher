@@ -607,6 +607,23 @@ try_thin_scrollbar(listMods);
 PM.y = PM.y + 236 + 8;
 
 var mod_tools = PM.tool_row({"启用"; "删除"; "刷新"}, {"打开目录"});
+
+// 扫描进度：细条，只在"正在读元数据"时出现
+var progMods = PM.make({
+	cls = "plus";
+	left = PM.left;
+	top = PM.y;
+	right = PM.right;
+	bottom = PM.y + 5;
+});
+
+m3theme.progress(progMods);
+progMods.setTrackbarRange(0, 100);
+progMods.progressPos = 0;
+progMods.visible = false;
+
+PM.y = PM.y + 5 + 4;
+
 var lblModHint = PM.text("", true);
 
 PM.finish();
@@ -881,7 +898,131 @@ function mod_btn_update() {
 	else btn.text = "禁用";
 }
 
+// ---------- Mod 元数据：先出列表，再后台分批补 ----------
+//
+// 一次读完几百个 jar 的元数据会卡住界面，所以：
+//   1) 先按文件名把列表铺出来（立刻可见）；
+//   2) 每 20ms 读 4 个，就地刷新那两列，进度条同步走；
+//   3) 读完后走一次 mods_render_final()（缓存已热，瞬间完成），
+//      这一次才做"按名字排序"和"重复标红"。
+// 切换版本/页签会让 mod_scan_gen +1，正在跑的任务下次 tick 自己退出。
+
+var mod_scan_gen = 0;     // 每次重画 +1，用来作废旧任务
+var mod_scan_done = 0;    // 已完成数（进度条被误拖时用它复位）
+
+function mod_scan_cancel() {
+	mod_scan_gen = mod_scan_gen + 1;
+}
+
+// 进度条不是滑条：用户点了就复位，别让人以为能拖
+progMods.onPosChanged = function(pos, byUser) {
+	if (!byUser) return;
+
+	progMods.progressPos = mod_scan_done;
+}
+
 function mods_render() {
+	mod_scan_cancel();
+	var gen = mod_scan_gen;
+
+	listMods.clear();
+	mod_rows = {};
+	mod_dup_rows = {};
+
+	mod_scan_done = 0;
+
+	if (!pv_current) {
+		progMods.visible = false;
+		lblModHint.text = "请先在设置窗口里选择游戏路径。";
+		m3list.renumber(listMods);
+		mod_btn_update();
+		return;
+	}
+
+	var dir = m3mod.dir_of(cfg, pv_current);
+
+	if (!dir or !io.exist(dir)) {
+		progMods.visible = false;
+		lblModHint.text = "此版本没有 mods 文件夹：" ++ tostring(dir);
+		m3list.renumber(listMods);
+		mod_btn_update();
+		return;
+	}
+
+	var list = m3mod.scan(dir);
+
+	// 先按文件名铺出来（元数据先空着，名字先显示文件名）
+	for i, m in list {
+		m.modid = "";
+		m.title = m.name;
+		m.mver = "-";
+
+		var status = "启用";
+		if (!m.enabled) status = "禁用";
+
+		listMods.addItem({ ""; m.title; m.mver; m.file; status });
+		table.push(mod_rows, m);
+	}
+
+	m3list.renumber(listMods);
+
+	if (#mod_rows == 0) {
+		progMods.visible = false;
+		lblModHint.text = "此版本未安装 Mod。";
+		mod_btn_update();
+		return;
+	}
+
+	progMods.setTrackbarRange(0, #mod_rows);
+	progMods.progressPos = 0;
+	progMods.visible = true;
+
+	lblModHint.text = "正在读取 Mod 信息… 0/" ++ #mod_rows;
+
+	var i = 1;
+
+	var step = function() {
+		if (gen != mod_scan_gen) return;   // 被切页 / 切版本作废
+
+		var n = 0;
+		while (i <= #mod_rows and n < 4) {
+			var m = mod_rows[i];
+			var meta = m3mod.meta_of(m.path);
+
+			m.modid = meta.modid or "";
+			m.title = meta.name or "";
+			m.mver = meta.version or "";
+
+			if (#m.title == 0) m.title = m.name;
+			if (#m.mver == 0) m.mver = "-";
+
+			// 就地改这两列：不重排，扫描过程中列表不乱跳
+			listMods.setItemText(m.title, i, 2);
+			listMods.setItemText(m.mver, i, 3);
+
+			i = i + 1;
+			n = n + 1;
+		}
+
+		mod_scan_done = i - 1;
+		progMods.progressPos = mod_scan_done;
+
+		if (i <= #mod_rows) {
+			lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
+			winform.setTimeout(step, 20);
+		}
+		else {
+			progMods.visible = false;
+			mods_render_final();
+		}
+	};
+
+	step();
+}
+
+// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
+function mods_render_final() {
+	progMods.visible = false;
 	listMods.clear();
 	mod_rows = {};
 
@@ -1305,6 +1446,15 @@ function nav_skin(i, selected) {
 	}
 }
 
+// 把每个列表的列宽重新压回可视宽度（拖过列头之后"回正"）
+function fit_all_lists() {
+	m3list.fit(listAcc);
+	m3list.fit(listJava);
+	m3list.fit(listPaths);
+	m3list.fit(listVers);
+	m3list.fit(listMods);
+}
+
 function select_page(n) {
 	if (n < 1 or n > #PAGES) return;
 
@@ -1323,8 +1473,15 @@ function select_page(n) {
 		show_page(n);
 		ensure_page(n);
 
+		// 离开 Mod 页就别再扫了
+		if (n != 6) mod_scan_cancel();
+
 		// 版本独立设置：每次进来都重读版本列表（可能刚在上一页增删改过）
 		if (n == 6) pv_refresh();
+
+		// 切页时把各列表的列宽重新压回可视宽度：
+		// 用户拖过列头之后总宽会超出，回来时应该"回正"
+		fit_all_lists();
 
 		winform.lblPageTitle.text = nav_titles[n];
 
