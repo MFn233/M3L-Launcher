@@ -87,7 +87,9 @@ namespace m3zip {
 	// 读一个条目：local header 之后就是数据。
 	// 返回 data, err —— 失败必须说清是哪一步，否则上层只能误报"没有条目"。
 	function read_entry(file, e) {
-		if (!file.seek("set", e.localOff)) return null, "seek 到 local header 失败";
+		// seek 返回新位置；位置 0 也是合法值，所以只能判 null，不能判非零
+		var at = file.seek("set", e.localOff);
+		if (at == null) return null, "seek 到 local header 失败（localOff=" ++ e.localOff ++ "）";
 
 		var lh = file.read(30);
 		if (!lh) return null, "读 local header 失败";
@@ -97,7 +99,8 @@ namespace m3zip {
 
 		var dataStart = e.localOff + 30 + nameLen + extraLen;
 
-		if (!file.seek("set", dataStart)) return null, "seek 到数据段失败";
+		at = file.seek("set", dataStart);
+		if (at == null) return null, "seek 到数据段失败（dataStart=" ++ dataStart ++ "）";
 
 		var data = file.read(e.compSize);
 		if (!data) return null, "读数据段失败（compSize=" ++ e.compSize ++ "）";
@@ -106,7 +109,16 @@ namespace m3zip {
 
 		if (e.method == 8) {
 			var out = ..zlib.gzUncompress(data, "raw");
-			if (!out) return null, "raw deflate 解压失败（compSize=" ++ e.compSize ++ "）";
+
+			if (!out) {
+				// 带上实际读到的字节数与头两个字节，用来判断是"读错位置"还是"真的解不开"
+				var b1 = data[1] or 0;
+				var b2 = data[2] or 0;
+
+				return null, "raw deflate 解压失败（读到 " ++ #data
+					++ " 字节，头两字节 " ++ b1 ++ "," ++ b2
+					++ "，localOff=" ++ e.localOff ++ "）";
+			}
 
 			return out;
 		}
