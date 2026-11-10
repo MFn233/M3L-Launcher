@@ -142,16 +142,14 @@ namespace m3mod {
 	function cache_peek(path) {
 		if (!path) return null;
 
-		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
-		return meta_cache[key];
+		return meta_cache[..string.lower(path)];
 	}
 
 	// 写一条缓存（UI 线程解析完就存，不等最后统一存）
 	function cache_put(path, meta) {
 		if (!path or type(meta) != "table") return;
 
-		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
-		meta_cache[key] = meta;
+		meta_cache[..string.lower(path)] = meta;
 	}
 
 	function cache_save() {
@@ -328,7 +326,8 @@ namespace m3mod {
 	function meta_of(path) {
 		if (!path) return { modid = ""; name = ""; version = ""; loader = "" };
 
-		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
+		// 键用路径（不再拼文件大小：每次渲染都要 io.getSize 一遍，157 个文件不值当）
+		var key = ..string.lower(path);
 		if (meta_cache[key]) return meta_cache[key];
 
 		var zip = null;

@@ -901,6 +901,7 @@ comboPvPri.add("高");
 var mod_rows = {};        // 与列表顺序一致：scan() 出来的条目
 var mod_dup_rows = {};    // 重复安装的行号（1 基），自定义绘制时标红
 var mod_todo = {};        // 这一轮需要读的行号
+var mod_meta_reasons = {}; // 读不到元数据的原因统计
 var mod_scan_got = false; // 后台线程有没有回过话（看门狗用）
 var mod_scan_error = "";  // 后台线程报的错
 var mod_scan_syncing = false;
@@ -969,6 +970,15 @@ function mod_scan_cancel() {
 function mod_fill_row(idx, meta) {
 	if (!mod_rows[idx]) return;
 
+	// 失败原因计数（底部提示用）
+	if (meta.err) {
+		var tag = "解析不出名字";
+		if (string.indexOf(meta.err, "打不开")) tag = "打不开压缩包";
+		elseif (string.indexOf(meta.err, "没有元数据")) tag = "没有元数据条目";
+
+		mod_meta_reasons[tag] = (mod_meta_reasons[tag] or 0) + 1;
+	}
+
 	var m = mod_rows[idx];
 
 	m.modid = meta.modid or "";
@@ -994,6 +1004,7 @@ function mods_render() {
 	mod_todo = {};
 
 	mod_scan_done = 0;
+	mod_meta_reasons = {};
 
 	if (!pv_current) {
 		mod_prog_hide();
@@ -1101,67 +1112,35 @@ function mods_render() {
 // 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
 function mods_render_final() {
 	mod_prog_hide();
-	listMods.clear();
-	mod_rows = {};
 
-	if (!pv_current) {
-		lblModHint.text = "请先在设置窗口里选择游戏路径。";
+	if (#mod_rows == 0) {
+		listMods.clear();
+
+		if (!pv_current) lblModHint.text = "请先在设置窗口里选择游戏路径。";
+		else lblModHint.text = "此版本未安装 Mod。";
+
 		m3list.renumber(listMods);
 		mod_btn_update();
 		return;
 	}
 
-	var dir = m3mod.dir_of(cfg, pv_current);
-
-	if (!dir or !io.exist(dir)) {
-		lblModHint.text = "此版本没有 mods 文件夹：" ++ tostring(dir);
-		m3list.renumber(listMods);
-		mod_btn_update();
-		return;
-	}
-
-	var list = m3mod.scan(dir);
-
-	// 读元数据：名字 / 版本 / modid（读不到就退回文件名）
-	var meta_fail = 0;
-	var meta_reasons = {};
-
-	for i, m in list {
-		var meta = m3mod.meta_of(m.path);
-
-		m.modid = meta.modid or "";
-		m.title = meta.name or "";
-		m.mver = meta.version or "";
-
-		if (#m.title == 0) m.title = m.name;
-		if (#m.mver == 0) m.mver = "-";
-
-		if (meta.err) {
-			meta_fail = meta_fail + 1;
-
-			var tag = "解析不出名字";
-			if (string.indexOf(meta.err, "打不开")) tag = "打不开压缩包";
-			elseif (string.indexOf(meta.err, "没有元数据")) tag = "没有元数据条目";
-
-			meta_reasons[tag] = (meta_reasons[tag] or 0) + 1;
-		}
-	}
+	// 这里**不再**重扫目录、不再重读元数据：
+	// mod_rows 里已经是"名字 / 版本 / modid 都填好"的了，只是顺序还是文件名顺序。
+	var rows = mod_rows;
 
 	// 同一个 modid 出现多次 = 重复安装
 	var seen = {};
-	for i, m in list {
+
+	for i, m in rows {
 		if (#m.modid == 0) continue;
 		seen[m.modid] = (seen[m.modid] or 0) + 1;
 	}
 
-	// 排序：启用在前、禁用在后的文件名升序。
-	// 不用 table.sort 的比较函数——aardio 里那是 lambda(b) owner.x < b.x 的写法，
-	// 第一个元素叫 owner、只有一个参数 b；写成 function(a,b) 会拿到 b = null。
-	// 这里改成"造字符串键再排序"，纯字符串比较，最稳。
+	// 排序：启用在前，组内按名字升序（造字符串键，不用 table.sort 的比较函数）
 	var keyed = {};
 	var keys = {};
 
-	for i, m in list {
+	for i, m in rows {
 		var prefix = "1";          // 1 = 禁用，排在后面
 		if (m.enabled) prefix = "0";
 
@@ -1172,22 +1151,22 @@ function mods_render_final() {
 
 	table.sort(keys);
 
-	list = {};
-	for i, k in keys {
-		table.push(list, keyed[k]);
-	}
-
-	var off = 0;
+	// 一次性重建列表
+	listMods.clear();
+	mod_rows = {};
 	mod_dup_rows = {};
 
-	for i, m in list {
+	var off = 0;
+
+	for i, k in keys {
+		var m = keyed[k];
+
 		var status = "启用";
 		if (!m.enabled) {
 			status = "禁用";
 			off = off + 1;
 		}
 
-		// 同 modid 多份：状态列加「重复」，整行标红
 		var dup = (#m.modid > 0 and seen[m.modid] > 1);
 		if (dup) {
 			status = status ++ " 重复";
@@ -1215,6 +1194,7 @@ function mods_render_final() {
 	}
 
 	var total = #mod_rows;
+
 	if (total == 0) {
 		lblModHint.text = "此版本未安装 Mod。";
 	}
@@ -1226,26 +1206,19 @@ function mods_render_final() {
 
 		var tip = "共 " ++ total ++ " 个 Mod，禁用 " ++ off ++ " 个。";
 		if (dups > 0) tip = tip ++ "有 " ++ dups ++ " 个是重复安装（同一个 modid），已标红。";
-		if (meta_fail > 0) {
-			var reasons = "";
-			for k, v in meta_reasons {
-				if (#reasons > 0) reasons = reasons ++ " / ";
-				reasons = reasons ++ k ++ " " ++ v;
-			}
 
-			tip = tip ++ meta_fail ++ " 个读不到元数据（" ++ reasons ++ "）。";
+		var reasons = "";
+		for k, v in mod_meta_reasons {
+			if (#reasons > 0) reasons = reasons ++ " / ";
+			reasons = reasons ++ k ++ " " ++ v;
 		}
+
+		if (#reasons > 0) tip = tip ++ "读不到元数据：" ++ reasons ++ "。";
+
 		lblModHint.text = tip;
 	}
 
 	mod_btn_update();
-}
-
-function mod_current() {
-	var i = listMods.selIndex;
-	if (i > 0 and i <= #mod_rows) return mod_rows[i];
-
-	return null;
 }
 
 // 重复安装的行标红。
@@ -1264,6 +1237,10 @@ listMods.onnotify = function(id, code, ptr) {
 	}
 
 	if (stage == 0x10001/*_CDDS_ITEMPREPAINT*/) {
+		// 快速通道：不是重复行就直接按默认画，
+		// 不要求逐子项绘制（157 行 × 5 列都走子项绘制会很拖）
+		if (!mod_dup_rows[lvcd.nmcd.dwItemSpec + 1]) return 0/*_CDRF_DODEFAULT*/;
+
 		return 0x20/*_CDRF_NOTIFYSUBITEMDRAW*/;
 	}
 
