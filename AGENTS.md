@@ -86,6 +86,10 @@
 
 - `table.sort` 的比较函数**不是** `function(a, b)`：标准库写法是 `lambda(b) owner.x < b.x`，
   第一个元素经 `owner` 取、函数只有一个参数。要排序就用"造字符串键 + `table.sort(keys)`"。
+- `for ... in` 后面**只能接表变量或迭代器函数**：
+  `for i, v in string.split(s, ",")` 会报 `不支持此操作:call 类型:table`，
+  必须先 `var parts = string.split(s, ",")` 再遍历。
+  合法的直接写法只有 `string.gmatch(...)`、`zip.eachFile()` 这类返回迭代器的调用。
 - 不用 `table.remove` 删数组元素（会留下 null 空洞），改成"重建数组"：
 
 ```aardio
