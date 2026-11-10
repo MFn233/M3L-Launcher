@@ -75,9 +75,9 @@ namespace m3toml {
 			var nxt = "";
 			if (i < n) nxt = ..string.left(..string.slice(s, i + 1), 1);
 
-			if (nxt == "n") out = out ++ ..string.chr(10);
-			elseif (nxt == "t") out = out ++ ..string.chr(9);
-			elseif (nxt == "r") out = out ++ ..string.chr(13);
+			if (nxt == "n") out = out ++ '\n';
+			elseif (nxt == "t") out = out ++ '\t';
+			elseif (nxt == "r") out = out ++ '\r';
 			elseif (nxt == '"') out = out ++ CH_DQUOTE;
 			elseif (nxt == CH_BACKSLASH) out = out ++ CH_BACKSLASH;
 			else out = out ++ nxt;
@@ -335,8 +335,8 @@ namespace m3toml {
 		if (type(text) != "string") return root;
 
 		// 统一换行后按行处理（跨行值会被合并到一行）
-		var body = ..string.replace(text, ..string.chr(13), "");
-		var lines = ..string.split(body, ..string.chr(10));
+		var body = ..string.replace(text, '\r', "");
+		var lines = ..string.split(body, '\n');
 
 		var i = 1;
 		var n = #lines;

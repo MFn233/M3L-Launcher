@@ -27,8 +27,17 @@ namespace m3zip {
 		return u32(s, i) + u32(s, i + 4) * 4294967296;
 	}
 
-	function chr_sig(a, b) {
-		return "PK" ++ ..string.chr(a) ++ ..string.chr(b);
+	// 从尾部往前找一个 4 字节签名（aardio 没有 string.chr，直接比字节）
+	function rfind_sig(s, b1, b2, b3, b4) {
+		for i = #s - 3; 1; -1 {
+			if (s[i] == b1 and s[i + 1] == b2 and s[i + 2] == b3 and s[i + 3] == b4) return i;
+		}
+
+		return null;
+	}
+
+	function is_sig(s, i, b1, b2, b3, b4) {
+		return (s[i] == b1 and s[i + 1] == b2 and s[i + 2] == b3 and s[i + 3] == b4);
 	}
 
 	// 取最后一段（zip 里用正斜杠）
@@ -140,7 +149,7 @@ namespace m3zip {
 			return got, "读取尾部失败";
 		}
 
-		var at = ..string.lastIndexOf(tail, chr_sig(5, 6));
+		var at = rfind_sig(tail, 80, 75, 5, 6);
 		if (!at) {
 			file.close();
 			return got, "不是 ZIP 文件";
@@ -152,7 +161,7 @@ namespace m3zip {
 
 		// ZIP64：字段溢出时从 ZIP64 目录尾部重新取
 		if (cdOff == 0xFFFFFFFF or count == 0xFFFF) {
-			var lat = ..string.lastIndexOf(tail, chr_sig(6, 7));
+			var lat = rfind_sig(tail, 80, 75, 6, 7);
 
 			if (lat) {
 				var z64 = u64(tail, lat + 8);
@@ -161,7 +170,7 @@ namespace m3zip {
 
 				var h = file.read(56);
 
-				if (h and ..string.left(h, 4) == chr_sig(6, 6)) {
+				if (h and is_sig(h, 1, 80, 75, 6, 6)) {
 					count = u64(h, 32);
 					cdSize = u64(h, 40);
 					cdOff = u64(h, 48);
