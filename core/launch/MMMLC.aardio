@@ -141,12 +141,18 @@ namespace MMMLC{
 		return out, out_keys;
 	}
 
-	//库的身份只看 group:artifact，版本号不参与比较。
+	//库的身份看 group:artifact（版本号不参与比较）——**但要带上分类器**：
+	//`org.lwjgl:lwjgl-glfw:3.4.1` 与 `org.lwjgl:lwjgl-glfw:3.4.1:natives-windows`
+	//是两个不同的文件，只按 group:artifact 去重会把 natives 那份吞掉，
+	//LWJGL3 就找不到原生库（Cleanroom 上表现为启动异常）。
 	function library_key(parted) {
 		if (type(parted) != "table") return null;
 		if (#parted < 2) return null;
 
-		return parted[1] ++ ":" ++ parted[2];
+		var key = parted[1] ++ ":" ++ parted[2];
+		if (parted[4]) key = key ++ ":" ++ parted[4];
+
+		return key;
 	}
 
 	//版本号比较：只按点分数字比（2.0-beta9 这种尾巴忽略）。
