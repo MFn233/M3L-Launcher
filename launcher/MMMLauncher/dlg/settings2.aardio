@@ -15,6 +15,7 @@ import MMMLC;
 import process;
 import fsys.dlg;
 import m3list;
+import m3opts;
 import m3version;
 import json;
 import crypt;
@@ -60,24 +61,6 @@ winform.add({
 	cls = "bkplus"; left = 0; top = FOOT_TOP - 1; right = 760; bottom = FOOT_TOP;
 	bgcolor = DIVIDE;
 });
-
-// ---------- 临时诊断（查完就删） ----------
-var diag_path = ..string.getenv("TEMP") ++ "\m3-settings.log";
-
-function diag(tag) {
-	var rc = winform.getRect();
-
-	..string.save(diag_path, ..string.format(
-		"%6d ms  %-12s  %dx%d  rect=%d,%d,%d,%d  dpi=%.2f\n",
-		..time.tick(), tag,
-		rc.right - rc.left, rc.bottom - rc.top,
-		rc.left, rc.top, rc.right, rc.bottom,
-		winform.dpiScaleX or 1
-	), "a");
-}
-
-..string.save(diag_path, "---- open ----\n", "w");
-diag("dsg_done");
 
 // 从这里开始到 return 之前，窗口正在被搭出来：控件、分组框、列宽都在变。
 // 冻结重绘，避免屏幕上出现中间状态（看起来像窗口在变形）。
@@ -141,8 +124,8 @@ var P2 = m3layout.create(winform, 232, 52, 504, { framed = true });
 
 P2.section("窗口大小设置");
 var comboMode, btnDefault = P2.row("窗口模式", { cls = "combobox"; mode = "dropdownlist" }, "默认大小");
-var editW = P2.row("宽度", { cls = "edit"; text = "854"; num = 1 });
-var editH = P2.row("高度", { cls = "edit"; text = "480"; num = 1 });
+var editW = P2.row("宽度", { cls = "edit"; text = "854" });
+var editH = P2.row("高度", { cls = "edit"; text = "480" });
 P2.text("手动设置时才需要填宽度与高度；全屏与「与启动器一致」会忽略这两个值。");
 
 P2.section("分配内存");
@@ -440,6 +423,274 @@ subVerBtn.oncommand = function(id, event) {
 
 sub_apply();
 
+// ---------- 第五页之二：版本独立设置 ----------
+//
+// 只存「与全局不同的部分」：勾上的项写进 versions\<版本名>\.m3l.options.json，
+// 没勾 = 跟随全局。改动先攒在 ver_pending 里，点「保存」才落盘，
+// 「取消」则整批丢弃——和其他页的保存语义保持一致。
+
+var PV = m3layout.create(winform, 232, 52, 504, { framed = true });
+PV.btn_w = 76;
+
+// 页标题已经叫「版本独立设置」，这里不再加小标题，免得同一个词又出现一次
+PV.section("");
+
+var comboOptVer = PV.row("版本", { cls = "combobox"; mode = "dropdownlist" });
+var pv_versions = {};
+
+// 一行：左边勾「使用独立设置」，右边控件。勾选框本身就是"有没有覆盖"的开关。
+function pv_row(label, ctrl_opt) {
+	var y = PV.y;
+
+	var chk = PV.make({
+		cls = "checkbox";
+		text = label;
+		left = PV.left;
+		top = y;
+		right = PV.left + 104;
+		bottom = y + 20;
+	});
+
+	chk.bgcolor = m3theme.C_BG;
+
+	var ctrl = PV.make(table.assign({}, ctrl_opt, {
+		left = PV.left + 112;
+		top = y;
+		right = PV.right;
+		bottom = y + PV.row_h;
+	}));
+
+	if (ctrl_opt.cls == "edit") m3theme.field(ctrl);
+
+	PV.y = y + PV.row_step;
+
+	return ctrl, chk;
+}
+
+PV.section("覆盖项");
+
+var editPvMem, chkMem = pv_row("内存", { cls = "edit"; text = "" });
+var comboPvMode, chkMode = pv_row("窗口模式", { cls = "combobox"; mode = "dropdownlist" });
+var editPvW, chkW = pv_row("宽度", { cls = "edit"; text = "" });
+var editPvH, chkH = pv_row("高度", { cls = "edit"; text = "" });
+var comboPvPri, chkPri = pv_row("进程优先级", { cls = "combobox"; mode = "dropdownlist" });
+
+var chkJvm = PV.make({
+	cls = "checkbox";
+	text = "JVM 参数（每行一条）";
+	left = PV.left;
+	top = PV.y;
+	right = PV.left + 240;
+	bottom = PV.y + 20;
+});
+
+chkJvm.bgcolor = m3theme.C_BG;
+PV.y = PV.y + PV.row_step;
+
+var editPvJvm = PV.make({
+	cls = "edit";
+	multiline = 1;
+	vscroll = 1;
+	autohscroll = false;
+	left = PV.left;
+	top = PV.y;
+	right = PV.right;
+	bottom = PV.y + 64;
+});
+
+editPvJvm.color = m3theme.C_INK;
+editPvJvm.bgcolor = m3theme.C_FIELD;
+
+PV.y = PV.y + 64 + 8;
+
+PV.text("勾上 = 这个版本用自己的值；不勾 = 跟随全局设置。", true);
+var lblPvHint = PV.text("", true);
+
+PV.finish();
+
+// ---------- 版本独立设置：数据 ----------
+
+var pv_current = null;     // 页面上正在显示哪个版本
+var ver_pending = {};      // 版本名 -> 待保存的覆盖表（点保存才落盘）
+
+function pv_mode_value(i) {
+	if (i == 2) return "fullscreen";
+	if (i == 3) return "match";
+	return "manual";
+}
+
+function pv_sync_enabled() {
+	editPvMem.disabled = !chkMem.checked;
+	comboPvMode.disabled = !chkMode.checked;
+	editPvW.disabled = !chkW.checked;
+	editPvH.disabled = !chkH.checked;
+	comboPvPri.disabled = !chkPri.checked;
+	editPvJvm.disabled = !chkJvm.checked;
+}
+
+function pv_fill_versions() {
+	var names = list_version_names();
+
+	comboOptVer.clear();
+	pv_versions = {};
+
+	for i, name in names {
+		comboOptVer.add(name);
+		table.push(pv_versions, name);
+	}
+
+	return names;
+}
+
+// 把某个版本的值填进控件（先看有没有待保存的覆盖，再看磁盘上的文件）
+function pv_load(name) {
+	pv_current = name;
+
+	var ov = ver_pending[name];
+	if (!ov) ov = m3opts.read(cfg.game_path, name);
+
+	var has_mem = (ov.memory !== null);
+	chkMem.checked = has_mem;
+	editPvMem.text = tostring(has_mem ? ov.memory : cfg.memory);
+
+	var has_mode = (ov.window_mode !== null);
+	chkMode.checked = has_mode;
+	var mode_text = has_mode ? ov.window_mode : cfg.window_mode;
+	comboPvMode.selIndex = mode_index(mode_text);
+
+	var has_w = (ov.width !== null);
+	chkW.checked = has_w;
+	editPvW.text = tostring(has_w ? ov.width : cfg.width);
+
+	var has_h = (ov.height !== null);
+	chkH.checked = has_h;
+	editPvH.text = tostring(has_h ? ov.height : cfg.height);
+
+	var has_pri = (ov.priority !== null);
+	chkPri.checked = has_pri;
+	comboPvPri.selIndex = priority_index(has_pri ? ov.priority : cfg.priority);
+
+	var has_jvm = (ov.jvm_args !== null);
+	chkJvm.checked = has_jvm;
+	editPvJvm.text = has_jvm ? ov.jvm_args : (cfg.jvm_args or "");
+
+	pv_sync_enabled();
+
+	var n = 0;
+	for k, v in ov {
+		if (v !== null) n = n + 1;
+	}
+
+	if (n == 0) {
+		lblPvHint.text = "这个版本没有独立设置，全部跟随全局。";
+	}
+	else {
+		lblPvHint.text = "这个版本有 " ++ n ++ " 项独立设置。";
+	}
+}
+
+// 从控件收集成覆盖表（没勾的键不写 = 跟随全局）
+function pv_collect() {
+	var t = {};
+
+	if (chkMem.checked) {
+		var mb = tonumber(string.trim(editPvMem.text)) or cfg.memory;
+		if (mb < 512) mb = 512;
+		if (mb > 32768) mb = 32768;
+		t.memory = mb;
+	}
+
+	if (chkMode.checked) t.window_mode = pv_mode_value(comboPvMode.selIndex);
+
+	if (chkW.checked) {
+		var w = tonumber(string.trim(editPvW.text)) or cfg.width;
+		if (w < 320) w = 320;
+		t.width = w;
+	}
+
+	if (chkH.checked) {
+		var h = tonumber(string.trim(editPvH.text)) or cfg.height;
+		if (h < 240) h = 240;
+		t.height = h;
+	}
+
+	if (chkPri.checked) t.priority = priority_value(comboPvPri.selIndex);
+
+	if (chkJvm.checked) t.jvm_args = editPvJvm.text;
+
+	return t;
+}
+
+// 切走之前先把当前版本的值收进待保存表
+function pv_stash() {
+	if (pv_current) ver_pending[pv_current] = pv_collect();
+}
+
+// 切版本：先收当前，再按新版本填
+function pv_switch_to(name) {
+	if (!name) return;
+	if (name == pv_current) return;
+
+	pv_stash();
+	pv_load(name);
+}
+
+// 重新读一遍版本列表（切路径、增删版本、打开这一页时用）
+function pv_refresh() {
+	var names = pv_fill_versions();
+
+	if (#names == 0) {
+		pv_current = null;
+		lblPvHint.text = "当前游戏目录下没有版本。";
+		return;
+	}
+
+	// 尽量保持当前选择；不在列表里就退回当前版本，再不行用第一个
+	var want = pv_current;
+	if (!want or !has_version(cfg.game_path, want)) {
+		if (cfg.version and has_version(cfg.game_path, cfg.version)) want = cfg.version;
+		else want = names[1];
+	}
+
+	var at = 0;
+	for i, v in pv_versions {
+		if (v == want) {
+			at = i;
+			break;
+		}
+	}
+
+	if (at > 0) comboOptVer.selIndex = at;
+
+	pv_load(want);
+}
+
+comboOptVer.onSelChange = function() {
+	var i = comboOptVer.selIndex;
+	if (i <= 0 or i > #pv_versions) return;
+
+	pv_switch_to(pv_versions[i]);
+}
+
+for i, c in { chkMem; chkMode; chkW; chkH; chkPri; chkJvm } {
+	c.oncommand = function(id, event) {
+		pv_sync_enabled();
+		mark_dirty();
+	};
+}
+
+comboPvMode.add("手动设置");
+comboPvMode.add("全屏");
+comboPvMode.add("与启动器一致");
+
+comboPvPri.add("低");
+comboPvPri.add("较低");
+comboPvPri.add("正常");
+comboPvPri.add("较高");
+comboPvPri.add("高");
+
+pv_sync_enabled();
+
 // ---------- 第六页：关于 ----------
 
 var P6 = m3layout.create(winform, 232, 92, 504, { framed = false });
@@ -573,8 +824,8 @@ function has_version(dir, name) {
 
 // ---------- 分页 ----------
 
-var PAGES = { P1; P2; P3; P4; P5; P6; P7 };
-var nav_titles = { "启动器设置"; "游戏设置"; "账户管理"; "Java 管理"; "路径与版本管理"; "关于"; "鸣谢" };
+var PAGES = { P1; P2; P3; P4; P5; PV; P6; P7 };
+var nav_titles = { "启动器设置"; "游戏设置"; "账户管理"; "Java 管理"; "路径与版本管理"; "版本独立设置"; "关于"; "鸣谢" };
 
 function show_page(n) {
 	for i, page in PAGES {
@@ -603,7 +854,7 @@ function ensure_page(n) {
 		paths_render();
 		vers_render();
 	}
-	elseif (n == 7) credits_fill();
+	elseif (n == 8) credits_fill();
 }
 
 // 导航用一排 plus 自绘项，不用 listbox：
@@ -647,6 +898,9 @@ function select_page(n) {
 		nav_current = n;
 		show_page(n);
 		ensure_page(n);
+
+		// 版本独立设置：每次进来都重读版本列表（可能刚在上一页增删改过）
+		if (n == 6) pv_refresh();
 
 		winform.lblPageTitle.text = nav_titles[n];
 
@@ -1791,6 +2045,16 @@ winform.btnSave.oncommand = function(id, event) {
 	c.version_columns = listVers.columns;
 
 	m3config.save(c);
+
+	// 版本独立设置：先把这一页当前显示的值收进待保存表，再逐版本落盘
+	if (pv_current) pv_stash();
+
+	for name, ov in ver_pending {
+		m3opts.write(c.game_path, name, ov);
+	}
+
+	ver_pending = {};
+
 	m3config.clear_draft();
 	winform.endModal(true);
 }
@@ -1867,11 +2131,7 @@ if (draft_restored) {
 
 loading = false;
 
-diag("build_done");
-
 select_page(start_page);
-
-diag("page_selected");
 
 // 先不解冻：窗口显示后系统会按实际 DPI 缩放（125% 时 766x603 -> 956x745），
 // 等那次 WM_SIZE 过去再解冻，第一帧就是最终尺寸，看不到跳变。
@@ -1882,11 +2142,9 @@ function resume_after_scale() {
 	resumed = true;
 
 	m3layout.resume(winform);
-	diag("resumed_after_scale");
 }
 
 winform.onSize = function(width, height, wParam) {
-	diag("onsize " ++ tostring(width) ++ "x" ++ tostring(height));
 	resume_after_scale();
 }
 

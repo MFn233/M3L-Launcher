@@ -11,6 +11,7 @@ import m3crash;
 import m3version;
 import MMMLC;
 import m3config;
+import m3opts;
 import m3log;
 import m3java;
 import m3game;
@@ -489,6 +490,10 @@ function start_game(retried, inst) {
 		return;
 	}
 
+	// 版本独立设置：全局打底，版本目录里的 .m3l.options.json 盖上去。
+	// 后面的内存 / 窗口 / 优先级 / JVM 参数都用这份"实际生效"的值。
+	var eff = m3opts.effective(cfg, cfg.game_path, cfg.version);
+
 	// 版本隔离：默认每个版本用自己的目录（versions\<版本>）；
 	// 关掉隔离的版本改用 .minecraft 根目录。判断要带上游戏目录，
 	// 否则不同 .minecraft 里的同名版本会共用同一份设置。
@@ -531,8 +536,8 @@ function start_game(retried, inst) {
 	dbg("实例 " ++ inst.id ++ "：游戏目录 " ++ cfg.game_path);
 	dbg("版本：" ++ cfg.version);
 	dbg("工作目录：" ++ work_dir);
-	dbg("内存：" ++ cfg.memory ++ " MB");
-	dbg("窗口模式：" ++ cfg.window_mode);
+	dbg("内存：" ++ eff.memory ++ " MB");
+	dbg("窗口模式：" ++ eff.window_mode);
 	dbg("配置的 Java：" ++ tostring(cfg.java));
 
 	if (debug_mode) {
@@ -544,13 +549,13 @@ function start_game(retried, inst) {
 	}
 
 	// 游戏窗口大小三种规则
-	var game_w = cfg.width;
-	var game_h = cfg.height;
+	var game_w = eff.width;
+	var game_h = eff.height;
 
-	if (cfg.window_mode == "fullscreen") {
+	if (eff.window_mode == "fullscreen") {
 		m3game.set_fullscreen(work_dir, true);
 	}
-	elseif (cfg.window_mode == "match") {
+	elseif (eff.window_mode == "match") {
 		m3game.set_fullscreen(work_dir, false);
 		game_w = winform.width;
 		game_h = winform.height;
@@ -569,7 +574,7 @@ function start_game(retried, inst) {
 
 	// 自定义 JVM 参数：一行一条，空行忽略
 	var extra_jvm = {};
-	var jvm_text = string.replace(cfg.jvm_args or "", '\r', "");
+	var jvm_text = string.replace(eff.jvm_args or "", '\r', "");
 	if (#jvm_text > 0) {
 		var jvm_lines = string.split(jvm_text, '\n');
 		for k, line in jvm_lines {
@@ -586,7 +591,7 @@ function start_game(retried, inst) {
 		access_token = "0";
 		user_type = "msa";
 		version_type = "M3LC";
-		memory = cfg.memory;
+		memory = eff.memory;
 		work_dir = work_dir;
 		java_hint = cfg.java;
 		width = game_w;
@@ -596,7 +601,7 @@ function start_game(retried, inst) {
 	};
 
 	log("--------------------------------------------------");
-	log("启动 " ++ cfg.version ++ "   玩家 " ++ username ++ "   内存 " ++ cfg.memory ++ " MB");
+	log("启动 " ++ cfg.version ++ "   玩家 " ++ username ++ "   内存 " ++ eff.memory ++ " MB");
 
 	// 启动前先把版本目录的 JSON 归位（文件名、id 与目录名对齐）。
 	// 用户在资源管理器里改过文件夹名时，不做这一步 --version 会指到不存在的目录。
@@ -653,7 +658,7 @@ function start_game(retried, inst) {
 		inst.game_dir = cfg.game_path;
 		inst.work_dir = work_dir;
 		inst.java = java;
-		inst.memory = cfg.memory;
+		inst.memory = eff.memory;
 		inst.started = time.tick();
 
 		// 打包日志时把启动命令行也带上，排查 Java 参数问题很有用
@@ -727,7 +732,7 @@ function start_game(retried, inst) {
 	table.push(instances, inst);
 
 	// 进程优先级（在游戏起来之后设，设不上也不影响启动）
-	apply_priority(inst.prcs, cfg.priority);
+	apply_priority(inst.prcs, eff.priority);
 
 	log("已启动，PID = " ++ tostring(pid));
 	log("游戏运行期间，右键「启动游戏」可强制结束。");

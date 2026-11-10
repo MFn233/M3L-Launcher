@@ -1,0 +1,116 @@
+//m3opts.aardio
+
+//版本独立设置：只存「与全局不同的部分」。
+//
+//文件位置：<游戏目录>\versions\<版本名>\.m3l.options.json
+//命名约定：.m3l-meta.json 是下载器写的元信息，.m3l.options.json 是本模块写的设置覆盖。
+//
+//规则：
+//- 键存在 = 覆盖全局；键不存在 = 跟随全局（所以删除键就是"回退全局"）；
+//- 只有白名单里的键允许按版本覆盖（内存 / 窗口 / JVM 参数 / 优先级）；
+//  Java 列表、游戏路径、多开、调试模式属于全局，不参与覆盖。
+
+namespace m3opts {
+	import io;
+	import json;
+	import fsys;
+	import string;
+
+	// 允许按版本覆盖的键（白名单）。加键之前先想清楚：它是否真的"每个版本可以不同"。
+	KEYS = { "memory"; "width"; "height"; "window_mode"; "priority"; "jvm_args" };
+
+	function path_of(minecraft_dir, name) {
+		if (!minecraft_dir or !name) return null;
+
+		return minecraft_dir ++ "\versions\" ++ name ++ "\.m3l.options.json";
+	}
+
+	// 只留白名单里的键；空值不写（空 = 跟随全局）
+	function clean(t) {
+		var out = {};
+
+		if (type(t) != "table") return out;
+
+		for i, k in KEYS {
+			var v = t[k];
+			if (v === null) continue;
+			if (type(v) == "string" and #string.trim(v) == 0) continue;
+
+			out[k] = v;
+		}
+
+		return out;
+	}
+
+	function is_empty(t) {
+		if (type(t) != "table") return true;
+
+		for k, v in t {
+			if (v !== null) return false;
+		}
+
+		return true;
+	}
+
+	// 读覆盖项；没有文件或读失败都返回空表
+	function read(minecraft_dir, name) {
+		var f = path_of(minecraft_dir, name);
+		if (!f or !io.exist(f)) return {};
+
+		var data = json.load(f);
+		if (type(data) != "table") return {};
+
+		return clean(data);
+	}
+
+	// 写覆盖项；内容为空就把文件删掉（等价于"全部跟随全局"）
+	function write(minecraft_dir, name, t) {
+		var f = path_of(minecraft_dir, name);
+		if (!f) return false;
+
+		var data = clean(t);
+
+		if (is_empty(data)) {
+			if (io.exist(f)) fsys.delete(f);
+			return true;
+		}
+
+		json.save(f, data);
+		return true;
+	}
+
+	// 版本被删除 / 改名前的清理
+	function remove(minecraft_dir, name) {
+		var f = path_of(minecraft_dir, name);
+		if (!f) return;
+		if (io.exist(f)) fsys.delete(f);
+	}
+
+	// 合并出一份"这个版本实际生效"的设置：全局打底，覆盖项盖上去。
+	// 启动时用它，界面里也可以用它显示真实值。
+	function effective(cfg, minecraft_dir, name) {
+		var out = {};
+
+		for i, k in KEYS {
+			out[k] = cfg[k];
+		}
+
+		var ov = read(minecraft_dir, name);
+		for k, v in ov {
+			out[k] = v;
+		}
+
+		return out;
+	}
+}
+
+/**intellisense(m3opts)
+KEYS = 允许按版本覆盖的键（白名单）
+path_of(__/*游戏目录*/,__/*版本名*/) = 覆盖文件路径：versions\<名字>\.m3l.options.json
+read(__/*游戏目录*/,__/*版本名*/) = 读覆盖项，没有就返回空表
+write(__/*游戏目录*/,__/*版本名*/,__/*表*/) = 写覆盖项；内容为空则删文件
+remove(__/*游戏目录*/,__/*版本名*/) = 删除该版本的覆盖文件
+effective(__/*配置*/,__/*游戏目录*/,__/*版本名*/) = 全局 + 覆盖，合并成实际生效的设置
+clean(__/*表*/) = 只留白名单里的键，去掉空值
+is_empty(__/*表*/) = 没有任何覆盖项
+end intellisense**/
