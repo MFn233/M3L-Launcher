@@ -61,6 +61,24 @@ winform.add({
 	bgcolor = DIVIDE;
 });
 
+// ---------- 临时诊断（查完就删） ----------
+var diag_path = ..string.getenv("TEMP") ++ "\m3-settings.log";
+
+function diag(tag) {
+	var rc = winform.getRect();
+
+	..string.save(diag_path, ..string.format(
+		"%6d ms  %-12s  %dx%d  rect=%d,%d,%d,%d  dpi=%.2f\n",
+		..time.tick(), tag,
+		rc.right - rc.left, rc.bottom - rc.top,
+		rc.left, rc.top, rc.right, rc.bottom,
+		winform.dpiScaleX or 1
+	), "a");
+}
+
+..string.save(diag_path, "---- open ----\n", "w");
+diag("dsg_done");
+
 // 从这里开始到 return 之前，窗口正在被搭出来：控件、分组框、列宽都在变。
 // 冻结重绘，避免屏幕上出现中间状态（看起来像窗口在变形）。
 m3layout.suspend(winform);
@@ -1849,9 +1867,20 @@ if (draft_restored) {
 
 loading = false;
 
+diag("build_done");
+
 select_page(start_page);
+
+diag("page_selected");
 
 // 全部搭完再解冻，一次性画出来
 m3layout.resume(winform);
+
+diag("resumed");
+
+// 显示之后如果还有尺寸变化，这里会记下来
+winform.onSize = function(width, height, wParam) {
+	diag("onsize " ++ tostring(width) ++ "x" ++ tostring(height));
+}
 
 return winform;
