@@ -130,7 +130,24 @@ P2.text("手动设置时才需要填宽度与高度；全屏与「与启动器�
 
 P2.section("分配内存");
 var editMem, btnAuto = P2.row("内存", { cls = "edit"; text = "4096"; num = 1 }, "自动配置");
-P2.text("单位 MB。建议取物理内存的 1/4。");
+
+// 滑条：512 MB ~ 32 GB，吸附到 128 MB 一档（直接用数值不好拖准）
+var sliderMem = P2.make({
+	cls = "plus";
+	left = P2.left;
+	top = P2.y;
+	right = P2.right;
+	bottom = P2.y + 22;
+});
+
+m3theme.slider(sliderMem);
+sliderMem.setTrackbarRange(512, 32768);
+
+P2.y = P2.y + 22 + 4;
+
+var lblMemRange = P2.text("512 MB ～ 32 GB　（拖动滑条，或直接改上面的数字）", true);
+
+P2.text("单位 MB。建议取物理内存的 1/4，并按已装 Mod 数量与当前可用内存调整。");
 
 P2.section("进程优先级");
 var comboPri = P2.row("优先级", { cls = "combobox"; mode = "dropdownlist" });
@@ -993,7 +1010,28 @@ editMem.onChange = function() {
 	if (!v) return;
 
 	if (v < 512) v = 512;
-	if (v > 16384) v = 16384;
+	if (v > 32768) v = 32768;
+}
+
+// 滑条吸附到 128 MB 一档；用户拖动时同步到数值框
+var mem_slider_busy = false;
+
+sliderMem.onPosChanged = function(pos, triggeredByUser) {
+	if (mem_slider_busy) return;
+
+	var v = math.floor(pos / 128) * 128;
+	if (v < 512) v = 512;
+
+	if (v != pos) {
+		mem_slider_busy = true;
+		sliderMem.progressPos = v;
+		mem_slider_busy = false;
+	}
+
+	if (triggeredByUser) {
+		editMem.text = tostring(v);
+		mem_slider_debounce();
+	}
 }
 
 comboMode.onSelChange = function() {
@@ -1009,16 +1047,116 @@ btnDefault.oncommand = function(id, event) {
 }
 
 btnAuto.oncommand = function(id, event) {
-	var status = sys.mem.getStatus();
-	var total_mb = math.floor(status.totalPhys / 1048576);
+	var r = memory_suggest();
 
-	var mb = math.floor(total_mb / 4 / 256) * 256;
-	if (mb < 1024) mb = 1024;
-	if (mb > 8192) mb = 8192;
+	editMem.text = tostring(r.memory);
+	sliderMem.progressPos = r.memory;
 
-	editMem.text = tostring(mb);
 	mark_dirty();
-	winform.lblHint.text = "按物理内存的 1/4 建议：" ++ mb ++ " MB（本机共 " ++ total_mb ++ " MB）";
+
+	var why = "按物理内存的 1/4 加已装 " ++ r.mods ++ " 个 Mod 估算："
+		++ r.memory ++ " MB（本机共 " ++ r.total ++ " MB，当前可用 " ++ r.avail ++ " MB）";
+
+	if (r.capped) why = why ++ "。受当前可用内存限制，已下调。";
+
+	winform.lblHint.text = why;
+}
+
+// ---------- 内存估算 ----------
+
+// 当前版本实际使用的 mods 目录（隔离时在版本目录里）
+function mods_dir() {
+	if (#cfg.game_path == 0) return null;
+
+	if (!cfg.version or #cfg.version == 0) return cfg.game_path ++ "\mods";
+
+	var isolated = m3config.is_isolated(cfg, cfg.game_path, cfg.version);
+	if (isolated) return cfg.game_path ++ "\versions\" ++ cfg.version ++ "\mods";
+
+	return cfg.game_path ++ "\mods";
+}
+
+// 数一遍 .jar（含一层子目录：有的整合包按游戏版本分文件夹）
+function count_mods() {
+	var dir = mods_dir();
+	if (!dir or !io.exist(dir)) return 0;
+
+	var n = 0;
+	var files = fsys.list(dir, "*.jar");
+	n = n + #files;
+
+	var _, folders = fsys.list(dir);
+	for i, sub in folders {
+		var subdir = dir ++ "\" ++ sub;
+		if (io.exist(subdir)) {
+			var inner = fsys.list(subdir, "*.jar");
+			if (inner) n = n + #inner;
+		}
+	}
+
+	return n;
+}
+
+// 估算规则：
+//   基础 = 物理内存的 1/4（1024 ~ 8192，按 256 取整）
+//   加成 = Mod 数 × 32 MB（最多 4096）
+//   上限 = 当前可用内存减 1 GB（给系统留余量）
+function memory_suggest() {
+	var st = sys.mem.getStatus();
+	var total_mb = math.floor(st.totalPhys / 1048576);
+	var avail_mb = math.floor(st.availPhys / 1048576);
+
+	var base = math.floor(total_mb / 4 / 256) * 256;
+	if (base < 1024) base = 1024;
+	if (base > 8192) base = 8192;
+
+	var mods = count_mods();
+	var bonus = mods * 32;
+	if (bonus > 4096) bonus = 4096;
+
+	var want = base + bonus;
+
+	var cap = math.floor((avail_mb - 1024) / 256) * 256;
+	if (cap < 1024) cap = 1024;
+
+	var mb = want;
+	if (mb > cap) mb = cap;
+	if (mb < 512) mb = 512;
+	if (mb > 32768) mb = 32768;
+
+	return {
+		memory = mb;
+		total = total_mb;
+		avail = avail_mb;
+		mods = mods;
+		base = base;
+		bonus = bonus;
+		capped = (want > cap);
+	};
+}
+
+// 数值写回滑条（不触发"用户拖动"那条路径）
+function mem_to_slider() {
+	var v = tonumber(string.trim(editMem.text));
+	if (!v) return;
+
+	if (v < 512) v = 512;
+	if (v > 32768) v = 32768;
+
+	editMem.text = tostring(v);
+	sliderMem.progressPos = v;
+}
+
+// 拖滑条时别每动一像素就写一次草稿：停手 250ms 再写
+var mem_tick = 0;
+
+function mem_slider_debounce() {
+	mem_tick = mem_tick + 1;
+	var mine = mem_tick;
+
+	winform.setTimeout(function() {
+		if (mine == mem_tick) mark_dirty();
+	}, 250);
 }
 
 // ---------- 账户管理 ----------
@@ -2082,6 +2220,7 @@ winform.onCancel = function() {
 // ---------- 初始化 ----------
 
 editMem.text = tostring(cfg.memory);
+sliderMem.progressPos = cfg.memory;      // 滑条跟着数值走
 editJvm.text = cfg.jvm_args or "";
 editW.text = tostring(cfg.width);
 editH.text = tostring(cfg.height);
@@ -2117,8 +2256,8 @@ comboPri.onSelChange = function() {
 	mark_dirty();
 }
 
-editMem.onFocusLost = function() { mark_dirty(); }
-editMem.onOk = function() { mark_dirty(); }
+editMem.onFocusLost = function() { mem_to_slider(); mark_dirty(); }
+editMem.onOk = function() { mem_to_slider(); mark_dirty(); }
 editW.onFocusLost = function() { mark_dirty(); }
 editW.onOk = function() { mark_dirty(); }
 editH.onFocusLost = function() { mark_dirty(); }
