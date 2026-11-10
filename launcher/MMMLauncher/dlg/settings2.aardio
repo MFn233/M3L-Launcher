@@ -1126,8 +1126,8 @@ function mods_render() {
 			t_meta = t_meta + ms;
 
 			if (ms >= 30) {
-				// 零填充后再排序，字符串比较就等于数值比较；分隔符要用单引号才是真制表符
-				table.push(slow, string.format('%08d\t%s', ms, mod_rows[idx].file));
+				// 存成表，别拼字符串再解析回来（拼了又要 indexOf 找分隔符，容易踩空）
+				table.push(slow, { ms = ms; file = mod_rows[idx].file });
 			}
 
 			m3mod.cache_put(mod_rows[idx].path, meta);
@@ -1147,18 +1147,25 @@ function mods_render() {
 
 		m3mod.cache_save();
 
-		table.sort(slow);
+		// 取最慢的 5 个：造"零填充毫秒 + 序号"的排序键，再按 key 取回表
+		var keyed = {};
+		var keys = {};
+
+		for i, r in slow {
+			var k = string.format("%08d", r.ms) ++ "\t" ++ i;
+			keyed[k] = r;
+			table.push(keys, k);
+		}
+
+		table.sort(keys);
 
 		var top = {};
 
-		for i = #slow; i >= 1; 1 {
+		for i = #keys; i >= 1; 1 {
 			if (#top >= 5) break;
 
-			var one = slow[i];
-			var at_tab = string.indexOf(one, '\t');
-			var ms = tonumber(string.left(one, at_tab - 1));
-
-			table.push(top, string.format("%6dms  %s", ms, string.slice(one, at_tab + 1)));
+			var r = keyed[keys[i]];
+			table.push(top, string.format("%6dms  %s", r.ms, r.file));
 		}
 
 		mod_scan_stats = {
