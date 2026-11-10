@@ -16,6 +16,7 @@ var dir = "C:\Users\DELL\Desktop\MMML\模组样本";
 console.log("目录: " .. dir);
 
 var out = {};
+table.push(out, "toml=" .. tostring(m3mod.toml_engine()));
 table.push(out, "dir=" .. dir);
 
 var count = 0;

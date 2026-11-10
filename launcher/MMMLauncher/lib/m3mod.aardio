@@ -11,7 +11,7 @@ namespace m3mod {
 	import string;
 	import json;
 	import zlib.unzip;
-import m3toml;
+	import m3toml;
 	import table;     // 命名空间里访问 table.push 必须先 import，否则报 _get table
 	import m3config;
 
@@ -264,6 +264,14 @@ import m3toml;
 		}
 
 		return m3toml.parse(text);
+	}
+
+	// 当前用的 TOML 引擎（"string.toml" 或 "m3toml"），测试脚本会打印
+	function toml_engine() {
+		toml_parse("a=1");
+
+		if (toml_lib_ok) return "string.toml";
+		return "m3toml";
 	}
 
 	// mods.toml / neoforge.mods.toml：信息在第一组 [[mods]] 里
