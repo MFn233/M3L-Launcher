@@ -99,6 +99,30 @@ namespace MMMLC{
 		info.classpath = dedupe_by_key(info.classpath, info.class_meta);
 		info.classpath, info.class_meta = dedupe(info.classpath, info.class_meta);
 
+		//Cleanroom / lwjgl3ify 这类版本用 LWJGL3 + lwjglxx 在 Java 层模拟 LWJGL2。
+		//此时再放真正的 LWJGL2（org.lwjgl.lwjgl:*）会互相遮蔽：实测 1.12.2 + Java 25 上，
+		//org.lwjgl.Sys 会去加载 lwjgl64.dll，随后 ClassFormatError（org/lwjgl/PointerWrapper）
+		//把整个 JVM 带崩。凡是 classpath 里已经有 LWJGL3，就把 LWJGL2 摘掉。
+		var has_lwjgl3 = false;
+		for i, m in info.class_meta {
+			if (m and m.key == "org.lwjgl:lwjgl") has_lwjgl3 = true;
+		}
+
+		if (has_lwjgl3) {
+			var kept = {};
+			var kept_meta = {};
+
+			for i, m in info.class_meta {
+				if (m and m.key and string.startsWith(m.key, "org.lwjgl.lwjgl:")) continue;
+
+				table.push(kept, info.classpath[i]);
+				table.push(kept_meta, m);
+			}
+
+			info.classpath = kept;
+			info.class_meta = kept_meta;
+		}
+
 		return info;
 	}
 
@@ -576,6 +600,14 @@ namespace MMMLC{
 			}
 			if (!has_token_prefix(args, "-Dstderr.encoding=")) {
 				table.push(args, "-Dstderr.encoding=UTF-8");
+			}
+		}
+
+		//Java 24 起 sun.misc.Unsafe 的内存访问默认被限制，LWJGL2 与不少老模组会因此失败。
+		//JDK 提供了放行开关，但只有 24+ 才认，低版本传了会直接启动失败，所以按版本判断。
+		if (opts.java_major and opts.java_major >= 24) {
+			if (!has_token_prefix(args, "--sun-misc-unsafe-memory-access=")) {
+				table.push(args, "--sun-misc-unsafe-memory-access=allow");
 			}
 		}
 
