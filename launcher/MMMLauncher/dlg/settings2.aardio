@@ -233,7 +233,10 @@ P4.y = P4.y + 150 + 8;
 
 // 一行放两组按钮：左边是列表级操作，右边是选中项操作
 P4.btn_w = 76;
-var java_tools = P4.tool_row({"重新检测"; "添加"; "移除"}, {"加入黑名单"; "设为当前"; "打开目录"});
+// 7 个按钮一行放不下，按语义拆两行：
+// 第一行是列表级操作，第二行是针对选中项的操作。
+var java_tools = P4.tool_row({"重新检测"; "添加"; "移除"}, {});
+var java_item_tools = P4.tool_row({"收藏"; "加入黑名单"; "设为当前"; "打开目录"}, {});
 
 var lblJavaHint = P4.text("", true);
 
@@ -1745,7 +1748,16 @@ function java_render() {
 
 	var sorted = sort_javas(cfg.javas);
 
+	// 顺序：收藏的在最前（组内保持原有排序），再其余
+	var order = {};
 	for i, j in sorted {
+		if (java_faved(j.path)) table.push(order, j);
+	}
+	for i, j in sorted {
+		if (!java_faved(j.path)) table.push(order, j);
+	}
+
+	for i, j in order {
 		var major_text = "?";
 		if (j.major and j.major > 0) major_text = "Java " ++ j.major;
 
@@ -1755,6 +1767,7 @@ function java_render() {
 		if (!vendor_text or #vendor_text == 0) vendor_text = m3java.vendor_of(j.path, j.version);
 
 		var mark = "";
+		if (java_faved(j.path)) mark = mark ++ "★ ";
 		if (j.black) mark = mark ++ "[黑名单] ";
 		if (cfg.java == j.path) mark = mark ++ "[当前] ";
 
@@ -1781,6 +1794,30 @@ function java_render() {
 	lblJavaHint.text = "共 " ++ #cfg.javas ++ " 个。黑名单里的 Java 不会被自动选中。";
 
 	java_black_btn_update();
+	java_fav_btn_update();
+}
+
+// Java 收藏：键用小写 exe 路径（Java 是全局的，不像版本要带目录）
+function java_faved(path) {
+	if (!cfg.fav_javas or !path) return false;
+	return cfg.fav_javas[string.lower(path)] == true;
+}
+
+function java_set_fav(path, on) {
+	cfg.fav_javas = cfg.fav_javas or {};
+
+	var k = string.lower(path);
+	if (on) cfg.fav_javas[k] = true;
+	else cfg.fav_javas[k] = null;
+}
+
+function java_fav_btn_update() {
+	var btn = java_item_tools.left[1];
+	if (!btn) return;
+
+	var path = java_current();
+	if (path and java_faved(path)) btn.text = "取消收藏";
+	else btn.text = "收藏";
 }
 
 function java_current() {
@@ -1793,7 +1830,7 @@ function java_current() {
 // 黑名单按钮的文字跟着选中项走：
 // 已经在黑名单里就显示「移出黑名单」，否则「加入黑名单」（没选中时也用后者）。
 function java_black_btn_update() {
-	var btn = java_tools.right[1];
+	var btn = java_item_tools.left[2];
 	if (!btn) return;
 
 	var path = java_current();
@@ -1817,6 +1854,7 @@ listJava.onSelChanged = function(sel, item, subItem, nm) {
 	if (i > 0 and i <= #java_rows) java_selected = java_rows[i];
 
 	java_black_btn_update();
+	java_fav_btn_update();
 }
 
 // 重新检测
@@ -1898,7 +1936,7 @@ java_tools.left[3].oncommand = function(id, event) {
 }
 
 // 加入 / 移出黑名单
-java_tools.right[1].oncommand = function(id, event) {
+java_item_tools.left[2].oncommand = function(id, event) {
 	var path = java_current();
 	if (!path) {
 		lblJavaHint.text = "请先选择一个 Java。";
@@ -1946,7 +1984,7 @@ java_tools.right[1].oncommand = function(id, event) {
 }
 
 // 设为当前
-java_tools.right[2].oncommand = function(id, event) {
+java_item_tools.left[3].oncommand = function(id, event) {
 	var path = java_current();
 	if (!path) {
 		lblJavaHint.text = "请先选择一个 Java。";
@@ -1961,7 +1999,7 @@ java_tools.right[2].oncommand = function(id, event) {
 }
 
 // 在资源管理器里选中这条 Java
-java_tools.right[3].oncommand = function(id, event) {
+java_item_tools.left[4].oncommand = function(id, event) {
 	var path = java_current();
 	if (!path) {
 		lblJavaHint.text = "请先选择一个 Java。";
@@ -1974,6 +2012,26 @@ java_tools.right[3].oncommand = function(id, event) {
 	}
 
 	process.exploreSelect(path);
+}
+
+// 收藏 / 取消收藏
+java_item_tools.left[1].oncommand = function(id, event) {
+	var path = java_current();
+	if (!path) {
+		lblJavaHint.text = "请先选择一个 Java。";
+		return;
+	}
+
+	var on = !java_faved(path);
+	java_set_fav(path, on);
+
+	java_selected = path;
+
+	m3config.save_keys(cfg, {"fav_javas"});
+	java_render();
+
+	if (on) lblJavaHint.text = "已收藏：" ++ path;
+	else lblJavaHint.text = "已取消收藏：" ++ path;
 }
 
 // ---------- 收藏 ----------
