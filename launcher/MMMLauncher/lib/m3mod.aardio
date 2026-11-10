@@ -146,6 +146,14 @@ namespace m3mod {
 		return meta_cache[key];
 	}
 
+	// 写一条缓存（UI 线程解析完就存，不等最后统一存）
+	function cache_put(path, meta) {
+		if (!path or type(meta) != "table") return;
+
+		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
+		meta_cache[key] = meta;
+	}
+
 	function cache_save() {
 		var out = {};
 
