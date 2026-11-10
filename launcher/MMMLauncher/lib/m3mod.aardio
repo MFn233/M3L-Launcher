@@ -188,52 +188,72 @@ namespace m3mod {
 	}
 
 	// 计量：open / locate / read / parse 四段各自的总耗时（毫秒），只做整数累加
-	var st = { open = 0; locate = 0; read = 0; parse = 0; hit = 0; miss = 0 };
+	var st = { open = 0; scan = 0; read = 0; parse = 0; hit = 0; miss = 0 };
 
 	function stats_reset() {
-		st = { open = 0; locate = 0; read = 0; parse = 0; hit = 0; miss = 0 };
+		st = { open = 0; scan = 0; read = 0; parse = 0; hit = 0; miss = 0 };
 	}
 
 	function stats_get() {
 		return st;
 	}
 
-	// 按名字跳读一个条目。zip 里用正斜杠，但有的实现按反斜杠比较，两种都试。
-	// 这是"随机读取"：不遍历整个压缩包，一个 jar 只读几条。
-	function read_one(zip, name) {
-		var variants = { name; ..string.replace(name, "/", "\\") };
+	// 一次遍历把候选条目取出来。
+	// 为什么不用 locate：实测 locate 每个包 200ms 级（608 次调用吃掉 130 秒），
+	// 而顺序扫中央目录、命中几条就停，通常前十个条目内就齐了。
+	function collect_entries(zip, names) {
+		var want = {};
 
-		for i, v in variants {
-			var ok = false;
-			var t = ..time.tick();
-
-			try {
-				ok = zip.locate(v);
-			}
-			catch(e) {
-				ok = false;
-			}
-
-			st.locate = st.locate + (..time.tick() - t);
-
-			if (!ok) continue;
-
-			var s = null;
-			t = ..time.tick();
-
-			try {
-				s = zip.readCurrentFile();
-			}
-			catch(e) {
-				s = null;
-			}
-
-			st.read = st.read + (..time.tick() - t);
-
-			if (s and #s > 0) return s;
+		for i, n in names {
+			want[..string.lower(n)] = true;
 		}
 
-		return null;
+		var got = {};
+		var loader_hit = false;
+		var seen = 0;
+
+		try {
+			for pos, dirName, fileName, extractPath, fileInfo in zip.eachFile() {
+				if (!fileName) continue;
+
+				seen = seen + 1;
+				if (seen > 400) break;   // 兜底：极端包不无限扫
+
+				var base = fileName;
+				var cut = ..string.lastIndexAny(base, "/\\");
+				if (cut) base = ..string.right(base, -(cut + 1));
+
+				var low = ..string.lower(base);
+				if (!want[low] or got[low]) continue;
+
+				var s = null;
+				var t = ..time.tick();
+
+				try {
+					s = zip.readCurrentFile();
+				}
+				catch(e) {
+					s = null;
+				}
+
+				st.read = st.read + (..time.tick() - t);
+
+				if (!s or #s == 0) continue;
+
+				got[low] = s;
+				st.hit = st.hit + 1;
+
+				// 加载器专属条目（不是 MANIFEST）拿到就够用了，MANIFEST 只是补缺；
+				// 再给一点余量找 MANIFEST（一般在前几个条目），找不到也收工
+				if (low != "manifest.mf") loader_hit = true;
+
+				if (loader_hit and (#got >= 2 or seen >= 40)) break;
+			}
+		}
+		catch(e) {
+		}
+
+		return got;
 	}
 
 	// 有的整合包里的 mcmod.info 不是合法 JSON（带注释、少逗号），
@@ -458,61 +478,33 @@ namespace m3mod {
 			return bad;
 		}
 
-		// 按优先级逐个定位，命中即停；MANIFEST 只在缺字段时才读（多数包不需要）。
-		var texts = {};
+		// 一次遍历取候选条目（不再逐个 locate）
+		var names = {
+			"fabric.mod.json";
+			"quilt.mod.json";
+			"META-INF/neoforge.mods.toml";
+			"META-INF/mods.toml";
+			"litemod.json";
+			"mcmod.info";
+			"META-INF/MANIFEST.MF";
+		};
+
+		var ts = ..time.tick();
+		var texts = collect_entries(zip, names);
+		st.scan = st.scan + (..time.tick() - ts);
+
 		var hit = 0;
 		var tried = {};
 
-		// .litemod 里只可能有 litemod.json，把它排最前，省掉几次白跑的 locate
-		var order = {};
-		var is_lite = ..string.endsWith(..string.lower(path), ".litemod");
-
-		if (is_lite) {
-			..table.push(order, { key = "litemod.json"; name = "litemod.json" });
-		}
-
-		for i, c in META_CANDIDATES {
-			if (is_lite and c.key == "litemod.json") continue;
-			..table.push(order, c);
-		}
-
-		for i, c in order {
-			var s = read_one(zip, c.name);
-
-			if (!s) {
-				..table.push(tried, c.key ++ "-");
-				st.miss = st.miss + 1;
-				continue;
-			}
-
-			texts[c.key] = s;
+		for k, v in texts {
 			hit = hit + 1;
-			..table.push(tried, c.key ++ "+");
-			st.hit = st.hit + 1;
-
-			break;
+			..table.push(tried, k ++ "+");
 		}
 
 		var tp = ..time.tick();
 		var m = pick_meta(texts);
 
 		st.parse = st.parse + (..time.tick() - tp);
-
-		// 缺名字或版本时才去读 MANIFEST（它是"统一位置"，但多数包用不上）
-		if (#m.version == 0 or #m.name == 0) {
-			var mf = read_one(zip, "META-INF/MANIFEST.MF");
-
-			if (mf) {
-				texts["manifest.mf"] = mf;
-
-				tp = ..time.tick();
-				m = pick_meta(texts);
-				st.parse = st.parse + (..time.tick() - tp);
-
-				..table.push(tried, "manifest+");
-				hit = hit + 1;
-			}
-		}
 
 		m.tried = table.concat(tried, ",");
 

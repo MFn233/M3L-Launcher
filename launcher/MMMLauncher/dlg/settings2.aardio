@@ -1122,7 +1122,7 @@ function mod_write_scan_file(dir) {
 
 		var st = mod_scan_stats.st;
 		if (st) {
-			table.push(lines, "#ms_breakdown: open=" ++ st.open ++ "  locate=" ++ st.locate
+			table.push(lines, "#ms_breakdown: open=" ++ st.open ++ "  scan=" ++ st.scan
 				++ "  read=" ++ st.read ++ "  parse=" ++ st.parse);
 			table.push(lines, "#entries: hit=" ++ st.hit ++ "  miss=" ++ st.miss);
 		}
