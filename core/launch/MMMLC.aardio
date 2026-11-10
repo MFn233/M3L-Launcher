@@ -142,7 +142,7 @@ namespace MMMLC{
 			table.push(y, n or 0);
 		}
 
-		var n = math.max(#x, #y);
+		var n = ..math.max(#x, #y);
 		for i = 1; n; 1 {
 			var va = x[i] or 0;
 			var vb = y[i] or 0;
