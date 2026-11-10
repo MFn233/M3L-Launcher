@@ -2,6 +2,9 @@
 
 //日志窗口：一个窗口显示一个会话（一个游戏实例）。
 //主窗口 loadForm 之后调 bind(会话)，这里不自己挂。
+//
+//日志带级别与筛选：正文按级别用不同灰阶（项目只允许黑白灰，不用红/黄），
+//顶部一行筛选按钮带实时计数，点一下只看某一级。
 
 import win.ui;
 import m3theme;
@@ -10,51 +13,203 @@ import m3config;
 import process;
 
 /*DSG{{*/
-var winform = win.form(text="日志";right=640;bottom=420;bgcolor=0xF2F2F2;border="resizable")
+var winform = win.form(text="日志";right=640;bottom=452;bgcolor=0xF2F2F2;border="resizable")
 winform.add(
-editLog={cls="richedit";left=16;top=16;right=624;bottom=364;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;autohscroll=false;anchors={left=1;top=1;right=1;bottom=1};font=LOGFONT(name='Consolas';h=-12);z=1};
-btnClear={cls="plus";text="清空";left=16;top=374;right=88;bottom=404;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
-btnPack={cls="plus";text="打包日志";left=96;top=374;right=216;bottom=404;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
-btnClose={cls="plus";text="关闭";left=536;top=374;right=624;bottom=404;anchors={right=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=3};
-chkAuto={cls="checkbox";text="自动滚动";left=232;top=378;right=340;bottom=400;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
+btnAll={cls="plus";text="全部";left=16;top=12;right=104;bottom=38;anchors={left=1;top=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=10};
+btnError={cls="plus";text="错误";left=110;top=12;right=198;bottom=38;anchors={left=1;top=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=11};
+btnWarn={cls="plus";text="警告";left=204;top=12;right=292;bottom=38;anchors={left=1;top=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=12};
+btnDebug={cls="plus";text="调试";left=298;top=12;right=386;bottom=38;anchors={left=1;top=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=13};
+editLog={cls="richedit";left=16;top=48;right=624;bottom=396;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;autohscroll=false;anchors={left=1;top=1;right=1;bottom=1};font=LOGFONT(name='Consolas';h=-12);z=1};
+btnClear={cls="plus";text="清空";left=16;top=408;right=88;bottom=438;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+btnPack={cls="plus";text="打包日志";left=96;top=408;right=216;bottom=438;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
+btnClose={cls="plus";text="关闭";left=536;top=408;right=624;bottom=438;anchors={right=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=3};
+chkAuto={cls="checkbox";text="自动滚动";left=232;top=412;right=340;bottom=434;anchors={left=1;bottom=1};font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
 )
 /*}}*/
 
-// 日志正文用近黑灰；错误行用红色（richedit 的 textColor 是 COLORREF）
-var C_LOG_FG = 0x333333;
-var C_RED = 0x0000FF;
+//级别与灰阶：错误最深、调试最浅，全部落在黑白灰里
+var C_FATAL = 0x000000;
+var C_ERROR = 0x101010;
+var C_WARN  = 0x202020;
+var C_INFO  = 0x333333;
+var C_DEBUG = 0x8C8C8C;
 
-winform.editLog.color = C_LOG_FG;
+function level_color(lv) {
+	if (lv == "fatal") return C_FATAL;
+	if (lv == "error") return C_ERROR;
+	if (lv == "warn") return C_WARN;
+	if (lv == "debug") return C_DEBUG;
+
+	return C_INFO;
+}
+
+winform.editLog.color = C_INFO;
 
 m3theme.button(winform.btnClear);
 m3theme.button(winform.btnPack);
 m3theme.button(winform.btnClose);
 
+for i, b in { winform.btnAll; winform.btnError; winform.btnWarn; winform.btnDebug } {
+	m3theme.button(b);
+}
+
 winform.chkAuto.bgcolor = m3theme.C_BG;
 
-// 选择记在 config.json 里，下次打开还是上次的样子
+//选择记在 config.json 里，下次打开还是上次的样子
 var cfg = m3config.read();
 winform.chkAuto.checked = (cfg.log_autoscroll !== false);
 
-// 给 m3log 会话用的两个接口
-winform.append = function(text, is_error) {
-	winform.editLog.readonly = false;
-	if (is_error) {
-		winform.editLog.appendText({ textColor = C_RED }, text ++ '\r\n');
-	}
-	else {
-		winform.editLog.appendText(text ++ '\r\n');
-	}
-	winform.editLog.readonly = true;
+// ---------- 数据 ----------
 
-	// 自动滚到底；关掉后视图停在当前位置，方便往回翻
+//每行：{ level = "fatal"/"error"/"warn"/"info"/"debug"; text = 原文 }
+var lines = {};
+
+//太长的会话只留最后这么多行，免得日志窗口越用越慢
+var MAX_LINES = 5000;
+
+var counts = { fatal = 0; error = 0; warn = 0; info = 0; debug = 0 };
+var filter = "all";
+
+//日志行自己带前缀（[错误] / [警告] / [提示] / [调试]），直接按前缀判级
+function level_of(line, is_error) {
+	if (string.indexOf(line, "[致命]")) return "fatal";
+	if (string.indexOf(line, "[错误]")) return "error";
+	if (string.indexOf(line, "[警告]")) return "warn";
+	if (string.indexOf(line, "[调试]")) return "debug";
+	if (is_error) return "error";
+
+	return "info";
+}
+
+function count_text(label, n) {
+	return label ++ " " ++ n;
+}
+
+function update_buttons() {
+	winform.btnAll.text = count_text("全部", #lines);
+	winform.btnError.text = count_text("错误", counts.fatal + counts.error);
+	winform.btnWarn.text = count_text("警告", counts.warn);
+	winform.btnDebug.text = count_text("调试", counts.debug);
+
+	//选中的那个反色（和设置里的子页签一致）
+	var pairs = {
+		{ winform.btnAll; "all" };
+		{ winform.btnError; "error" };
+		{ winform.btnWarn; "warn" };
+		{ winform.btnDebug; "debug" };
+	};
+
+	for i, p in pairs {
+		var ctrl = p[1];
+		var on = (filter == p[2]);
+
+		if (on) {
+			ctrl.skin({
+				background = { default = m3theme.INK; hover = m3theme.INK; active = m3theme.INK };
+				color = { default = m3theme.C_BG; hover = m3theme.C_BG; active = m3theme.C_BG };
+			});
+		}
+		else {
+			ctrl.skin({
+				background = { default = m3theme.C_BG; hover = m3theme.SIDEBAR_HOVER; active = m3theme.C_BG };
+				color = { default = m3theme.INK; hover = m3theme.INK; active = m3theme.INK };
+			});
+		}
+	}
+}
+
+function scroll_bottom() {
 	if (winform.chkAuto.checked) {
 		::SendMessageInt(winform.editLog.hwnd, 0x0115 /*_WM_VSCROLL*/, 7 /*_SB_BOTTOM*/, 0);
 	}
 }
 
-winform.clear_all = function() {
+function passed(lv) {
+	if (filter == "all") return true;
+	if (filter == "error") return (lv == "error" or lv == "fatal");
+
+	return (lv == filter);
+}
+
+//按当前筛选重建全部内容（切筛选、清空后用）
+function render_all() {
+	winform.editLog.readonly = false;
 	winform.editLog.text = "";
+
+	//一次贴完，别让它每加一行都重绘
+	::SendMessageInt(winform.editLog.hwnd, 0x000B /*_WM_SETREDRAW*/, 0, 0);
+
+	for i, ln in lines {
+		if (!passed(ln.level)) continue;
+
+		winform.editLog.appendText({ textColor = level_color(ln.level) }, ln.text ++ '\r\n');
+	}
+
+	::SendMessageInt(winform.editLog.hwnd, 0x000B, 1, 0);
+
+	winform.editLog.readonly = true;
+
+	update_buttons();
+	scroll_bottom();
+}
+
+//给会话用的接口
+winform.append = function(text, is_error) {
+	var lv = level_of(tostring(text), is_error);
+
+	table.push(lines, { level = lv; text = tostring(text) });
+	counts[lv] = (counts[lv] or 0) + 1;
+
+	//超长会话整段裁掉最老的一批（不用 table.remove 删数组头，会留空洞）
+	if (#lines > MAX_LINES) {
+		var kept = {};
+
+		for i = 501; #lines; 1 {
+			table.push(kept, lines[i]);
+		}
+
+		lines = kept;
+	}
+
+	if (passed(lv)) {
+		winform.editLog.readonly = false;
+		winform.editLog.appendText({ textColor = level_color(lv) }, tostring(text) ++ '\r\n');
+		winform.editLog.readonly = true;
+
+		scroll_bottom();
+	}
+
+	update_buttons();
+}
+
+winform.clear_all = function() {
+	lines = {};
+	counts = { fatal = 0; error = 0; warn = 0; info = 0; debug = 0 };
+
+	winform.editLog.text = "";
+	update_buttons();
+}
+
+// ---------- 筛选按钮 ----------
+
+winform.btnAll.oncommand = function(id, event) {
+	filter = "all";
+	render_all();
+}
+
+winform.btnError.oncommand = function(id, event) {
+	filter = "error";
+	render_all();
+}
+
+winform.btnWarn.oncommand = function(id, event) {
+	filter = "warn";
+	render_all();
+}
+
+winform.btnDebug.oncommand = function(id, event) {
+	filter = "debug";
+	render_all();
 }
 
 var session = null;
@@ -73,10 +228,13 @@ winform.bind = function(sess, owner_inst) {
 winform.chkAuto.oncommand = function(id, event) {
 	cfg.log_autoscroll = winform.chkAuto.checked;
 	m3config.save_keys(cfg, {"log_autoscroll"});
+
+	if (winform.chkAuto.checked) scroll_bottom();
 }
 
 winform.btnClear.oncommand = function(id, event) {
 	if (session) session.clear();
+	else winform.clear_all();
 }
 
 // 把排查用的文件打成一个 zip（游戏日志、崩溃报告、mods 列表、启动命令…）
@@ -113,6 +271,8 @@ winform.btnClose.oncommand = function(id, event) {
 winform.onClose = function(hwnd, message, wParam, lParam) {
 	if (session) session.detach(winform);
 }
+
+update_buttons();
 
 winform.show();
 return winform;
