@@ -135,6 +135,38 @@ namespace MMMLC{
 			table.push(info.notes, info.fallback ++ " 个库没写下载地址，已按坐标补出路径。");
 		}
 
+		//classpath 不变量兜底：同一个 group:artifact:classifier 只能出现一次。
+		//去重逻辑今天出过两次错（meta 与 path 错位、分类器没算进 key），
+		//这条独立检查能把漏网的重复条目捞回来，避免"两个版本的同名类同时在 classpath"。
+		var seen = {};
+		var uniq = {};
+		var uniq_meta = {};
+		var dup = 0;
+
+		for i, m in info.class_meta {
+			var k = m and m.key;
+			if (!k) {
+				table.push(uniq, info.classpath[i]);
+				table.push(uniq_meta, m);
+				continue;
+			}
+
+			if (seen[k]) {
+				dup = dup + 1;
+				continue;
+			}
+
+			seen[k] = true;
+			table.push(uniq, info.classpath[i]);
+			table.push(uniq_meta, m);
+		}
+
+		if (dup > 0) {
+			info.classpath = uniq;
+			info.class_meta = uniq_meta;
+			table.push(info.notes, "classpath 里有 " ++ dup ++ " 个重复条目，已去掉。");
+		}
+
 		return info;
 	}
 
@@ -450,12 +482,17 @@ namespace MMMLC{
 	function prepare_natives(info, log) {
 		var dir = info.natives;
 
-		if (io.exist(dir)) return true;
 		if (#info.native_jars == 0) return true;
 
-		if (!fsys.createDir(dir)) return null, "无法创建 natives 目录: " + dir;
+		//这里**不能**"目录存在就跳过"：上一次失败可能留下空目录或旧版本的原生库，
+		//之后就会一直用错的那份（表现为运行期找不到符号 / 直接崩 JVM）。
+		//改成逐个文件比对大小，缺的、大小不同的才重写。
+		if (!io.exist(dir) and !fsys.createDir(dir)) return null, "无法创建 natives 目录: " + dir;
 
 		import zlib.unzip;
+
+		var written = 0;
+		var failed = {};
 
 		for i, item in info.native_jars {
 			var fileName_only = file_name_of(item.path);
@@ -471,17 +508,34 @@ namespace MMMLC{
 
 				//1.19 之后的 jar 里文件在 windows/x64/org/... 下面，
 				//必须按文件名平铺，否则 java.library.path 找不到。
-				var target = io.joinpath(dir, file_name_of(fileName));
+				var name = file_name_of(fileName);
+				var target = io.joinpath(dir, name);
+
 				var data = zip.readCurrentFile();
-				if (!data) continue;
+				if (!data) {
+					table.push(failed, name);
+					continue;
+				}
+
+				//已存在且大小一致就跳过，省掉重复写盘
+				if (io.exist(target) and (io.getSize(target) == #data)) continue;
 
 				if (!string.save(target, data)) {
 					zip.close();
 					return null, "写 natives 文件失败: " + target;
 				}
+
+				written = written + 1;
 			}
+
 			zip.close();
 		}
+
+		if (#failed > 0) {
+			table.push(info.notes, #failed ++ " 个原生库没读出来（" ++ failed[1] ++ " 等），可能影响渲染或音频。");
+		}
+
+		if (written > 0 and log) log("补齐 " ++ written ++ " 个原生库");
 
 		return true;
 	}
