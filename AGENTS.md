@@ -112,6 +112,9 @@ arr = list;
   （`docs/specs/aproj.md:146`）
 - 新增 `dlg/*.aardio` 后，让用户在 IDE 里右键「窗体文件」→ **同步本地目录**，否则发布版缺窗体
 - 工程属性（版本号、公司名、图标）也在 IDE 里改
+- **升版本要改两处**：工程属性 `FileVersion`（四段，含 aardio 自增的构建号）
+  与 `launcher/MMMLauncher/lib/m3app.aardio` 的 `VERSION`（前三位）。
+  关于页显示的是 `m3app.version_text()`：发布版读 exe 资源，F5 时退回 `VERSION` 常量。
 - 发布前检查 exe 的 PE 资源表里 `/DLG/*.AARDIO` 是否齐全
 
 ---

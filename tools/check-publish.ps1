@@ -87,8 +87,50 @@ foreach ($name in $dlgs) {
 }
 
 Write-Host ""
+Write-Host "  --- version (project property vs lib/m3app.aardio) ---"
+# 版本号有两处：工程属性 FileVersion（四段）与 m3app.aardio 的 VERSION（前三位）。
+# 两者对不上时，关于页在 F5 与发布版里会显示不同的数字，所以这里提示一句。
+$aprojPath = Join-Path $root "launcher\MMMLauncher\default.aproj"
+$m3appPath = Join-Path $root "launcher\MMMLauncher\lib\m3app.aardio"
+$verWarn = 0
+
+$projVer = $null
+if (Test-Path $aprojPath) {
+	$aprojText = Get-Content $aprojPath -Raw -Encoding UTF8
+	if ($aprojText -match 'FileVersion="([^"]+)"') { $projVer = $matches[1] }
+}
+
+$m3appVer = $null
+if (Test-Path $m3appPath) {
+	$m3appText = Get-Content $m3appPath -Raw -Encoding UTF8
+	if ($m3appText -match 'VERSION\s*=\s*"([^"]+)"') { $m3appVer = $matches[1] }
+}
+
+$exeVer = $file.VersionInfo.FileVersion
+
+Write-Host "    aproj FileVersion : $projVer"
+Write-Host "    m3app VERSION     : $m3appVer"
+Write-Host "    exe  FileVersion  : $exeVer"
+
+if ($projVer -and $m3appVer) {
+	$projShort = ($projVer -split '\.')[0..2] -join '.'
+	if ($projShort -ne $m3appVer) {
+		Write-Host "    [WARN] first three segments differ: aproj=$projShort m3app=$m3appVer"
+		$verWarn = 1
+	} else {
+		Write-Host "    [ OK ] first three segments match ($projShort)"
+	}
+} else {
+	Write-Host "    [WARN] could not read one of them"
+	$verWarn = 1
+}
+
+Write-Host ""
 if ($missing -eq 0) {
 	Write-Host "  RESULT: OK - this EXE carries every library and dialog."
+	if ($verWarn -ne 0) {
+		Write-Host "          (version numbers need attention, see [WARN] above)"
+	}
 	exit 0
 } else {
 	Write-Host "  RESULT: FAIL - $missing item(s) missing."

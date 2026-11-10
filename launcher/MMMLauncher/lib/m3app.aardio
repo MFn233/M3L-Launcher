@@ -1,0 +1,39 @@
+//m3app.aardio
+
+//应用自身的元信息：版本号、产品名。集中一处，避免"关于页里写死一个版本号"。
+//
+//版本号规则仍然是 x.x.x.x：第四段由 aardio 在发布时自增，界面只显示前三位。
+//所以这里写的 VERSION 只需要和**工程属性 FileVersion 的前三位**一致。
+//
+//发布版读 exe 的版本资源（永远和工程属性同步）；
+//F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，退回 VERSION 常量。
+//这样开发时也能看到正确版本，不用先发布、也不用去改对话框里的字。
+
+namespace m3app {
+	import fsys.version;
+
+	// 每次升版本改这一行（和工程属性前三位保持一致）
+	VERSION = "0.2.0";
+
+	// 用来确认"这个 exe 是我们自己的"：aardio 宿主 exe 的 ProductName 不是这个
+	PRODUCT = "M^3 Launcher";
+
+	// 返回 "0.2.0" 这样的三位版本号
+	function version_text() {
+		var vi = fsys.version.getInfo(..io._exepath);
+		if (vi and vi.productName == PRODUCT and vi.fileVersion) {
+			var fv = vi.fileVersion;
+			if (fv.valid()) {
+				return tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
+			}
+		}
+
+		return VERSION;
+	}
+}
+
+/**intellisense(m3app)
+VERSION = 版本号前三位（要和工程属性 FileVersion 的前三位一致）
+PRODUCT = 产品名，用来认 exe 是不是我们自己的
+version_text() = 三位版本号：发布版读 exe 资源，开发时用 VERSION
+end intellisense**/

@@ -21,6 +21,7 @@ import crypt;
 import sys.mem;
 import fsys;
 import fsys.version;
+import m3app;
 import string;
 import math;
 /*DSG{{*/
@@ -304,7 +305,7 @@ table.push(P6.controls, lblAboutName);
 P6.text("—— 一个妄图写出完美代码的程序爱好者。", true);
 P6.gap(12);
 P6.text("作者：MFn。本项目遵循 GPL-3.0 协议开源。", true);
-var lblAboutVer = P6.text("版本 0.2.0", true);
+var lblAboutVer = P6.text("版本 " ++ m3app.version_text(), true);
 
 P6.finish();
 
@@ -1565,18 +1566,6 @@ winform.onCancel = function() {
 }
 
 // ---------- 初始化 ----------
-
-// 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
-// F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
-var about_ver = "";
-var vi = fsys.version.getInfo(io._exepath);
-if (vi and vi.productName == "M^3 Launcher" and vi.fileVersion) {
-	var fv = vi.fileVersion;
-	if (fv.valid()) {
-		about_ver = tostring(fv.major) ++ "." ++ tostring(fv.minor) ++ "." ++ tostring(fv.build);
-	}
-}
-if (#about_ver > 0) lblAboutVer.text = "版本 " ++ about_ver;
 
 editMem.text = tostring(cfg.memory);
 editJvm.text = cfg.jvm_args or "";
