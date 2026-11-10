@@ -1009,6 +1009,8 @@ function java_render() {
 	}
 
 	lblJavaHint.text = "共 " ++ #cfg.javas ++ " 个。黑名单里的 Java 不会被自动选中。";
+
+	java_black_btn_update();
 }
 
 function java_current() {
@@ -1018,9 +1020,33 @@ function java_current() {
 	return java_selected;
 }
 
+// 黑名单按钮的文字跟着选中项走：
+// 已经在黑名单里就显示「移出黑名单」，否则「加入黑名单」（没选中时也用后者）。
+function java_black_btn_update() {
+	var btn = java_tools.right[1];
+	if (!btn) return;
+
+	var path = java_current();
+	var in_black = false;
+
+	if (path) {
+		for i, j in cfg.javas {
+			if (j.path == path) {
+				if (j.black) in_black = true;
+				break;
+			}
+		}
+	}
+
+	if (in_black) btn.text = "移出黑名单";
+	else btn.text = "加入黑名单";
+}
+
 listJava.onSelChanged = function(sel, item, subItem, nm) {
 	var i = listJava.selIndex;
 	if (i > 0 and i <= #java_rows) java_selected = java_rows[i];
+
+	java_black_btn_update();
 }
 
 // 重新检测
