@@ -243,12 +243,15 @@ var SUB_BTN_H = 28;
 
 var P5 = m3layout.create(winform, 232, 88, 504, { framed = true });
 
+// 左边线与分组框的左边线对齐（框比内容左移 12px），而不是对齐列表
+var SUB_BTN_LEFT = 220;
+
 var subPathBtn = winform.add({
 	cls = "plus";
 	text = "路径";
-	left = 232;
+	left = SUB_BTN_LEFT;
 	top = 52;
-	right = 232 + SUB_BTN_W;
+	right = SUB_BTN_LEFT + SUB_BTN_W;
 	bottom = 52 + SUB_BTN_H;
 	font = LOGFONT(name='Microsoft YaHei'; h=-12);
 });
@@ -256,9 +259,9 @@ var subPathBtn = winform.add({
 var subVerBtn = winform.add({
 	cls = "plus";
 	text = "版本";
-	left = 232 + SUB_BTN_W + 8;
+	left = SUB_BTN_LEFT + SUB_BTN_W + 8;
 	top = 52;
-	right = 232 + SUB_BTN_W * 2 + 8;
+	right = SUB_BTN_LEFT + SUB_BTN_W * 2 + 8;
 	bottom = 52 + SUB_BTN_H;
 	font = LOGFONT(name='Microsoft YaHei'; h=-12);
 });
@@ -360,6 +363,8 @@ for k, c in SV.controls {
 
 var sub_current = 1;   // 1 = 路径，2 = 版本
 
+// 两个状态都常驻底色：未选中浅灰、选中深一档。
+// 不做"透明、悬停才出底色"——那样看起来像两个普通文字，不像可切换的页签。
 function sub_btn_skin(ctrl, selected) {
 	if (selected) {
 		ctrl.skin({
@@ -369,7 +374,7 @@ function sub_btn_skin(ctrl, selected) {
 	}
 	else {
 		ctrl.skin({
-			background = { default = m3theme.BG; hover = m3theme.SIDEBAR_HOVER; active = m3theme.SIDEBAR_SEL };
+			background = { default = m3theme.SIDEBAR; hover = m3theme.SIDEBAR_HOVER; active = m3theme.SIDEBAR_SEL };
 			color = { default = m3theme.MUTED; hover = m3theme.INK; active = m3theme.INK };
 		});
 	}
