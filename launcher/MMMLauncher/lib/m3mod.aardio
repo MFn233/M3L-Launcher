@@ -71,9 +71,15 @@ namespace m3mod {
 
 		add_files(dir, "");
 
+		// fsys.list() 返回的目录项是**完整路径**（不是名字），别再拼一次。
+		// 两种形式都兜住：能直接用就是路径，否则当名字拼。
 		var _, folders = fsys.list(dir);
 		for i, sub in folders {
-			add_files(dir ++ "\" ++ sub, sub);
+			var subdir = sub;
+			if (!io.exist(subdir)) subdir = dir ++ "\" ++ sub;
+			if (!io.exist(subdir)) continue;
+
+			add_files(subdir, io.splitpath(subdir).name);
 		}
 
 		return out;
