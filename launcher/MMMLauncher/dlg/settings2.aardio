@@ -541,12 +541,23 @@ var editPvH, chkH = pv_row("高度", { cls = "edit"; text = "" });
 var comboPvPri, chkPri = pv_row("进程优先级", { cls = "combobox"; mode = "dropdownlist" });
 
 // Java：跟随全局，或给这个版本单独指定（可写相对路径，以版本文件夹为起点）
+var lblPvJava = PVA.make({
+	cls = "static";
+	text = "Java";
+	left = PVA.left;
+	top = PVA.y + 2;
+	right = PVA.left + 52;
+	bottom = PVA.y + 22;
+});
+
+m3theme.ink(lblPvJava);
+
 var comboPvJava = PVA.make({
 	cls = "combobox";
 	mode = "dropdownlist";
-	left = PVA.left;
+	left = PVA.left + 56;
 	top = PVA.y;
-	right = PVA.left + 104;
+	right = PVA.left + 160;
 	bottom = PVA.y + PVA.row_h;
 });
 
@@ -556,7 +567,7 @@ comboPvJava.add("手动指定");
 var editPvJava = PVA.make({
 	cls = "edit";
 	text = "";
-	left = PVA.left + 112;
+	left = PVA.left + 168;
 	top = PVA.y;
 	right = PVA.right - 64;
 	bottom = PVA.y + PVA.row_h;
@@ -576,6 +587,9 @@ var btnPvJava = PVA.make({
 m3theme.button(btnPvJava);
 
 PVA.y = PVA.y + PVA.row_step;
+
+//「跟随全局」到底跟哪个：直接把全局 Java 写出来，省得再猜
+var lblPvJavaHint = PVA.text("", true);
 
 var chkJvm = PVA.make({
 	cls = "checkbox";
@@ -751,6 +765,8 @@ function pv_sync_enabled() {
 	var manual = (comboPvJava.selIndex == 2);
 	editPvJava.disabled = !manual;
 	btnPvJava.disabled = !manual;
+
+	lblPvJavaHint.text = "跟随全局时使用：" ++ (cfg.java or "由启动器按版本自动选择");
 }
 
 function pv_fill_versions() {
