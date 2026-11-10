@@ -94,8 +94,11 @@ namespace m3zip {
 		var lh = file.read(30);
 		if (!lh) return null, "读 local header 失败";
 
-		var nameLen = u16(lh, 26);
-		var extraLen = u16(lh, 28);
+		// local header 从 1 号元素开始，字段是 0 基偏移：
+		// nameLen 在 0 基 26 → 索引 27；extraLen 在 0 基 28 → 索引 29。
+		// （写成 26/28 会差一个字节，数据段取错、解压必然失败）
+		var nameLen = u16(lh, 27);
+		var extraLen = u16(lh, 29);
 
 		var dataStart = e.localOff + 30 + nameLen + extraLen;
 
@@ -243,9 +246,10 @@ namespace m3zip {
 				var h = file.read(56);
 
 				if (h and is_sig(h, 1, 80, 75, 6, 6)) {
-					count = u64(h, 32);
-					cdSize = u64(h, 40);
-					cdOff = u64(h, 48);
+					// 同样是 1 基索引：字段 0 基偏移 32/40/48 → 索引 +1
+					count = u64(h, 33);
+					cdSize = u64(h, 41);
+					cdOff = u64(h, 49);
 				}
 			}
 		}
