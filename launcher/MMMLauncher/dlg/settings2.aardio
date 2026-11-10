@@ -27,6 +27,7 @@ import m3app;
 import string;
 import math;
 import time;
+import thread.command;
 /*DSG{{*/
 var winform = win.form(text="设置";right=759;bottom=567;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
@@ -900,6 +901,8 @@ comboPvPri.add("高");
 
 var mod_rows = {};        // 与列表顺序一致：scan() 出来的条目
 var mod_dup_rows = {};    // 重复安装的行号（1 基），自定义绘制时标红
+var mod_listener = null;  // thread.command 对象（后台线程回报用）
+var mod_jobs_left = 0;    // 还有几个 worker 没干完
 var mod_selected = null;  // 选中的条目（按 path 记）
 
 // 只有选中"已禁用"的 Mod 时，按钮才叫「启用」；否则叫「禁用」
@@ -988,9 +991,11 @@ function mods_render() {
 		return;
 	}
 
+	m3mod.cache_load();
+
 	var list = m3mod.scan(dir);
 
-	// 先按文件名铺出来（元数据先空着，名字先显示文件名）
+	// 先按文件名铺出来（元数据先空着）；命中缓存的直接填好
 	for i, m in list {
 		m.modid = "";
 		m.title = m.name;
@@ -1012,29 +1017,13 @@ function mods_render() {
 		return;
 	}
 
-	mod_prog_show(#mod_rows);
-	mod_prog_update(0, #mod_rows);
+	// 缓存里已经有的先填上，剩下的交给后台线程
+	var todo = {};
 
-	lblModHint.text = "正在读取 Mod 信息… 0/" ++ #mod_rows;
+	for i, m in mod_rows {
+		var meta = m3mod.cache_peek(m.path);
 
-	var i = 1;
-
-	// 先声明再赋值。直接写 var step = function() 的话，函数体里那句 step
-	// 在声明之前就被编译，会解析成全局（nil），setTimeout(step, 20) 就报
-	// 未指定回调函数。
-	var step;
-
-	step = function() {
-		if (gen != mod_scan_gen) return;   // 被切页 / 切版本作废
-
-		// 按时间片跑：一次最多占用 25ms，剩下的下一拍继续。
-		// 固定"每拍 4 个"在 150 个 Mod 时太慢，固定"每拍 30 个"又会卡界面。
-		var deadline = ..time.tick() + 25;
-
-		while (i <= #mod_rows and ..time.tick() < deadline) {
-			var m = mod_rows[i];
-			var meta = m3mod.meta_of(m.path);
-
+		if (meta) {
 			m.modid = meta.modid or "";
 			m.title = meta.name or "";
 			m.mver = meta.version or "";
@@ -1042,27 +1031,112 @@ function mods_render() {
 			if (#m.title == 0) m.title = m.name;
 			if (#m.mver == 0) m.mver = "-";
 
-			// 就地改这两列：不重排，扫描过程中列表不乱跳
 			listMods.setItemText(m.title, i, 2);
 			listMods.setItemText(m.mver, i, 3);
-
-			i = i + 1;
-		}
-
-		mod_scan_done = i - 1;
-		mod_prog_update(mod_scan_done, #mod_rows);
-
-		if (i <= #mod_rows) {
-			lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
-			winform.setTimeout(step, 1);
 		}
 		else {
-			mod_prog_hide();
-			mods_render_final();
+			table.push(todo, i);
 		}
-	};
+	}
 
-	step();
+	mod_scan_done = #mod_rows - #todo;
+	mod_prog_show(#mod_rows);
+	mod_prog_update(mod_scan_done, #mod_rows);
+
+	if (#todo == 0) {
+		mod_prog_hide();
+		mods_render_final();
+		return;
+	}
+
+	lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
+
+	// ---- 后台线程读元数据 ----
+
+	if (!mod_listener) {
+		mod_listener = thread.command();
+
+		// on_meta 在 UI 线程里执行（thread.command 负责跨线程投递）
+		mod_listener.on_meta = function(g, idx, name, ver, modid, err) {
+			if (g != mod_scan_gen) return;   // 切页/切版本之后迟到的回报，丢弃
+
+			if (mod_rows[idx]) {
+				var m = mod_rows[idx];
+
+				m.modid = modid;
+				m.title = name;
+				m.mver = ver;
+
+				if (#m.title == 0) m.title = m.name;
+				if (#m.mver == 0) m.mver = "-";
+
+				listMods.setItemText(m.title, idx, 2);
+				listMods.setItemText(m.mver, idx, 3);
+			}
+
+			mod_scan_done = mod_scan_done + 1;
+			mod_prog_update(mod_scan_done, #mod_rows);
+
+			if (mod_scan_done < #mod_rows) {
+				lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
+			}
+		};
+
+		mod_listener.on_done = function(g) {
+			if (g != mod_scan_gen) return;
+
+			mod_jobs_left = mod_jobs_left - 1;
+
+			if (mod_jobs_left > 0) return;
+			if (mod_scan_done < #mod_rows) return;
+
+			m3mod.cache_save();
+			mods_render_final();
+		};
+	}
+
+	var paths = {};
+	for i, m in mod_rows {
+		paths[i] = m.path;
+	}
+
+	// 把待办索引均分给若干线程（Mod 少就一个线程，省得折腾）
+	var worker = 4;
+	if (#todo <= 8) worker = 1;
+	if (worker > #todo) worker = #todo;
+
+	mod_jobs_left = worker;
+
+	var per = ..math.ceil(#todo / worker);
+
+	for w = 1; worker; 1 {
+		var at = (w - 1) * per + 1;
+		var to = at + per - 1;
+		if (to > #todo) to = #todo;
+		if (at > to) break;
+
+		// 切页/切版本后这些结果没人要了：靠 gen 判断
+		var first = todo[at];
+		var last = todo[to];
+
+		thread.invoke(
+			function(listener, paths, first, last, g) {
+				import thread.command;
+				import m3mod;
+
+				for i = first; last; 1 {
+					var meta = m3mod.meta_of(paths[i]);
+
+					listener.$on_meta(g, i,
+						meta.name or "",
+						meta.version or "",
+						meta.modid or "",
+						meta.err or "");
+				}
+
+				listener.$on_done(g);
+			}, mod_listener, paths, first, last, gen);
+	}
 }
 
 // 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表

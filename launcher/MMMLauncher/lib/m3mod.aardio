@@ -99,6 +99,8 @@ namespace m3mod {
 	// 结果按 路径+大小 缓存：同一个 Mod 反复重画列表时不用再开一次压缩包。
 
 	var meta_cache = {};
+	var cache_file = ..io.fullpath("/mod-meta-cache.json");
+	var cache_loaded = false;
 
 	// 候选条目：key 是内部索引名，name 是压缩包里的条目名。
 	// 顺序 = 优先级：Fabric/Quilt 先看，其次 Forge 新版、LiteLoader、老版，最后 MANIFEST。
@@ -111,6 +113,60 @@ namespace m3mod {
 		{ key = "mcmod.info"; name = "mcmod.info" };
 		{ key = "manifest.mf"; name = "META-INF/MANIFEST.MF" };
 	};
+
+	// 持久缓存：读过的元数据写到配置旁边的 mod-meta-cache.json，
+	// 下次开设置就不用再开压缩包了（键 = 小写路径|大小）。
+	function cache_load() {
+		if (cache_loaded) return;
+		cache_loaded = true;
+
+		if (!io.exist(cache_file)) return;
+
+		var data = null;
+		try {
+			data = json.load(cache_file);
+		}
+		catch(e) {
+			data = null;
+		}
+
+		if (type(data) != "table") return;
+
+		for k, v in data {
+			if (type(v) != "table") continue;
+			meta_cache[k] = v;
+		}
+	}
+
+	// 只查缓存，不碰磁盘（用于"先填已知道的"）
+	function cache_peek(path) {
+		if (!path) return null;
+
+		var key = ..string.lower(path) ++ "|" ++ ..tostring(io.getSize(path) or 0);
+		return meta_cache[key];
+	}
+
+	function cache_save() {
+		var out = {};
+
+		for k, v in meta_cache {
+			if (type(v) != "table") continue;
+			if (v.err) continue;          // 失败的别缓存，下次再试
+
+			out[k] = {
+				modid = v.modid or "";
+				name = v.name or "";
+				version = v.version or "";
+				loader = v.loader or "";
+			};
+		}
+
+		try {
+			json.save(cache_file, out);
+		}
+		catch(e) {
+		}
+	}
 
 	// 按名字跳读一个条目。zip 里用正斜杠，但有的实现按反斜杠比较，两种都试。
 	// 这是"随机读取"：不遍历整个压缩包，一个 jar 只读几条。
