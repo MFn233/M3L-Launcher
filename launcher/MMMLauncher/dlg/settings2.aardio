@@ -27,7 +27,6 @@ import m3app;
 import string;
 import math;
 import time;
-import thread.command;
 /*DSG{{*/
 var winform = win.form(text="设置";right=759;bottom=567;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
@@ -901,7 +900,6 @@ comboPvPri.add("高");
 
 var mod_rows = {};        // 与列表顺序一致：scan() 出来的条目
 var mod_dup_rows = {};    // 重复安装的行号（1 基），自定义绘制时标红
-var mod_listener = null;  // thread.command 对象（后台线程回报用）
 var mod_todo = {};        // 这一轮需要读的行号
 var mod_scan_got = false; // 后台线程有没有回过话（看门狗用）
 var mod_scan_error = "";  // 后台线程报的错
@@ -967,30 +965,7 @@ function mod_scan_cancel() {
 	mod_scan_gen = mod_scan_gen + 1;
 }
 
-// 后台线程回传的是"条目原文"，解析留在 UI 线程——
-// 新线程有独立的全局环境，项目库不一定能 import 到，而线程里的异常在 GUI 下是静默的。
-var MOD_SLOTS = {
-	"fabric.mod.json";
-	"quilt.mod.json";
-	"META-INF/neoforge.mods.toml";
-	"META-INF/mods.toml";
-	"litemod.json";
-	"mcmod.info";
-	"META-INF/MANIFEST.MF";
-};
-
-// 与 MOD_SLOTS 一一对应（pick_meta 用的键是"文件名最后一段"）
-var MOD_SLOT_KEYS = {
-	"fabric.mod.json";
-	"quilt.mod.json";
-	"neoforge.mods.toml";
-	"mods.toml";
-	"litemod.json";
-	"mcmod.info";
-	"manifest.mf";
-};
-
-// 把某行的元数据（已解析）填进列表
+// 把某行的元数据填进列表
 function mod_fill_row(idx, meta) {
 	if (!mod_rows[idx]) return;
 
@@ -1003,29 +978,12 @@ function mod_fill_row(idx, meta) {
 	if (#m.title == 0) m.title = m.name;
 	if (#m.mver == 0) m.mver = "-";
 
-	m3mod.cache_put(m.path, {
-		modid = m.modid;
-		name = m.title;
-		version = m.mver;
-		loader = meta.loader or "";
-	});
-
 	listMods.setItemText(m.title, idx, 2);
 	listMods.setItemText(m.mver, idx, 3);
 }
 
-// 线程回传的 7 段原文 → 解析 → 填行
-function mod_apply_texts(idx, t) {
-	var texts = {};
-
-	for k, key in MOD_SLOT_KEYS {
-		var s = t[k];
-		if (s and #s > 0) texts[key] = s;
-	}
-
-	mod_fill_row(idx, m3mod.pick_meta(texts));
-}
-
+// 同步读取，按时间片跑：已缓存的瞬间出结果，没缓存的才开压缩包。
+// 不用后台线程：线程在部分环境里加载不到项目库，而且异常是静默的（踩过）。
 function mods_render() {
 	mod_scan_cancel();
 	var gen = mod_scan_gen;
@@ -1036,9 +994,6 @@ function mods_render() {
 	mod_todo = {};
 
 	mod_scan_done = 0;
-	mod_scan_got = false;
-	mod_scan_error = "";
-	mod_scan_syncing = false;
 
 	if (!pv_current) {
 		mod_prog_hide();
@@ -1062,7 +1017,6 @@ function mods_render() {
 
 	var list = m3mod.scan(dir);
 
-	// 先按文件名铺出来；命中缓存的直接填好
 	for i, m in list {
 		m.modid = "";
 		m.title = m.name;
@@ -1084,18 +1038,19 @@ function mods_render() {
 		return;
 	}
 
+	// 缓存里有的先填上，剩下的排队
 	for i, m in mod_rows {
 		var meta = m3mod.cache_peek(m.path);
 
 		if (meta) {
 			mod_fill_row(i, meta);
+			mod_scan_done = mod_scan_done + 1;
 		}
 		else {
 			table.push(mod_todo, i);
 		}
 	}
 
-	mod_scan_done = #mod_rows - #mod_todo;
 	mod_prog_show(#mod_rows);
 	mod_prog_update(mod_scan_done, #mod_rows);
 
@@ -1107,170 +1062,28 @@ function mods_render() {
 
 	lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
 
-	// ---- 后台线程：只读条目原文 ----
-
-	if (!mod_listener) {
-		mod_listener = thread.command();
-
-		mod_listener.on_texts = function(g, idx, s1, s2, s3, s4, s5, s6, s7) {
-			if (g != mod_scan_gen) return;   // 迟到的结果，丢弃
-
-			mod_scan_got = true;
-
-			mod_apply_texts(idx, { s1; s2; s3; s4; s5; s6; s7 });
-
-			mod_scan_done = mod_scan_done + 1;
-			mod_prog_update(mod_scan_done, #mod_rows);
-
-			if (mod_scan_done < #mod_rows) {
-				lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
-			}
-		};
-
-		mod_listener.on_job_done = function(g) {
-			if (g != mod_scan_gen) return;
-
-			mod_jobs_left = mod_jobs_left - 1;
-			if (mod_jobs_left > 0) return;
-			if (mod_scan_done < #mod_rows) return;
-
-			m3mod.cache_save();
-			mods_render_final();
-		};
-
-		// 线程里抛异常：记下原因，改同步读取
-		mod_listener.on_error = function(g, msg) {
-			if (g != mod_scan_gen) return;
-
-			mod_scan_error = tostring(msg);
-			mod_sync_scan(g);
-		};
-	}
-
-	var paths = {};
-	for i, m in mod_rows {
-		paths[i] = m.path;
-	}
-
-	var worker = 4;
-	if (#mod_todo <= 8) worker = 1;
-	if (worker > #mod_todo) worker = #mod_todo;
-
-	mod_jobs_left = worker;
-
-	var per = ..math.ceil(#mod_todo / worker);
-
-	for w = 1; worker; 1 {
-		var at = (w - 1) * per + 1;
-		var to = at + per - 1;
-		if (to > #mod_todo) to = #mod_todo;
-		if (at > to) break;
-
-		var first = mod_todo[at];
-		var last = mod_todo[to];
-
-		// 线程体自包含：只 import 标准库
-		thread.invoke(
-			function(listener, paths, first, last, g, slots) {
-				import thread.command;
-				import zlib.unzip;
-
-				try {
-					for i = first; last; 1 {
-						var out = {};
-
-						var zip = null;
-						try {
-							zip = zlib.unzip(paths[i], false);
-						}
-						catch(e) {
-							zip = null;
-						}
-
-						if (zip) {
-							for k, nm in slots {
-								var s = null;
-
-								try {
-									if (zip.locate(nm)) {
-										s = zip.readCurrentFile();
-									}
-									else {
-										var alt = string.replace(nm, "/", "\\");
-										if (zip.locate(alt)) s = zip.readCurrentFile();
-									}
-								}
-								catch(e) {
-									s = null;
-								}
-
-								out[k] = s or "";
-							}
-
-							try {
-								zip.close();
-							}
-							catch(e) {
-							}
-						}
-
-						listener.$on_texts(g, i,
-							out[1], out[2], out[3], out[4], out[5], out[6], out[7]);
-					}
-				}
-				catch(e) {
-					listener.$on_error(g, tostring(e));
-					return;
-				}
-
-				listener.$on_job_done(g);
-			}, mod_listener, paths, first, last, gen, MOD_SLOTS);
-	}
-
-	// 看门狗：2 秒内一条回传都没有 → 认定后台线程不可用，改同步读
-	var watchdog;
-	watchdog = function() {
-		if (gen != mod_scan_gen) return;
-		if (mod_scan_got) return;
-
-		mod_sync_scan(gen);
-	};
-
-	winform.setTimeout(watchdog, 2000);
-}
-
-// 同步兜底：后台线程不通时在 UI 线程上分片读（会卡，但至少读得到）
-function mod_sync_scan(gen) {
-	if (gen != mod_scan_gen) return;
-	if (mod_scan_syncing) return;
-
-	mod_scan_syncing = true;
-
-	if (#mod_scan_error > 0) {
-		lblModHint.text = "后台读取失败（" ++ mod_scan_error ++ "），改为同步读取…";
-	}
-	else {
-		lblModHint.text = "后台读取超时，改为同步读取…";
-	}
-
 	var at = 1;
 
 	var step;
 	step = function() {
 		if (gen != mod_scan_gen) return;
 
-		var deadline = ..time.tick() + 25;
+		// 时间片：一次最多占 20ms，剩下的下一拍继续，界面保持可操作
+		var deadline = ..time.tick() + 20;
 
 		while (at <= #mod_todo and ..time.tick() < deadline) {
 			var idx = mod_todo[at];
 
-			mod_fill_row(idx, m3mod.meta_of(mod_rows[idx].path));
+			var meta = m3mod.meta_of(mod_rows[idx].path);
+			m3mod.cache_put(mod_rows[idx].path, meta);
+
+			mod_fill_row(idx, meta);
 
 			mod_scan_done = mod_scan_done + 1;
-			mod_prog_update(mod_scan_done, #mod_rows);
-
 			at = at + 1;
 		}
+
+		mod_prog_update(mod_scan_done, #mod_rows);
 
 		if (at <= #mod_todo) {
 			lblModHint.text = "正在读取 Mod 信息… " ++ mod_scan_done ++ "/" ++ #mod_rows;
@@ -1285,7 +1098,7 @@ function mod_sync_scan(gen) {
 	step();
 }
 
-// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
+// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表// 最终渲染：元数据都读完了（或走缓存），排序 + 标红 + 填表
 function mods_render_final() {
 	mod_prog_hide();
 	listMods.clear();

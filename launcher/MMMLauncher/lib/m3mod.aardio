@@ -207,39 +207,6 @@ namespace m3mod {
 		return null;
 	}
 
-	// 兜底：随机读取一个都没命中时才遍历（很慢，只当最后手段）。
-	function read_by_scan(zip, texts, errout) {
-		var by_base = {};
-		for i, c in META_CANDIDATES {
-			var base = c.name;
-			var cut = ..string.lastIndexAny(base, "/\\");
-			if (cut) base = ..string.right(base, -(cut + 1));
-
-			by_base[..string.lower(base)] = c.key;
-		}
-
-		try {
-			for pos, dirName, fileName, extractPath, fileInfo in zip.eachFile() {
-				if (!fileName) continue;
-
-				var base = fileName;
-				var cut = ..string.lastIndexAny(base, "/\\");
-				if (cut) base = ..string.right(base, -(cut + 1));
-
-				var key = by_base[..string.lower(base)];
-				if (!key or texts[key]) continue;
-
-				var s = zip.readCurrentFile();
-				if (s and #s > 0) texts[key] = s;
-			}
-		}
-		catch(e) {
-			if (errout) errout[1] = ..tostring(e);
-		}
-
-		return texts;
-	}
-
 	// 有的整合包里的 mcmod.info 不是合法 JSON（带注释、少逗号），
 	// 解析失败只当"读不到元数据"，不能让整个列表崩掉。
 	function safe_json(s) {
@@ -379,30 +346,28 @@ namespace m3mod {
 			return bad;
 		}
 
-		// 随机读取：一个 jar 只读几条，不遍历
+		// 按优先级逐个定位，**命中就停**：
+		// 一个 jar 通常只开 1~2 次，不会读后面那些用不上的条目。
 		var texts = {};
 		var hit = 0;
 
 		for i, c in META_CANDIDATES {
 			var s = read_one(zip, c.name);
+
 			if (s) {
 				texts[c.key] = s;
 				hit = hit + 1;
+
+				// Fabric/Forge 新版的元数据是权威的，拿到就能停；
+				// MANIFEST 是最后兜底，拿到也别停（可能有更权威的排在后面？没有，它排最后）
+				if (c.key != "manifest.mf") break;
 			}
-		}
-
-		// 一条都没命中才遍历兜底（慢，正常情况走不到）
-		var scan_err = { null };
-
-		if (hit == 0) {
-			texts = read_by_scan(zip, texts, scan_err);
 		}
 
 		var m = pick_meta(texts);
 
 		if (#m.modid == 0 and #m.name == 0) {
-			if (scan_err[1]) m.err = "遍历失败：" ++ scan_err[1];
-			elseif (hit == 0) m.err = "没有元数据条目";
+			if (hit == 0) m.err = "没有元数据条目";
 			else m.err = "元数据解析不出名字";
 		}
 

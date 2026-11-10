@@ -1,0 +1,120 @@
+//tools/diag-mod.aardio
+
+//诊断：Mod 元数据读取到底慢在哪一步。
+//用法：在 aardio 里打开这个文件按 F5，把控制台输出发给我。
+//
+//三段分别测：
+//   1) 只开关压缩包（不含读条目）
+//   2) 每个包按名字定位 META-INF/mods.toml（正斜杠 / 反斜杠都试）
+//   3) 定位成功后再读那一条的内容
+//哪一段慢，就说明瓶颈在哪。
+
+import console;
+import fsys;
+import zlib.unzip;
+import time;
+
+// 改这里：想测哪个版本就改哪一行
+var mods_dir = "D:\PCL\.minecraft\versions\1.20.1-MFn's Simulated Colonies 2.0\mods";
+var sample = 20;   // 抽多少个 jar 测
+
+console.log("目录: " .. mods_dir);
+
+if (!io.exist(mods_dir)) {
+	console.log("目录不存在。");
+	console.pause();
+	return;
+}
+
+var jars = {};
+
+fsys.enum(mods_dir, "*.jar", function(dirname, filename, fullpath, findData) {
+	if (!filename) return;
+	if (#jars >= sample) return false;   // 回调返回 false 提前结束
+
+	table.push(jars, fullpath);
+}, false);
+
+console.log("抽样 jar 数: " .. #jars);
+
+if (#jars == 0) {
+	console.log("没找到 jar。");
+	console.pause();
+	return;
+}
+
+// ---------- 1) 开关压缩包 ----------
+var t = time.tick();
+
+for i, p in jars {
+	var zip = zlib.unzip(p, false);
+	if (zip) zip.close();
+}
+
+console.log("[1] 开 + 关  " .. #jars .. " 个包: " .. (time.tick() - t) .. " ms");
+
+// ---------- 2) 定位条目 ----------
+t = time.tick();
+
+var hit = 0;
+
+for i, p in jars {
+	var zip = zlib.unzip(p, false);
+	if (!zip) continue;
+
+	var ok = false;
+
+	try {
+		ok = zip.locate("META-INF/mods.toml");
+
+		if (!ok) ok = zip.locate("META-INF\mods.toml");
+	}
+	catch(e) {
+	}
+
+	if (ok) hit = hit + 1;
+
+	zip.close();
+}
+
+console.log("[2] 逐个 locate: " .. (time.tick() - t) .. " ms，命中 " .. hit .. "/" .. #jars);
+
+// ---------- 3) 读条目内容 ----------
+t = time.tick();
+
+var got = 0;
+var bytes = 0;
+
+for i, p in jars {
+	var zip = zlib.unzip(p, false);
+	if (!zip) continue;
+
+	var ok = false;
+
+	try {
+		ok = zip.locate("META-INF/mods.toml");
+		if (!ok) ok = zip.locate("META-INF\mods.toml");
+	}
+	catch(e) {
+	}
+
+	if (ok) {
+		var s = zip.readCurrentFile();
+		if (s) {
+			got = got + 1;
+			bytes = bytes + #s;
+		}
+	}
+
+	zip.close();
+}
+
+console.log("[3] 定位 + 读内容: " .. (time.tick() - t) .. " ms，读到 " .. got .. " 条，共 " .. bytes .. " 字节");
+
+console.log("");
+console.log("判读：");
+console.log("  [1] 就慢 → 打开压缩包本身贵，换读法（.NET ZipFile 之类）");
+console.log("  [1] 快、[2] 慢 → locate 定位慢，改用别的定位方式");
+console.log("  [1][2] 快、[3] 慢 → 读条目内容慢（可能是包太大）");
+
+console.pause();
