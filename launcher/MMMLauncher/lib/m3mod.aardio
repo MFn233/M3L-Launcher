@@ -12,6 +12,7 @@ namespace m3mod {
 	import json;
 	import zlib.unzip;
 	import m3toml;
+	import m3zip;
 	import table;     // 命名空间里访问 table.push 必须先 import，否则报 _get table
 	import m3config;
 
@@ -201,6 +202,30 @@ namespace m3mod {
 	// 一次遍历把候选条目取出来。
 	// 为什么不用 locate：实测 locate 每个包 200ms 级（608 次调用吃掉 130 秒），
 	// 而顺序扫中央目录、命中几条就停，通常前十个条目内就齐了。
+	// 兜底：zlib.unzip + 一次遍历（m3zip 不支持的非标准包才走这里）
+	function collect_via_unzip(path, names) {
+		var zip = null;
+
+		try {
+			zip = zlib.unzip(path, false);
+		}
+		catch(e) {
+			zip = null;
+		}
+
+		if (!zip) return {}, null;
+
+		var got, sample = collect_entries(zip, names);
+
+		try {
+			zip.close();
+		}
+		catch(e) {
+		}
+
+		return got, sample;
+	}
+
 	function collect_entries(zip, names) {
 		var want = {};
 
@@ -472,26 +497,6 @@ namespace m3mod {
 		var key = ..string.lower(path);
 		if (meta_cache[key]) return meta_cache[key];
 
-		var zip = null;
-
-		var t_open = ..time.tick();
-
-		try {
-			zip = zlib.unzip(path, false);
-		}
-		catch(e) {
-			zip = null;
-		}
-
-		st.open = st.open + (..time.tick() - t_open);
-
-		if (!zip) {
-			var bad = { modid = ""; name = ""; version = ""; loader = ""; err = "打不开压缩包" };
-			meta_cache[key] = bad;
-			return bad;
-		}
-
-		// 一次遍历取候选条目（不再逐个 locate）
 		var names = {
 			"fabric.mod.json";
 			"quilt.mod.json";
@@ -502,9 +507,19 @@ namespace m3mod {
 			"META-INF/MANIFEST.MF";
 		};
 
+		// 首选：自己读中央目录，几毫秒
 		var ts = ..time.tick();
-		var texts, sample = collect_entries(zip, names);
+		var texts, zerr = m3zip.read(path, names);
 		st.scan = st.scan + (..time.tick() - ts);
+
+		var sample = null;
+
+		// 少数非标准包（加密、分卷之类）退回 zlib.unzip 遍历
+		if (#texts == 0) {
+			var ts2 = ..time.tick();
+			texts, sample = collect_via_unzip(path, names);
+			st.open = st.open + (..time.tick() - ts2);
+		}
 
 		var hit = 0;
 		var tried = {};
@@ -528,8 +543,6 @@ namespace m3mod {
 			}
 			else m.err = "元数据解析不出名字";
 		}
-
-		zip.close();
 
 		meta_cache[key] = m;
 

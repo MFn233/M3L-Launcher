@@ -1,0 +1,236 @@
+//m3zip.aardio
+//最小 ZIP 读取器：只读中央目录 + 按名字解压指定条目。
+//
+//为什么自己写：
+//  zlib.unzip 的 locate() 实测每包 200ms 级（608 次调用吃掉 130 秒）；
+//  eachFile() 虽然快，但现代 Mod 包把 META-INF/ 放在压缩包**尾部**
+//  （实测 mods.toml 在第 3902 个条目），命中它要整包扫一遍。
+//  ZIP 的中央目录本来就在文件尾部，读一次目录 + 解压一条即几毫秒。
+//
+//只做减法：不加密、不分卷、不写。遇到不认识的格式返回 nil。
+
+namespace m3zip {
+	import fsys.file;
+	import zlib;
+
+	// 小端整数。aardio 里二进制字符串用 s[i] 取第 i 个字节（1 基）。
+	function u16(s, i) {
+		return (s[i] or 0) + (s[i + 1] or 0) * 256;
+	}
+
+	function u32(s, i) {
+		return (s[i] or 0) + (s[i + 1] or 0) * 256
+			+ (s[i + 2] or 0) * 65536 + (s[i + 3] or 0) * 16777216;
+	}
+
+	function u64(s, i) {
+		return u32(s, i) + u32(s, i + 4) * 4294967296;
+	}
+
+	function chr_sig(a, b) {
+		return "PK" ++ ..string.chr(a) ++ ..string.chr(b);
+	}
+
+	// 取最后一段（zip 里用正斜杠）
+	function base_of(name) {
+		var cut = ..string.lastIndexAny(name, "/\\");
+		if (cut) return ..string.slice(name, cut + 1);
+
+		return name;
+	}
+
+	// 候选名预先拆成字节表：比较时直接对字节，不做字符串切片
+	// （对几 MB 的中央目录逐条 slice 是 O(n²)，实测会拖垮性能）
+	function build_cands(names) {
+		var cands = {};
+
+		for i, n in names {
+			var base = ..string.lower(base_of(n));
+			var bytes = {};
+
+			for b = 1; #base; 1 {
+				bytes[b] = base[b];
+			}
+
+			..table.push(cands, { key = ..string.lower(base_of(n)); len = #base; bytes = bytes });
+		}
+
+		return cands;
+	}
+
+	// 在中央目录的某一条上，判断"条目名的最后一段"是否命中候选
+	// 返回命中的 key（文件名小写）或 null
+	function match_cand(cd, nameStart, nameLen, cands) {
+		for ci, c in cands {
+			var lenC = c.len;
+			if (nameLen < lenC) continue;
+
+			var start = nameStart + nameLen - lenC;
+			var ok = true;
+
+			for b = 1; lenC; 1 {
+				var v = cd[start + b - 1] or 0;
+
+				// 比较前统一转小写（ZIP 里 MANIFEST.MF 是大写）
+				if (v >= 65 and v <= 90) v = v + 32;
+
+				if (v != c.bytes[b]) {
+					ok = false;
+					break;
+				}
+			}
+
+			if (!ok) continue;
+
+			// 前面必须是路径分隔符（否则 "mymods.toml" 也会命中）
+			if (nameLen > lenC) {
+				var prev = cd[start - 1] or 0;
+				if (prev != 47/*'/'*/ and prev != 92/*'\'*/) continue;
+			}
+
+			return c.key;
+		}
+
+		return null;
+	}
+
+	// 读一个条目：local header 之后就是数据
+	function read_entry(file, e) {
+		file.seek("set", e.localOff);
+
+		var lh = file.read(30);
+		if (!lh) return null;
+
+		var nameLen = u16(lh, 26);
+		var extraLen = u16(lh, 28);
+
+		file.seek("set", e.localOff + 30 + nameLen + extraLen);
+
+		var data = file.read(e.compSize);
+		if (!data) return null;
+
+		if (e.method == 0) return data;                              // 存储
+		if (e.method == 8) return ..zlib.gzUncompress(data, "raw");   // deflate
+
+		return null;
+	}
+
+	// 读出 names 里能匹配到的条目，返回 { 文件名小写 = 内容 }
+	function read(path, names) {
+		var got = {};
+
+		var file = ..fsys.file(path, "rb");
+		if (!file) return got, "打不开文件";
+
+		var total = file.size();
+		if (!total or total < 22) {
+			file.close();
+			return got, "文件太小";
+		}
+
+		// EOCD 在尾部，最多 22 + 65535 字节注释
+		var tailLen = total;
+		if (tailLen > 66000) tailLen = 66000;
+
+		file.seek("set", total - tailLen);
+
+		var tail = file.read(tailLen);
+		if (!tail) {
+			file.close();
+			return got, "读取尾部失败";
+		}
+
+		var at = ..string.lastIndexOf(tail, chr_sig(5, 6));
+		if (!at) {
+			file.close();
+			return got, "不是 ZIP 文件";
+		}
+
+		var count = u16(tail, at + 10);
+		var cdSize = u32(tail, at + 12);
+		var cdOff = u32(tail, at + 16);
+
+		// ZIP64：字段溢出时从 ZIP64 目录尾部重新取
+		if (cdOff == 0xFFFFFFFF or count == 0xFFFF) {
+			var lat = ..string.lastIndexOf(tail, chr_sig(6, 7));
+
+			if (lat) {
+				var z64 = u64(tail, lat + 8);
+
+				file.seek("set", z64);
+
+				var h = file.read(56);
+
+				if (h and ..string.left(h, 4) == chr_sig(6, 6)) {
+					count = u64(h, 32);
+					cdSize = u64(h, 40);
+					cdOff = u64(h, 48);
+				}
+			}
+		}
+
+		if (!cdOff or cdOff >= total) {
+			file.close();
+			return got, "中央目录位置无效";
+		}
+
+		if (cdSize > 64 * 1024 * 1024) {
+			file.close();
+			return got, "中央目录过大";
+		}
+
+		file.seek("set", cdOff);
+
+		var cd = file.read(cdSize);
+		if (!cd) {
+			file.close();
+			return got, "读取中央目录失败";
+		}
+
+		var cands = build_cands(names);
+
+		var found = 0;
+		var loader_hit = false;
+		var pos = 1;
+		var n = #cd;
+
+		while (pos + 46 <= n) {
+			// 条目签名 PK\x01\x02
+			if (!(cd[pos] == 80 and cd[pos + 1] == 75 and cd[pos + 2] == 1 and cd[pos + 3] == 2)) break;
+
+			var nameLen = u16(cd, pos + 28);
+			var extraLen = u16(cd, pos + 30);
+			var commentLen = u16(cd, pos + 32);
+
+			var key = match_cand(cd, pos + 46, nameLen, cands);
+
+			if (key and !got[key]) {
+				var e = {
+					method = u16(cd, pos + 10);
+					compSize = u32(cd, pos + 20);
+					localOff = u32(cd, pos + 42);
+				};
+
+				var data = read_entry(file, e);
+
+				if (data and #data > 0) {
+					got[key] = data;
+					found = found + 1;
+
+					if (key != "manifest.mf") loader_hit = true;
+
+					// 加载器条目 + MANIFEST 都有了就够用
+					if (loader_hit and found >= 2) break;
+				}
+			}
+
+			pos = pos + 46 + nameLen + extraLen + commentLen;
+		}
+
+		file.close();
+
+		if (found == 0) return got, "中央目录里没有匹配的元数据条目";
+
+		return got;
+	}
+}

@@ -1,0 +1,92 @@
+//test-zip.aardio
+
+//单独验证 m3zip：抽一批 jar，打印每个包读到的条目、字节数与耗时。
+//结果写到 launcher/MMMLauncher/_zip-test.txt
+//
+//用法：在 aardio 里打开本文件按 F5。
+
+import console;
+import fsys;
+import time;
+import m3zip;
+
+var out = {};
+
+table.push(out, "#m3zip 测试");
+
+var names = {
+	"fabric.mod.json";
+	"quilt.mod.json";
+	"META-INF/neoforge.mods.toml";
+	"META-INF/mods.toml";
+	"litemod.json";
+	"mcmod.info";
+	"META-INF/MANIFEST.MF";
+};
+
+var dirs = {
+	"C:\Users\DELL\Desktop\MMML\模组样本";
+	"D:\PCL\.minecraft\versions\1.20.1-MFn's Simulated Colonies 2.0\mods";
+};
+
+var total_ms = 0;
+var total_n = 0;
+var total_bytes = 0;
+
+for di, dir in dirs {
+	if (!io.exist(dir)) {
+		table.push(out, "#跳过（不存在）：" ++ dir);
+		continue;
+	}
+
+	table.push(out, "#目录：" ++ dir);
+
+	var limit = 0;
+
+	fsys.enum(dir, "*.*", function(dirname, filename, fullpath, findData) {
+		if (!filename) return;
+
+		var low = string.lower(filename);
+		if (!string.endsWith(low, ".jar") and !string.endsWith(low, ".litemod")) return;
+
+		limit = limit + 1;
+		if (limit > 30) return false;
+
+		var t0 = time.tick();
+		var got, err = m3zip.read(fullpath, names);
+		var ms = time.tick() - t0;
+
+		var keys = "";
+		var bytes = 0;
+
+		for k, v in got {
+			keys = keys ++ k ++ "(" ++ #v ++ ") ";
+			bytes = bytes + #v;
+		}
+
+		if (#keys == 0 and err) keys = "[失败] " ++ err;
+
+		total_ms = total_ms + ms;
+		total_n = total_n + 1;
+		total_bytes = total_bytes + bytes;
+
+		table.push(out, string.format("%-46s | %5d ms | %6d B | %s", filename, ms, bytes, keys));
+	}, false);
+}
+
+table.push(out, "");
+table.push(out, string.format("#合计 %d 个包，%d ms，平均 %.1f ms/包，共读 %d 字节",
+	total_n, total_ms, (total_n ? total_ms / total_n : 0), total_bytes));
+
+var ok_path = "C:\Users\DELL\Desktop\MMML\launcher\MMMLauncher\_zip-test.txt";
+
+try {
+	string.save(ok_path, table.concat(out, '\r\n'));
+	console.log("结果已写到：" ++ ok_path);
+}
+catch(e) {
+	console.log("写结果文件失败：" ++ tostring(e));
+}
+
+console.log(table.concat(out, "\n"));
+console.pause();
