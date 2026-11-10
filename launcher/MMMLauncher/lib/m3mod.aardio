@@ -204,13 +204,21 @@ namespace m3mod {
 	function collect_entries(zip, names) {
 		var want = {};
 
+		// 键必须和后面查的 **同名形式**：这里统一用"文件名最后一段"。
+		// （之前这里是 string.lower(n) 保留了 META-INF/ 前缀，于是
+		//   "meta-inf/mods.toml" 与 "mods.toml" 永远对不上，只有根目录条目能命中。）
 		for i, n in names {
-			want[..string.lower(n)] = true;
+			var base = n;
+			var cut = ..string.lastIndexAny(base, "/\\");
+			if (cut) base = ..string.slice(base, cut + 1);
+
+			want[..string.lower(base)] = true;
 		}
 
 		var got = {};
 		var loader_hit = false;
 		var seen = 0;
+		var first_entry = null;
 
 		try {
 			for pos, dirName, fileName, extractPath, fileInfo in zip.eachFile() {
@@ -219,9 +227,11 @@ namespace m3mod {
 				seen = seen + 1;
 				if (seen > 400) break;   // 兜底：极端包不无限扫
 
+				if (!first_entry) first_entry = fileName;
+
 				var base = fileName;
 				var cut = ..string.lastIndexAny(base, "/\\");
-				if (cut) base = ..string.right(base, -(cut + 1));
+				if (cut) base = ..string.slice(base, cut + 1);
 
 				var low = ..string.lower(base);
 				if (!want[low] or got[low]) continue;
@@ -253,7 +263,7 @@ namespace m3mod {
 		catch(e) {
 		}
 
-		return got;
+		return got, first_entry;
 	}
 
 	// 有的整合包里的 mcmod.info 不是合法 JSON（带注释、少逗号），
@@ -490,7 +500,7 @@ namespace m3mod {
 		};
 
 		var ts = ..time.tick();
-		var texts = collect_entries(zip, names);
+		var texts, sample = collect_entries(zip, names);
 		st.scan = st.scan + (..time.tick() - ts);
 
 		var hit = 0;
@@ -509,7 +519,10 @@ namespace m3mod {
 		m.tried = table.concat(tried, ",");
 
 		if (#m.modid == 0 and #m.name == 0) {
-			if (hit == 0) m.err = "没有元数据条目";
+			if (hit == 0) {
+				m.err = "没有元数据条目";
+				if (sample) m.err = m.err ++ "（包里首个条目：" ++ sample ++ "）";
+			}
 			else m.err = "元数据解析不出名字";
 		}
 
