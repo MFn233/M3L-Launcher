@@ -970,6 +970,8 @@ function mod_scan_cancel() {
 function mod_fill_row(idx, meta) {
 	if (!mod_rows[idx]) return;
 
+	var m = mod_rows[idx];
+
 	// 诊断信息挂到行上（读不到元数据时落盘用）
 	m.err = meta.err or "";
 	m.tried = meta.tried or "";
@@ -982,8 +984,6 @@ function mod_fill_row(idx, meta) {
 
 		mod_meta_reasons[tag] = (mod_meta_reasons[tag] or 0) + 1;
 	}
-
-	var m = mod_rows[idx];
 
 	m.modid = meta.modid or "";
 	m.title = meta.name or "";
