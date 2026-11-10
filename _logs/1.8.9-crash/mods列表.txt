@@ -1,6 +1,0 @@
-共 5 个 mod：
-OldAnimationsMod-Animations & Cosmetics_2.7.1-mc_Forge1.8.9.jar
-viaforge-mc189-4.3.0.jar
-[实体渲染机制优化] entityculling-forge-mc1.8.9-1.5.0.jar
-[脚步声] mod-presence-footsteps-u8f.litemod
-[鼠标手势] MouseTweaks-2.6.2-mc1.8.9.jar.disabled

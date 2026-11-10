@@ -37,3 +37,6 @@ _backup/
 launcher/MMMLauncher/_meta-test.txt
 launcher/MMMLauncher/mod-scan.txt
 launcher/MMMLauncher/_zip-test.txt
+
+# 从用户机器上拷来分析的日志
+_logs/
