@@ -304,7 +304,7 @@ table.push(P6.controls, lblAboutName);
 P6.text("—— 一个妄图写出完美代码的程序爱好者。", true);
 P6.gap(12);
 P6.text("作者：MFn。本项目遵循 GPL-3.0 协议开源。", true);
-var lblAboutVer = P6.text("版本 0.1.3", true);
+var lblAboutVer = P6.text("版本 0.2.0", true);
 
 P6.finish();
 
@@ -336,19 +336,21 @@ function credit(text, is_heading) {
 	editCredits.readonly = true;
 }
 
-credit("第三方", true);
-credit("aardio · 开发工具与运行时");
-credit("Mojang · Minecraft 本体与版本清单格式");
-credit("HMCL · 崩溃原因分析规则的参考实现（GPL-3.0）");
-credit("");
-credit("实现协作", true);
-credit("DeepSeek · 代码实现、文档整理与测试");
-credit("");
-credit("参与测试", true);
-credit("（名单待补充）");
-credit("");
-credit("本项目为个人非营利项目，与上述公司、项目无隶属关系。", true);
-credit("「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。", true);
+function credits_fill() {
+	credit("第三方", true);
+	credit("aardio · 开发工具与运行时");
+	credit("Mojang · Minecraft 本体与版本清单格式");
+	credit("HMCL · 崩溃原因分析规则的参考实现（GPL-3.0）");
+	credit("");
+	credit("实现协作", true);
+	credit("DeepSeek · 代码实现、文档整理与测试");
+	credit("");
+	credit("参与测试", true);
+	credit("（名单待补充）");
+	credit("");
+	credit("本项目为个人非营利项目，与上述公司、项目无隶属关系。", true);
+	credit("「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang 无关联。", true);
+}
 
 P7.finish();
 
@@ -431,6 +433,23 @@ function show_page(n) {
 	}
 }
 
+// 页面数据第一次进入时才准备：账户/Java/路径/版本都要读磁盘，
+// 打开设置时一次性全做会让窗口"加载一下才出来"。
+var page_ready = {};
+
+function ensure_page(n) {
+	if (page_ready[n]) return;
+	page_ready[n] = true;
+
+	if (n == 3) acc_render();
+	elseif (n == 4) java_render();
+	elseif (n == 5) {
+		paths_render();
+		vers_render();
+	}
+	elseif (n == 7) credits_fill();
+}
+
 // 导航用一排 plus 自绘项，不用 listbox：
 // listbox 的选中是系统蓝条，和黑白灰主题冲突，而且行高、内缩都改不动。
 var nav_items = {};
@@ -469,6 +488,7 @@ function select_page(n) {
 
 	nav_current = n;
 	show_page(n);
+	ensure_page(n);
 
 	winform.lblPageTitle.text = nav_titles[n];
 
@@ -1220,10 +1240,9 @@ function list_version_names() {
 		if (folders[i]) table.push(names, folders[i]);
 	}
 
-	// 顺手自愈：JSON 文件名不对、或里面 id 与目录名不一致时修正过来
-	for i, name in names {
-		m3version.repair(cfg.game_path, name);
-	}
+	// 这里不做 m3version.repair()：它是"读 JSON + 可能写回"的磁盘操作，
+	// 版本一多就会明显卡一下。启动前 main 已经对当前版本做过自愈，
+	// 没必要每次列列表都全量扫一遍。
 
 	return sort_names(names);
 }
@@ -1547,7 +1566,6 @@ winform.onCancel = function() {
 
 // ---------- 初始化 ----------
 
-acc_render();
 // 关于页的版本号：读 exe 的版本资源，和工程属性永远一致。
 // F5 调试时跑的是 aardio 宿主 exe，版本资源不是我们的，所以先认产品名。
 var about_ver = "";
@@ -1565,8 +1583,6 @@ editJvm.text = cfg.jvm_args or "";
 editW.text = tostring(cfg.width);
 editH.text = tostring(cfg.height);
 
-java_render();
-
 comboMode.add("手动设置");
 comboMode.add("全屏");
 comboMode.add("与启动器一致");
@@ -1579,9 +1595,6 @@ comboPri.add("正常");
 comboPri.add("较高");
 comboPri.add("高");
 comboPri.selIndex = priority_index(cfg.priority);
-
-paths_render();
-vers_render();
 
 // 允许调用方指定打开时停在哪一页（全局变量在 loadForm 之前设置，进去后立刻清掉）
 var start_page = 1;
