@@ -307,6 +307,15 @@ namespace m3mod {
 			}
 		}
 
+		// forge 的 mods.toml 偶尔没有 version，用 MANIFEST 的版本兜一下
+		if (#m.modid > 0 and #m.version == 0) {
+			var mf = texts["manifest.mf"];
+			if (mf) {
+				var mv = ..string.match(mf, "Implementation%-Version:%s*([^\r\n]+)");
+				if (mv) m.version = ..string.trim(mv);
+			}
+		}
+
 		// 兜底：MANIFEST 里的标题与版本
 		if (#m.modid == 0) {
 			s = texts["manifest.mf"];

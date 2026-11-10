@@ -989,6 +989,14 @@ function mod_fill_row(idx, meta) {
 	m.title = meta.name or "";
 	m.mver = meta.version or "";
 
+	// 缓存存**原始**值：回退成文件名只用于显示，别写进缓存（否则以后没法判断真假）
+	m3mod.cache_put(m.path, {
+		modid = m.modid;
+		name = meta.name or "";
+		version = meta.version or "";
+		loader = meta.loader or "";
+	});
+
 	if (#m.title == 0) m.title = m.name;
 	if (#m.mver == 0) m.mver = "-";
 
