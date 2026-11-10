@@ -40,3 +40,6 @@ launcher/MMMLauncher/_zip-test.txt
 
 # 从用户机器上拷来分析的日志
 _logs/
+
+# 外部资料（书稿源码、PDF 等）
+_docs/
