@@ -84,25 +84,34 @@ namespace m3zip {
 		return null;
 	}
 
-	// 读一个条目：local header 之后就是数据
+	// 读一个条目：local header 之后就是数据。
+	// 返回 data, err —— 失败必须说清是哪一步，否则上层只能误报"没有条目"。
 	function read_entry(file, e) {
-		file.seek("set", e.localOff);
+		if (!file.seek("set", e.localOff)) return null, "seek 到 local header 失败";
 
 		var lh = file.read(30);
-		if (!lh) return null;
+		if (!lh) return null, "读 local header 失败";
 
 		var nameLen = u16(lh, 26);
 		var extraLen = u16(lh, 28);
 
-		file.seek("set", e.localOff + 30 + nameLen + extraLen);
+		var dataStart = e.localOff + 30 + nameLen + extraLen;
+
+		if (!file.seek("set", dataStart)) return null, "seek 到数据段失败";
 
 		var data = file.read(e.compSize);
-		if (!data) return null;
+		if (!data) return null, "读数据段失败（compSize=" ++ e.compSize ++ "）";
 
-		if (e.method == 0) return data;                              // 存储
-		if (e.method == 8) return ..zlib.gzUncompress(data, "raw");   // deflate
+		if (e.method == 0) return data;   // 存储
 
-		return null;
+		if (e.method == 8) {
+			var out = ..zlib.gzUncompress(data, "raw");
+			if (!out) return null, "raw deflate 解压失败（compSize=" ++ e.compSize ++ "）";
+
+			return out;
+		}
+
+		return null, "不支持的压缩方式 " ++ e.method;
 	}
 
 
@@ -164,6 +173,10 @@ namespace m3zip {
 			if (nl > 0 and nl < 300) {
 				d.firstName = ..string.slice(cd, 1 + 46, 1 + 46 + nl - 1, false);
 			}
+
+			d.firstMethod = u16(cd, 1 + 10);
+			d.firstComp = u32(cd, 1 + 20);
+			d.firstLocal = u32(cd, 1 + 42);
 		}
 
 		file.close();
@@ -246,6 +259,8 @@ namespace m3zip {
 		var cands = build_cands(names);
 
 		var found = 0;
+		var matched = 0;
+		var lastErr = null;
 		var loader_hit = false;
 		var pos = 1;
 		var n = #cd;
@@ -267,7 +282,7 @@ namespace m3zip {
 					localOff = u32(cd, pos + 42);
 				};
 
-				var data = read_entry(file, e);
+				var data, derr = read_entry(file, e);
 
 				if (data and #data > 0) {
 					got[key] = data;
@@ -278,6 +293,10 @@ namespace m3zip {
 					// 加载器条目 + MANIFEST 都有了就够用
 					if (loader_hit and found >= 2) break;
 				}
+				else {
+					matched = matched + 1;
+					if (!lastErr) lastErr = key ++ " → " ++ tostring(derr);
+				}
 			}
 
 			pos = pos + 46 + nameLen + extraLen + commentLen;
@@ -285,7 +304,11 @@ namespace m3zip {
 
 		file.close();
 
-		if (found == 0) return got, "中央目录里没有匹配的元数据条目";
+		if (found == 0) {
+			if (matched == 0) return got, "中央目录里没有匹配的元数据条目";
+
+			return got, "匹配到 " ++ matched ++ " 条但解压失败：" ++ tostring(lastErr);
+		}
 
 		return got;
 	}
