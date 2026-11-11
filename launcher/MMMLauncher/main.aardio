@@ -67,8 +67,27 @@ var crash_seq = 0;            // 已经弹过几个崩溃窗口（用来错开�
 
 // ---------- 日志 ----------
 
+//本次启动的日志也写一份到版本目录，关掉程序后还能查。
+//为什么不只靠日志窗口：窗口一关就没了，出问题时用户往往已经关掉了。
+var launch_file = "";
+var launch_buf = "";
+
+function log_flush() {
+	if (#launch_file == 0 or #launch_buf == 0) return;
+
+	string.save(launch_file, launch_buf, 1);   // 第三个参数非 0 = 追加
+	launch_buf = "";
+}
+
 function log(text, is_error) {
 	if (cur_session) cur_session.write(text, is_error);
+
+	if (#launch_file > 0) {
+		launch_buf = launch_buf ++ tostring(text) ++ '\r\n';
+
+		//攒到 8KB 才落盘一次，游戏刷屏时也不会频繁写文件
+		if (#launch_buf > 8192) log_flush();
+	}
 }
 
 // 调试模式下才输出的内部细节
@@ -162,6 +181,9 @@ function refresh_tooltip() {
 }
 
 function set_launching(on) {
+	//切状态往往意味着"这次启动结束/失败了"，顺手把日志落盘
+	if (!on) log_flush();
+
 	launching = on;
 	winform.btnLaunch.disabled = on;
 	winform.btnLaunch.text = on ? "启动中…" : "启动游戏";
@@ -661,6 +683,12 @@ function start_game(retried, inst) {
 			log("[提示] " ++ s);
 		}
 	}
+
+	//本次启动的日志落到版本目录，便于事后排查（也随「打包日志」一起带走）
+	launch_file = io.joinpath(info.version_dir, "m3l-launch.txt");
+	string.save(launch_file, "");
+	launch_buf = "";
+	log("[提示] 本次启动日志： " ++ launch_file);
 
 	var ok, nerr = MMMLC.prepare_natives(info);
 	if (!ok) { log("[错误] " ++ nerr, true); set_launching(false); return; }
