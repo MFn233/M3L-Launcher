@@ -984,7 +984,7 @@ btnPvJava.oncommand = function(id, event) {
 	var rel = null;
 	if (vdir) rel = string.replace(f, vdir ++ '\\', "");
 
-	if (rel and #rel < #f and !string.find(rel, "^%a:")) {
+	if (rel and #rel < #f and string.slice(rel, 2, 2) != ":") {
 		editPvJava.text = rel;
 	}
 	else {

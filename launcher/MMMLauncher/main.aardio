@@ -108,6 +108,14 @@ function flush_lines(inst) {
 		if (!line) line = "";
 		line = string.trimRight(line);
 
+		//记一笔"游戏真的开始输出自己的日志了"：退出判定要用。
+		//"Setting user" 从 1.2 到 1.21 都会打；老版本还会打 LWJGL 版本行。
+		if (!inst.saw_game_log
+			and (string.indexOf(line, "Setting user") or string.indexOf(line, "LWJGL")
+				or string.indexOf(line, "Created:"))) {
+			inst.saw_game_log = true;
+		}
+
 		inst.buffer = string.slice(inst.buffer, p + 1);
 		if (!inst.buffer) inst.buffer = "";
 
@@ -320,7 +328,11 @@ function finish_instance(inst) {
 	}
 
 	// 用户主动结束的不算崩溃
-	var crashed = (code != 0) and (!inst.stopped_by_user);
+	//退出码非 0 一定是异常；退出码为 0 也可能是异常 ——
+	//老版本（1.5.2 这类）启动失败时会静默 exit(0)，用户完全看不到东西。
+	//所以在 60 秒内退出、且日志里从没有过游戏启动标记时，也按失败处理。
+	var early_dead = (!inst.saw_game_log and seconds < 60);
+	var crashed = ((code != 0) or early_dead) and (!inst.stopped_by_user);
 
 	inst.session.write("--------------------------------------------------");
 	inst.session.write("游戏已退出，退出码 " ++ tostring(code), code != 0);
@@ -667,6 +679,13 @@ function start_game(retried, inst) {
 		return;
 	}
 
+	//本次启动的日志落到版本目录。放在缺库检查**之前**，
+	//否则「缺少 N 个库文件」这类最关键的几行反而进不了文件。
+	launch_file = io.joinpath(info.version_dir, "m3l-launch.txt");
+	string.save(launch_file, "");
+	launch_buf = "";
+	log("[提示] 本次启动日志： " ++ launch_file);
+
 	// 这个版本勾了「关闭文件校验」：明知可能缺文件也照常启动，不再报这一条
 	if (!eff.skip_check and #info.missing > 0) {
 		log("[警告] 缺少 " ++ #info.missing ++ " 个库文件，可能导致游戏无法正常启动：", true);
@@ -678,6 +697,20 @@ function start_game(retried, inst) {
 			log("        " ++ p, true);
 		}
 		log("        请补齐这些文件后再启动游戏。", true);
+
+		//只写日志不够：窗口一关就没人知道为什么起不来，这里必须弹出来
+		var msg = "客户端文件不完整：缺少 " ++ #info.missing ++ " 个库文件。" ++ '\r\n';
+
+		for i, p in info.missing {
+			if (i > 3) {
+				msg = msg ++ "……还有 " ++ (#info.missing - 3) ++ " 个。" ++ '\r\n';
+				break;
+			}
+			msg = msg ++ "  " ++ p ++ '\r\n';
+		}
+
+		msg = msg ++ '\r\n' ++ "请补齐这些文件后再启动游戏。";
+		notice(msg);
 	}
 
 	//启动前把我们做过的兼容处理说清楚：方便日后对照日志判断问题出在哪一层。
@@ -689,11 +722,6 @@ function start_game(retried, inst) {
 	}
 
 	//本次启动的日志落到版本目录，便于事后排查（也随「打包日志」一起带走）
-	launch_file = io.joinpath(info.version_dir, "m3l-launch.txt");
-	string.save(launch_file, "");
-	launch_buf = "";
-	log("[提示] 本次启动日志： " ++ launch_file);
-
 	var ok, nerr = MMMLC.prepare_natives(info);
 	if (!ok) { log("[错误] " ++ nerr, true); set_launching(false); return; }
 

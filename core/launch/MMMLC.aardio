@@ -556,16 +556,13 @@ namespace MMMLC{
 		p = string.replace(p, "/", '\\');
 		p = string.replace(p, '"', "");
 
-		//绝对路径（带盘符）原样用；否则按版本文件夹解析
-		if (string.find(p, "^%a:")) {
-			//已经在盘符上
-		}
-		elseif (string.startsWith(p, '\\')) {
-			//UNC 路径
-		}
-		else {
-			p = io.joinpath(version_dir, p);
-		}
+		//绝对路径（带盘符）原样用；否则按版本文件夹解析。
+		//不能用 string.find(p,"^%a:")：实测这类模式匹配在 aardio 里不可靠，
+		//会把 "C:\..." 判成相对路径，再拼上版本目录后必然"找不到"。
+		var second = string.slice(p, 2, 2);
+		var abs = (#p >= 2 and second == ":") or string.startsWith(p, '\\');
+
+		if (!abs) p = io.joinpath(version_dir, p);
 
 		//给的是目录就补 bin\java.exe
 		if (io.exist(p) and fsys.isDir(p)) p = io.joinpath(p, "bin", "java.exe");
