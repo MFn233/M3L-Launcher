@@ -13,7 +13,7 @@ namespace m3app {
 	import fsys.version;
 
 	// 每次升版本改这一行（和工程属性前三位保持一致）
-	VERSION = "0.2.1";
+	VERSION = "0.2.2";
 
 	// 用来确认"这个 exe 是我们自己的"：aardio 宿主 exe 的 ProductName 不是这个
 	PRODUCT = "M^3 Launcher";

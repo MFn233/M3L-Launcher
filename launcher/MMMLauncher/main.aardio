@@ -15,6 +15,7 @@ import m3opts;
 import m3log;
 import m3java;
 import m3game;
+import m3app;
 import crypt;
 import fsys;
 import string;
@@ -505,6 +506,9 @@ function start_game(retried, inst) {
 	}
 
 	set_launching(true);
+
+	//把版本与核心构建写进日志：排查"发行版和 F5 表现不同"时，一眼看出是哪份代码
+	log("[提示] 启动器 " ++ m3app.version_text() ++ "，核心 " ++ MMMLC.BUILD);
 
 	// 没设用户名就用 player 顶上，稍后提示用户
 	var username = cfg.username;

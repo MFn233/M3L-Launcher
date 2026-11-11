@@ -18,6 +18,10 @@ namespace MMMLC{
 	// 不要 import console：这个库一行 console.* 都没用，GUI 也不需要控制台。
 	// 它还曾经是发布版报“import console failed / bad constant in precompiled chunk”的位置，
 	// 少一个依赖就少一处可坏的资源。
+	// 核心构建标记：每次改这个库就改一行。
+	// 发行版与 F5 的差异全靠它区分——日志里能直接看出跑的哪份代码。
+	BUILD = "2026-11-11";
+
 	import process;
 	import process.popen;
 	import string;
