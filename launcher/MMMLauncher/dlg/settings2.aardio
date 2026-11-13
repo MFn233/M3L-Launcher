@@ -2337,7 +2337,7 @@ function acc_upsert(res, kind) {
 
 	acc_selected = a.name;
 
-	m3config.save_keys(cfg, {"accounts"; "account"; "username"});
+	m3config.save_keys(cfg, {"accounts"; "account"; "username"; "authlib_server"});
 	acc_render();
 
 	lblAccHint.text = "已登录：" ++ a.name ++ "（" ++ (kind == "authlib" ? "外置登录" : "正版") ++ "）";

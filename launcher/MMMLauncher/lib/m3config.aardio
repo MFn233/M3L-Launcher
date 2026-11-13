@@ -229,6 +229,7 @@ namespace m3config{
 			if (data.shot_tip !== null) cfg.shot_tip = data.shot_tip;
 			if (data.compat_fix !== null) cfg.compat_fix = data.compat_fix;
 			if (data.ms_client_id !== null) cfg.ms_client_id = data.ms_client_id;
+			if (data.authlib_server !== null) cfg.authlib_server = data.authlib_server;
 		if (data.log_autoscroll !== null) cfg.log_autoscroll = data.log_autoscroll;
 			if (data.priority !== null) cfg.priority = data.priority;
 			if (data.shared) cfg.shared = data.shared;
