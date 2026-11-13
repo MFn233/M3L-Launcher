@@ -39,26 +39,32 @@ namespace m3auth {
 
 	//发一次 JSON 请求。返回 解析后的表, HTTP 状态码, 错误说明
 	//网络错误时第一个返回 null；4xx/5xx 时表仍然解析（错误体里通常有 error 字段），由调用方判断。
+	//注意返回值：inet.http 在非 2xx 时返回 (false, 响应体, 状态码)。
+	//只接第一个值会把"400 + JSON 错误体"误当成"没有内容"——微软的
+	//authorization_pending 正是 400，所以三个都要接。
 	function json_call(method, url, obj, bearer) {
 		var http = inet.http();
 		var heads = { "Content-Type: application/json"; "Accept: application/json" };
 		if (bearer) table.push(heads, "Authorization: Bearer " ++ bearer);
 
 		var body = obj ? web.json.stringify(obj) : null;
-		var resp;
+		var ok, resp, status;
 
 		try {
-			if (method == "POST") resp = http.post(url, body, heads);
-			else resp = http.get(url, heads);
+			if (method == "POST") ok, resp, status = http.post(url, body, heads);
+			else ok, resp, status = http.get(url, heads);
 		}
 		catch(e) {
 			return null, 0, tostring(e);
 		}
 
-		var code = http.statusCode or 0;
+		var code = http.statusCode or status or 0;
 		http.close();
 
-		if (!resp) return null, code, "服务器没有返回内容";
+		if (!resp or #resp == 0) {
+			if (!ok) return null, code, "请求失败（HTTP " ++ tostring(code) ++ "）";
+			return {}, code;
+		}
 
 		var tab = null;
 		try {
@@ -68,32 +74,49 @@ namespace m3auth {
 			tab = null;
 		}
 
-		return tab, code, (tab ? null : "返回内容不是 JSON：" ++ string.left(tostring(resp), 120));
+		if (!tab) {
+			return null, code, "返回内容不是 JSON（HTTP " ++ tostring(code) ++ "）："
+				++ string.left(tostring(resp), 120);
+		}
+
+		return tab, code;
 	}
 
 	//application/x-www-form-urlencoded
+	//同 json_call：三个返回值都要接，否则 400 的错误体会丢。
 	function form_call(url, pairs) {
 		var http = inet.http();
 		var body = inet.url.stringifyParameters(pairs);
 
-		var resp;
+		var ok, resp, status;
 		try {
-			resp = http.post(url, body, { "Content-Type: application/x-www-form-urlencoded"; "Accept: application/json" });
+			ok, resp, status = http.post(url, body, {
+				"Content-Type: application/x-www-form-urlencoded";
+				"Accept: application/json";
+			});
 		}
 		catch(e) {
 			return null, 0, tostring(e);
 		}
 
-		var code = http.statusCode or 0;
+		var code = http.statusCode or status or 0;
 		http.close();
 
-		if (!resp) return null, code, "服务器没有返回内容";
+		if (!resp or #resp == 0) {
+			if (!ok) return null, code, "请求失败（HTTP " ++ tostring(code) ++ "）";
+			return {}, code;
+		}
 
 		var tab = null;
 		try { tab = web.json.parse(resp); }
 		catch(e) { tab = null; }
 
-		return tab, code, (tab ? null : "返回内容不是 JSON：" ++ string.left(tostring(resp), 120));
+		if (!tab) {
+			return null, code, "返回内容不是 JSON（HTTP " ++ tostring(code) ++ "）："
+				++ string.left(tostring(resp), 120);
+		}
+
+		return tab, code;
 	}
 
 	//---------- 微软设备码 ----------
