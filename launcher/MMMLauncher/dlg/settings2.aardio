@@ -274,7 +274,6 @@ var P3B = m3layout.create(winform, 232, ACC_BODY_TOP, 504, { framed = true });
 P3B.section("微软登录");
 var editMsClient = P3B.row("客户端 ID", { cls = "edit" });
 P3B.text("留空则使用内置的公共客户端 ID；如需用自己的 Azure 应用，请填入它的客户端 ID。", true);
-P3B.text("注册方法见项目里的《正版登录配置》：需要「个人 Microsoft 帐户」+「允许公共客户端流」，并通过官方的 AppID 审核。", true);
 
 P3B.finish();
 
