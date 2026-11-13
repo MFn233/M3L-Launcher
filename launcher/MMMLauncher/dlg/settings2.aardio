@@ -1628,32 +1628,12 @@ mod_tools.right[1].oncommand = function(id, event) {
 pv_sync_enabled();
 mod_btn_update();
 
-// ---------- 第六页：关于 ----------
+// ---------- 第七页：关于（含鸣谢） ----------
 
-var P6 = m3layout.create(winform, 232, 92, 504, { framed = false });
+var P6 = m3layout.create(winform, 232, 52, 504, { framed = false });
 
-var lblAboutName = winform.add({
-	cls = "static";
-	text = "MFn's Minimalism Mclauncher";
-	left = 232; top = 52; right = 736; bottom = 82;
-	font = LOGFONT(name='Microsoft YaHei'; h=-16; weight=700);
-});
-m3theme.ink(lblAboutName);
-table.push(P6.controls, lblAboutName);
-
-P6.text("—— 一个妄图写出完美代码的程序爱好者。", true);
-P6.gap(12);
-P6.text("作者：MFn。本项目遵循 GPL-3.0 协议开源。", true);
-var lblAboutVer = P6.text("版本 " ++ m3app.version_text(), true);
-
-P6.finish();
-
-// ---------- 第七页：鸣谢 ----------
-
-var P7 = m3layout.create(winform, 232, 52, 504, { framed = false });
-
-// 正文用 richedit：测试者名单会变长，必须能滚动
-var editCredits = winform.add({
+// 正文用 richedit：鸣谢名单会变长，必须能滚动
+var editAbout = winform.add({
 	cls = "richedit";
 	readonly = 1;
 	multiline = 1;
@@ -1662,42 +1642,65 @@ var editCredits = winform.add({
 	left = 232; top = 52; right = 736; bottom = 508;
 	font = LOGFONT(name='Microsoft YaHei'; h=-12);
 });
-editCredits.color = m3theme.C_INK;
-editCredits.bgcolor = m3theme.C_FIELD;
-table.push(P7.controls, editCredits);
+editAbout.color = m3theme.C_INK;
+editAbout.bgcolor = m3theme.C_FIELD;
+table.push(P6.controls, editAbout);
 
-// 追加一行：小标题近黑，条目次要灰
-function credit(text, is_heading) {
-	editCredits.readonly = false;
+// 追加一行：标题近黑加粗，正文次要灰
+function about_line(text, kind) {
+	editAbout.readonly = false;
 
-	if (is_heading) editCredits.appendText({ textColor = m3theme.C_INK }, text ++ '\r\n');
-	else editCredits.appendText({ textColor = m3theme.C_MUTED }, text ++ '\r\n');
+	if (kind == "title") {
+		editAbout.appendText({ textColor = m3theme.C_INK; bold = true }, text ++ '\r\n');
+	}
+	elseif (kind == "body") {
+		editAbout.appendText({ textColor = m3theme.C_INK }, text ++ '\r\n');
+	}
+	else {
+		editAbout.appendText({ textColor = m3theme.C_MUTED }, text ++ '\r\n');
+	}
 
-	editCredits.readonly = true;
+	editAbout.readonly = true;
 }
 
-function credits_fill() {
-	//正文在 lib/m3credits.aardio 里，改名单只改那个文件
+function about_fill() {
+	editAbout.readonly = false;
+	editAbout.text = "";
+	editAbout.readonly = true;
+
+	// 关于
+	about_line("MFn's Minimalism MC Launcher ——专一且简单的启动器。", "title");
+	about_line("");
+	about_line("版本：" ++ m3app.version_text());
+	about_line("作者：MFn");
+	about_line("“一个妄图写出完美代码的程序爱好者。”");
+	about_line("本项目遵循 GPL v3.0 or later 协议开源。");
+
+	about_line("");
+	about_line("————————————————————————");
+	about_line("");
+
+	// 鸣谢：正文在 lib/m3credits.aardio 里，改名单只改那个文件
 	var sections = m3credits.SECTIONS;
 
 	for i, s in sections {
-		credit(s.title, true);
+		about_line(s.title, "title");
 
 		for j, line in s.items {
-			credit(line);
+			about_line(line);
 		}
 
-		credit("");
+		about_line("");
 	}
 
 	var notes = m3credits.NOTES;
 
 	for i, line in notes {
-		credit(line, true);
+		about_line(line, "body");
 	}
 }
 
-P7.finish();
+P6.finish();
 
 // ---------- 用得到控件的函数（必须在控件声明之后） ----------
 
@@ -1766,8 +1769,8 @@ function has_version(dir, name) {
 
 // ---------- 分页 ----------
 
-var PAGES = { P1; P2; P3; P4; P5; PV; P6; P7 };
-var nav_titles = { "启动器设置"; "游戏设置"; "账户管理"; "Java 管理"; "路径与版本管理"; "版本独立设置"; "关于"; "鸣谢" };
+var PAGES = { P1; P2; P3; P4; P5; PV; P6 };
+var nav_titles = { "启动器设置"; "游戏设置"; "账户管理"; "Java 管理"; "路径与版本管理"; "版本独立设置"; "关于" };
 
 function show_page(n) {
 	for i, page in PAGES {
@@ -1797,7 +1800,7 @@ function ensure_page(n) {
 		paths_render();
 		vers_render();
 	}
-	elseif (n == 8) credits_fill();
+	elseif (n == 7) about_fill();
 }
 
 // 导航用一排 plus 自绘项，不用 listbox：
