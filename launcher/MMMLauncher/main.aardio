@@ -177,7 +177,15 @@ function refresh_status() {
 	var ver_short = ver;
 	if (#ver_short > 24) ver_short = string.slice(ver_short, 1, 24) ++ "…";
 
+	//按账号类型显示（外置登录曾被写死成"离线登录"）
 	var head = "离线登录";
+
+	var acc = m3config.current_account(cfg);
+	if (acc) {
+		if (acc.type == "msa") head = "正版登录";
+		elseif (acc.type == "authlib") head = "外置登录";
+	}
+
 	if (n > 0) head = "运行中";
 	elseif (launching) head = "启动中";
 
@@ -662,7 +670,7 @@ function start_game(retried, inst) {
 	var uuid = crypt.md5("OfflinePlayer:" ++ username);
 	var access_token = "0";
 	var user_type = "msa";
-	var acc = m3config.find_account(cfg, username);
+	var acc = m3config.current_account(cfg);
 
 	if (acc) {
 		var custom = string.trim(acc.uuid or "");

@@ -122,6 +122,8 @@ namespace m3config{
 			shot_tip = true;      // 弹日志窗口时提醒「不要截图分享」，新用户默认开
 			compat_fix = true;    // 启动时自动做兼容处理（关掉就照 JSON 原样）
 			ms_client_id = "";   // 微软客户端 ID，留空用内置默认
+			authlib_server = ""; // 上次用的外置登录服务器，用来预填
+			account_key = "";    // 当前账号身份键：type:name（同名不同属性靠它区分）
 			priority = "normal";
 			shared = {};
 	fav_paths = {};      // 收藏的游戏路径：键 = 小写目录
@@ -230,6 +232,7 @@ namespace m3config{
 			if (data.compat_fix !== null) cfg.compat_fix = data.compat_fix;
 			if (data.ms_client_id !== null) cfg.ms_client_id = data.ms_client_id;
 			if (data.authlib_server !== null) cfg.authlib_server = data.authlib_server;
+			if (data.account_key !== null) cfg.account_key = data.account_key;
 		if (data.log_autoscroll !== null) cfg.log_autoscroll = data.log_autoscroll;
 			if (data.priority !== null) cfg.priority = data.priority;
 			if (data.shared) cfg.shared = data.shared;
@@ -287,15 +290,45 @@ namespace m3config{
 		cfg.username = found.name;
 	}
 
-	// 按名字找账号
-	function find_account(cfg, name) {
-		if (!cfg.accounts) return null;
+	// 账号的身份是「类型 + 名字」：离线 / 正版 / 外置可以同名共存。
+	// 只按名字找会撞车（这就是"登录了却按离线启动"的根因）。
+	function key_of(a) {
+		if (!a) return "";
+		return tostring(a.type or "offline") ++ ":" ++ tostring(a.name or "");
+	}
+
+	function find_by_key(cfg, key) {
+		if (!cfg.accounts or #key == 0) return null;
 
 		for i, a in cfg.accounts {
-			if (a.name == name) return a;
+			if (key_of(a) == key) return a;
 		}
 
 		return null;
+	}
+
+	// 当前账号：优先按身份键；旧配置没有键时退回按名字（并优先带凭据的）
+	function current_account(cfg) {
+		var a = find_by_key(cfg, cfg.account_key or "");
+		if (a) return a;
+
+		return find_account(cfg, cfg.account);
+	}
+
+	// 按名字找账号（兼容旧调用）。同名时优先返回正版/外置那个。
+	function find_account(cfg, name) {
+		if (!cfg.accounts) return null;
+
+		var found = null;
+
+		for i, a in cfg.accounts {
+			if (a.name != name) continue;
+
+			if (!found) found = a;
+			if (a.type == "msa" or a.type == "authlib") return a;
+		}
+
+		return found;
 	}
 
 	function save(cfg) {

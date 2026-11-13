@@ -1703,7 +1703,7 @@ P7.finish();
 function user_summary(c) {
 	if (#c.username == 0) return "尚未配置账号";
 
-	var acc = m3config.find_account(c, c.username);
+	var acc = m3config.current_account(c);
 
 	var type_text = "离线登录";
 	if (acc and (acc.type == "msa" or acc.type == "mojang")) type_text = "正版登录";
@@ -2127,9 +2127,16 @@ function acc_render() {
 	listAcc.clear();
 	acc_rows = {};
 
+	var cur_key = (cfg.account_key or "");
+
 	for i, a in cfg.accounts {
 		var mark = "";
-		if (a.name == cfg.account) mark = "[当前] ";
+		if (#cur_key > 0) {
+			if (m3config.key_of(a) == cur_key) mark = "[当前] ";
+		}
+		elseif (a.name == cfg.account) {
+			mark = "[当前] ";
+		}
 
 		var type_text = "离线";
 		if (a.type == "msa" or a.type == "mojang") type_text = "正版";
@@ -2145,12 +2152,12 @@ function acc_render() {
 		table.push(acc_rows, i);
 	}
 
-	// 按名字找回选中项
+	// 按身份键找回选中项（同名不同属性也能区分）
 	if (acc_selected) {
 		var at = 0;
 		for i, idx in acc_rows {
 			var a = cfg.accounts[idx];
-			if (a and a.name == acc_selected) {
+			if (a and m3config.key_of(a) == acc_selected) {
 				at = i;
 				break;
 			}
@@ -2176,7 +2183,7 @@ function acc_index() {
 	if (!acc_selected) return 0;
 
 	for i, a in cfg.accounts {
-		if (a.name == acc_selected) return i;
+		if (m3config.key_of(a) == acc_selected) return i;
 	}
 
 	return 0;
@@ -2189,7 +2196,7 @@ listAcc.onSelChanged = function(sel, item, subItem, nm) {
 	var a = cfg.accounts[acc_rows[i]];
 	if (!a) return;
 
-	acc_selected = a.name;
+	acc_selected = m3config.key_of(a);
 	editName.text = a.name or "";
 	editUuid.text = a.uuid or "";
 }
@@ -2197,17 +2204,18 @@ listAcc.onSelChanged = function(sel, item, subItem, nm) {
 acc_btns[1].oncommand = function(id, event) {
 	cfg.accounts = cfg.accounts or {};
 
-	// 起一个不重名的默认名字：player / player2 / player3 ...
+	// 起一个默认名字：player / player2 …（只避开同类型重名，
+	// 因为不同属性的账号允许同名共存）
 	var name = "player";
 	var n = 1;
-	while (m3config.find_account(cfg, name)) {
+	while (m3config.find_by_key(cfg, "offline:" ++ name)) {
 		n = n + 1;
 		name = "player" ++ n;
 	}
 
 	table.push(cfg.accounts, { name = name; type = "offline"; uuid = "" });
 
-	acc_selected = name;
+	acc_selected = "offline:" ++ name;
 	m3config.save_keys(cfg, {"accounts"; "account"});
 	acc_render();
 	lblAccHint.text = "已添加离线账号：" ++ name ++ "，可在上方修改用户名。";
@@ -2221,6 +2229,7 @@ acc_btns[2].oncommand = function(id, event) {
 	}
 
 	var name = cfg.accounts[i].name;
+	var del_key = m3config.key_of(cfg.accounts[i]);
 
 	// 先确认：自定义的 UUID 删掉就没了
 	var show_name = name;
@@ -2237,9 +2246,16 @@ acc_btns[2].oncommand = function(id, event) {
 	}
 	cfg.accounts = list;
 
-	if (cfg.account == name) {
-		if (#cfg.accounts > 0) cfg.account = cfg.accounts[1].name;
-		else cfg.account = "";
+	if ((cfg.account_key or "") == del_key
+		or ((#(cfg.account_key or "") == 0) and cfg.account == name)) {
+		if (#cfg.accounts > 0) {
+			cfg.account = cfg.accounts[1].name;
+			cfg.account_key = m3config.key_of(cfg.accounts[1]);
+		}
+		else {
+			cfg.account = "";
+			cfg.account_key = "";
+		}
 	}
 
 	acc_selected = null;
@@ -2261,10 +2277,10 @@ acc_btns[3].oncommand = function(id, event) {
 		return;
 	}
 
-	// 重名检查（跳过自己）
+	// 只拦"同类型同名"：不同属性的账号允许重名（离线/正版/外置各一个）
 	for k, a in cfg.accounts {
-		if (k != i and a.name == name) {
-			lblAccHint.text = "已有同名账号。";
+		if (k != i and a.name == name and a.type == cfg.accounts[i].type) {
+			lblAccHint.text = "已有同类型同名账号。";
 			return;
 		}
 	}
@@ -2282,9 +2298,13 @@ acc_btns[3].oncommand = function(id, event) {
 	cfg.accounts[i].name = name;
 	cfg.accounts[i].uuid = uuid;
 
-	if (cfg.account == old_name) cfg.account = name;
+	var old_key = m3config.key_of({ name = old_name; type = cfg.accounts[i].type });
 
-	acc_selected = name;
+	if ((cfg.account_key or "") == old_key) {
+		cfg.account_key = m3config.key_of(cfg.accounts[i]);
+	}
+
+	acc_selected = m3config.key_of(cfg.accounts[i]);
 	m3config.save_keys(cfg, {"accounts"; "account"});
 	acc_render();
 	lblAccHint.text = "已保存账号：" ++ name;
@@ -2298,9 +2318,10 @@ acc_btns[4].oncommand = function(id, event) {
 	}
 
 	cfg.account = cfg.accounts[i].name;
-	acc_selected = cfg.account;
+	cfg.account_key = m3config.key_of(cfg.accounts[i]);
+	acc_selected = cfg.account_key;
 
-	m3config.save_keys(cfg, {"accounts"; "account"});
+	m3config.save_keys(cfg, {"accounts"; "account"; "account_key"});
 	acc_render();
 	lblAccHint.text = "当前账号：" ++ cfg.account;
 }
@@ -2309,10 +2330,22 @@ acc_btns[4].oncommand = function(id, event) {
 function acc_upsert(res, kind) {
 	var idx = 0;
 
+	// 先按 UUID 找（同一账号再次登录），再按「类型+名字」找
 	for i, a in cfg.accounts {
 		if (res.uuid and a.uuid == res.uuid) {
 			idx = i;
 			break;
+		}
+	}
+
+	if (idx == 0) {
+		var want_key = tostring(kind) ++ ":" ++ tostring(res.name);
+
+		for i, a in cfg.accounts {
+			if (m3config.key_of(a) == want_key) {
+				idx = i;
+				break;
+			}
 		}
 	}
 
@@ -2333,11 +2366,12 @@ function acc_upsert(res, kind) {
 	if (res.server) a.authlib_server = res.server;
 
 	cfg.account = a.name;
+	cfg.account_key = m3config.key_of(a);
 	cfg.username = a.name;   // 主页的"玩家"跟着走
 
 	acc_selected = a.name;
 
-	m3config.save_keys(cfg, {"accounts"; "account"; "username"; "authlib_server"});
+	m3config.save_keys(cfg, {"accounts"; "account"; "account_key"; "username"; "authlib_server"});
 	acc_render();
 
 	lblAccHint.text = "已登录：" ++ a.name ++ "（" ++ (kind == "authlib" ? "外置登录" : "正版") ++ "）";
