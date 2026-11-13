@@ -1,118 +1,141 @@
 //dlg/theme_test.aardio
 
-//控件样式测试台：把所有控件样式摆一屏，改主题时对着一看就知道有没有跑偏。
-//打开方式：右键主页标题「M³ Launcher」。
+//控件样式测试台：把 m3theme 的每种用法摆一屏。
+//改主题之后对着看：按钮三态、文字层级、输入、滑条、列表、日志着色有没有跑偏。
+//打开方式：右键主页标题。
 
 import win.ui;
 import m3theme;
 
 /*DSG{{*/
-var winform = win.form(text="控件样式测试台";right=620;bottom=620;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+var winform = win.form(text="控件样式测试台";right=620;bottom=668;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-lblTitle={cls="static";text="控件样式测试台";left=24;top=16;right=400;bottom=42;font=LOGFONT(name='Microsoft YaHei';h=-14;weight=700);z=1};
-line1={cls="plus";text="";left=24;top=50;right=596;bottom=51;z=2};
-lblNote={cls="static";text="鼠标移上去看 hover / active；改 m3theme 之后对着这屏看有没有跑偏。";left=24;top=58;right=596;bottom=78;font=LOGFONT(name='Microsoft YaHei';h=-11);z=3};
-lblSec1={cls="static";text="按钮";left=24;top=90;right=200;bottom=110;font=LOGFONT(name='Microsoft YaHei';h=-11);z=4};
-btnPrimary={cls="plus";text="主要按钮";left=24;top=116;right=164;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
-btnGhost={cls="plus";text="次要按钮";left=172;top=116;right=312;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=6};
-btnDisabled={cls="plus";text="禁用按钮";left=320;top=116;right=460;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=7};
-lblSec2={cls="static";text="分隔线 / 文字";left=24;top=162;right=300;bottom=182;font=LOGFONT(name='Microsoft YaHei';h=-11);z=8};
-line2={cls="plus";text="";left=24;top=188;right=596;bottom=189;z=9};
-lblInk={cls="static";text="主要文字";left=24;top=196;right=200;bottom=216;font=LOGFONT(name='Microsoft YaHei';h=-12);z=10};
-lblMuted={cls="static";text="次要文字";left=208;top=196;right=400;bottom=216;font=LOGFONT(name='Microsoft YaHei';h=-12);z=11};
-lblErr={cls="static";text="错误文字";left=408;top=196;right=596;bottom=216;font=LOGFONT(name='Microsoft YaHei';h=-12);z=12};
-lblSec3={cls="static";text="输入";left=24;top=226;right=300;bottom=246;font=LOGFONT(name='Microsoft YaHei';h=-11);z=13};
-edit1={cls="edit";text="正常输入框";left=24;top=252;right=300;bottom=278;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei';h=-12);z=14};
-edit2={cls="edit";text="禁用输入框";left=308;top=252;right=596;bottom=278;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei';h=-12);z=15};
-combo1={cls="combobox";left=24;top=288;right=300;bottom=378;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=16};
-combo2={cls="combobox";left=308;top=288;right=596;bottom=378;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=17};
-chk1={cls="checkbox";text="已选中";left=24;top=326;right=200;bottom=348;checked=1;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=18};
-chk2={cls="checkbox";text="未选中";left=208;top=326;right=384;bottom=348;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=19};
-chk3={cls="checkbox";text="禁用";left=392;top=326;right=596;bottom=348;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=20};
-lblSec4={cls="static";text="滑条";left=24;top=362;right=200;bottom=382;font=LOGFONT(name='Microsoft YaHei';h=-11);z=21};
-slider={cls="plus";left=24;top=388;right=360;bottom=410;z=22};
-lblSlider={cls="static";text="4096 MB";left=368;top=388;right=596;bottom=410;font=LOGFONT(name='Microsoft YaHei';h=-12);z=23};
-lblSec5={cls="static";text="列表";left=24;top=422;right=200;bottom=442;font=LOGFONT(name='Microsoft YaHei';h=-11);z=24};
-listDemo={cls="listview";mode="report";left=24;top=448;right=596;bottom=548;bgcolor=0xFFFFFF;font=LOGFONT(name='Microsoft YaHei';h=-12);z=25};
-btnClose={cls="plus";text="关闭";left=496;top=566;right=596;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-13);z=26};
-btnCrashTest={cls="plus";text="崩溃窗口测试台";left=24;top=566;right=196;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-12);z=27};
-lblDpi={cls="static";text="";left=204;top=566;right=298;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-11);z=28};
-btnLayout={cls="plus";text="布局测试";left=306;top=566;right=396;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-12);z=30};
-btnSettings2={cls="plus";text="设置界面";left=406;top=566;right=488;bottom=598;font=LOGFONT(name='Microsoft YaHei';h=-12);z=29};
+lblTitle={cls="static";text="控件样式测试台";left=24;top=16;right=420;bottom=44;font=LOGFONT(name='Microsoft YaHei';h=-15;weight=700);z=1};
+lblNote={cls="static";text="改 m3theme 之后对着这一屏看；鼠标移上去查 hover / active。";left=24;top=48;right=596;bottom=68;font=LOGFONT(name='Microsoft YaHei';h=-11);z=2};
+line1={cls="plus";text="";left=24;top=78;right=596;bottom=79;z=3};
+lblSecBtn={cls="static";text="按钮";left=24;top=88;right=200;bottom=106;font=LOGFONT(name='Microsoft YaHei';h=-11);z=4};
+btnPrimary={cls="plus";text="主要按钮";left=24;top=110;right=164;bottom=142;font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
+btnGhost={cls="plus";text="次要按钮";left=172;top=110;right=312;bottom=142;font=LOGFONT(name='Microsoft YaHei';h=-12);z=6};
+btnDisabled={cls="plus";text="禁用按钮";left=320;top=110;right=460;bottom=142;font=LOGFONT(name='Microsoft YaHei';h=-12);z=7};
+lblSecText={cls="static";text="文字";left=24;top=156;right=200;bottom=174;font=LOGFONT(name='Microsoft YaHei';h=-11);z=8};
+lblInk={cls="static";text="主要文字";left=24;top=178;right=140;bottom=198;font=LOGFONT(name='Microsoft YaHei';h=-12);z=9};
+lblMuted={cls="static";text="次要文字";left=148;top=178;right=264;bottom=198;font=LOGFONT(name='Microsoft YaHei';h=-12);z=10};
+lblErr={cls="static";text="错误文字";left=272;top=178;right=388;bottom=198;font=LOGFONT(name='Microsoft YaHei';h=-12);z=11};
+lblMono={cls="static";text="C:\Program Files\Java\azul-25.0.2\bin\java.exe";left=24;top=204;right=596;bottom=224;font=LOGFONT(name='Consolas';h=-12);z=12};
+lblSecInput={cls="static";text="输入";left=24;top=234;right=200;bottom=252;font=LOGFONT(name='Microsoft YaHei';h=-11);z=13};
+edit1={cls="edit";text="单行输入框";left=24;top=256;right=300;bottom=284;font=LOGFONT(name='Microsoft YaHei';h=-12);z=14};
+edit2={cls="edit";text="禁用输入框";left=308;top=256;right=596;bottom=284;font=LOGFONT(name='Microsoft YaHei';h=-12);z=15};
+combo1={cls="combobox";left=24;top=292;right=300;bottom=352;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=16};
+combo2={cls="combobox";left=308;top=292;right=596;bottom=352;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=17};
+chk1={cls="checkbox";text="已选中";left=24;top=362;right=148;bottom=386;checked=1;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=18};
+chk2={cls="checkbox";text="未选中";left=156;top=362;right=280;bottom=386;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=19};
+chk3={cls="checkbox";text="禁用";left=288;top=362;right=380;bottom=386;bgcolor=0xF2F2F2;font=LOGFONT(name='Microsoft YaHei';h=-12);z=20};
+lblSecSlider={cls="static";text="滑条";left=24;top=396;right=200;bottom=414;font=LOGFONT(name='Microsoft YaHei';h=-11);z=21};
+slider={cls="plus";left=24;top=418;right=420;bottom=440;z=22};
+lblSlider={cls="static";text="4096 MB";left=430;top=418;right=596;bottom=440;font=LOGFONT(name='Microsoft YaHei';h=-12);z=23};
+lblSecList={cls="static";text="列表";left=24;top=450;right=200;bottom=468;font=LOGFONT(name='Microsoft YaHei';h=-11);z=24};
+listDemo={cls="listview";mode="report";left=24;top=472;right=596;bottom=560;font=LOGFONT(name='Microsoft YaHei';h=-12);z=25};
+lblSecLog={cls="static";text="日志着色";left=24;top=570;right=200;bottom=588;font=LOGFONT(name='Microsoft YaHei';h=-11);z=26};
+editLog={cls="richedit";readonly=1;multiline=1;vscroll=1;autohscroll=false;left=24;top=592;right=596;bottom=628;font=LOGFONT(name='Consolas';h=-12);z=27};
+btnClose={cls="plus";text="关闭";left=496;top=634;right=596;bottom=666;font=LOGFONT(name='Microsoft YaHei';h=-13);z=28}
 )
 /*}}*/
 
-// 全部样式从主题库来，这里同时也是 m3theme 的展示页
+// ---------- 样式：全部来自主题库 ----------
+
 m3theme.button(winform.btnPrimary);
 m3theme.ghost(winform.btnGhost);
 m3theme.button(winform.btnDisabled);
-m3theme.button(winform.btnCrashTest);
-m3theme.button(winform.btnLayout);
-m3theme.button(winform.btnSettings2);
 m3theme.button(winform.btnClose);
 
 m3theme.rule(winform.line1);
-m3theme.rule(winform.line2);
 
 m3theme.ink(winform.lblTitle);
-m3theme.ink(winform.lblInk);
 m3theme.note(winform.lblNote);
+m3theme.note(winform.lblSecBtn);
+m3theme.note(winform.lblSecText);
+m3theme.note(winform.lblSecInput);
+m3theme.note(winform.lblSecSlider);
+m3theme.note(winform.lblSecList);
+m3theme.note(winform.lblSecLog);
+
+m3theme.ink(winform.lblInk);
 m3theme.note(winform.lblMuted);
-m3theme.note(winform.lblSec1);
-m3theme.note(winform.lblSec2);
-m3theme.note(winform.lblSec3);
-m3theme.note(winform.lblSec4);
-m3theme.note(winform.lblSec5);
 m3theme.danger(winform.lblErr);
+m3theme.ink(winform.lblMono);
 
 m3theme.field(winform.edit1);
 m3theme.field(winform.edit2);
+
 m3theme.ink(winform.lblSlider);
 
-// 禁用态：按钮看 disabled 皮肤，输入框看系统灰化
+// ---------- 禁用态 ----------
+
 winform.btnDisabled.disabled = true;
 winform.edit2.disabled = true;
 winform.chk3.disabled = true;
 
-// 下拉框
-winform.combo1.add("下拉框A");
-winform.combo1.add("下拉框B");
-winform.combo1.add("下拉框C");
+// ---------- 下拉框 ----------
+
+winform.combo1.add("下拉框 A");
+winform.combo1.add("下拉框 B");
+winform.combo1.add("下拉框 C");
 winform.combo1.selIndex = 1;
 
-winform.combo2.add("可编辑下拉框（其实是 dropdownlist）");
+winform.combo2.add("第二条下拉框");
 winform.combo2.selIndex = 1;
 
-// 滑条
+// ---------- 滑条 ----------
+// 三个状态的滑块形状只看 border.radius，所以这里放一条就能看出方形/圆角/圆
+
 m3theme.slider(winform.slider);
 winform.slider.setTrackbarRange(512, 16384);
 winform.slider.progressPos = 4096;
 
-// 列表
+// ---------- 列表 ----------
+
 winform.listDemo.fullRow = true;
 winform.listDemo.columns = {
-	{ "名称"; 240 };
-	{ "说明"; 300 };
+	{ "名称"; 220 };
+	{ "说明"; 320 };
 };
-winform.listDemo.addItem({ "第一行"; "普通文本" });
-winform.listDemo.addItem({ "第二行"; "选中试试整行高亮" });
-winform.listDemo.addItem({ "第三行"; "表头也能拖动宽度" });
-winform.listDemo.selIndex = 1;
 
-// 崩溃场景不好人为制造，用这个测试台看崩溃窗口和原因分析
-winform.btnCrashTest.oncommand = function(id, event) {
-	winform.loadForm("/dlg/crash_test.aardio").doModal(winform);
+winform.listDemo.addItem({ "第一行"; "普通行" });
+winform.listDemo.addItem({ "第二行"; "选中行（整行高亮）" });
+winform.listDemo.addItem({ "第三行"; "表头可拖动列宽" });
+winform.listDemo.selIndex = 2;
+
+// ---------- 日志着色 ----------
+// 和日志窗口同一套：错误红加粗、警告黑加粗、信息近黑、调试灰
+
+winform.editLog.color = m3theme.C_INK;
+winform.editLog.bgcolor = m3theme.C_FIELD;
+
+function log_line(text, kind) {
+	winform.editLog.readonly = false;
+
+	if (kind == "error") {
+		winform.editLog.appendText({ textColor = m3theme.C_RED; bold = true }, text ++ '\r\n');
+	}
+	elseif (kind == "warn") {
+		winform.editLog.appendText({ textColor = m3theme.C_INK; bold = true }, text ++ '\r\n');
+	}
+	elseif (kind == "debug") {
+		winform.editLog.appendText({ textColor = m3theme.C_MUTED }, text ++ '\r\n');
+	}
+	else {
+		winform.editLog.appendText({ textColor = m3theme.C_INK }, text ++ '\r\n');
+	}
+
+	winform.editLog.readonly = true;
 }
 
-// 新版设置界面（左侧分类导航 + 右侧分组），先在这里试用，满意再替换主页入口
-winform.btnSettings2.oncommand = function(id, event) {
-	winform.loadForm("/dlg/settings2.aardio").doModal(winform);
-}
+log_line("[错误] 找不到库文件：libraries/…", "error");
+log_line("[警告] 缺少 3 个库文件。", "warn");
+log_line("[提示] 已启动，PID = 1234", "info");
+log_line("[调试] 启动命令：java -Xmx4096M …", "debug");
 
-// 布局助手 m3layout 的对照页：同一内容两种密度
-winform.btnLayout.oncommand = function(id, event) {
-	winform.loadForm("/dlg/layout_test.aardio").doModal(winform);
-}
+// ---------- 关闭 ----------
 
 winform.btnClose.oncommand = function(id, event) {
 	winform.endModal(true);
@@ -120,26 +143,6 @@ winform.btnClose.oncommand = function(id, event) {
 
 winform.onCancel = function() {
 	winform.endModal(true);
-}
-
-// ---------- DPI 读数 ----------
-// 测 DPI 时对着这一行看：缩放比例是多少、列表的设备像素宽 vs 逻辑宽。
-// 列宽是按逻辑像素填的，m3list.fit 会先用 dpiScaleX 换算再比较。
-function refresh_dpi() {
-	var dpi = winform.dpiScaleX or 1;
-	if (dpi <= 0) dpi = 1;
-
-	var rc = winform.listDemo.getRect();
-	var device_w = rc.right - rc.left;
-	var logic_w = math.floor(device_w / dpi);
-
-	winform.lblDpi.text = string.format("DPI %.2f×　列表 %d 设备px → %d 逻辑px", dpi, device_w, logic_w);
-}
-
-refresh_dpi();
-
-winform.onSize = function(width, height, wParam) {
-	refresh_dpi();
 }
 
 return winform;
