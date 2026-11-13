@@ -18,9 +18,19 @@ namespace m3auth {
 	import io;
 	import fsys;
 
-	//微软的公共客户端 ID。要用自己的 Azure 应用就改这一行。
-	MS_CLIENT = "00000000402b5328";
+	//微软的公共客户端 ID 必须由**本项目的 Azure 应用**提供：
+	//旧的 00000000402b5328 在 consumers 租户里已不存在（AADSTS700016）。
+	//用 set_client() 注入（启动器从配置里读，测试台会提示输入）。
+	MS_CLIENT = "";
 	MS_SCOPE = "XboxLive.signin offline_access";
+
+	function set_client(id) {
+		MS_CLIENT = string.trim(tostring(id or ""));
+	}
+
+	function has_client() {
+		return (#MS_CLIENT > 0);
+	}
 
 	MS_DEVICE = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
 	MS_TOKEN = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
@@ -90,6 +100,8 @@ namespace m3auth {
 
 	//开始登录：返回 { device_code; user_code; verify_uri; interval; expires_in; message }
 	function device_start() {
+		if (!has_client()) return null, "还没有填微软客户端 ID（Azure 应用 ID）。";
+
 		var t, code, err = form_call(MS_DEVICE, {
 			client_id = MS_CLIENT;
 			scope = MS_SCOPE;
@@ -110,6 +122,8 @@ namespace m3auth {
 
 	//轮询一次。state: "pending" 还没确认 / "ok" 好了 / "error" 失败
 	function device_poll_once(device_code) {
+		if (!has_client()) return { state = "error"; msg = "还没有填微软客户端 ID。" };
+
 		var t, code, err = form_call(MS_TOKEN, {
 			grant_type = "urn:ietf:params:oauth:grant-type:device_code";
 			client_id = MS_CLIENT;
@@ -136,6 +150,8 @@ namespace m3auth {
 
 	//用 refresh_token 续期
 	function refresh_ms(refresh_token) {
+		if (!has_client()) return null, "还没有填微软客户端 ID。";
+
 		var t, code, err = form_call(MS_TOKEN, {
 			grant_type = "refresh_token";
 			client_id = MS_CLIENT;

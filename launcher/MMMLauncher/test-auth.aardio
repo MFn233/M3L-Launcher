@@ -12,7 +12,9 @@
 
 import console;
 import m3auth;
-import web.json;
+import m3config;
+
+var cfg = m3config.read();
 
 console.setTitle("登录测试台");
 
@@ -24,6 +26,32 @@ console.log("");
 var mode = "msa";
 var pick = console.getText();
 if (string.trim(pick) == "2") mode = "authlib";
+
+//微软登录需要一个"本项目自己的" Azure 应用 ID：
+//旧的 00000000402b5328 已经在 consumers 租户里失效（AADSTS700016）。
+if (mode == "msa") {
+	var saved = cfg.ms_client_id or "";
+
+	if (#saved == 0) {
+		console.log("");
+		console.log("还没填微软客户端 ID（Azure 应用 ID）。");
+		console.log("注册步骤见 设计文稿\\正版登录配置.md，只要 3 分钟。");
+		console.log("把 Application (client) ID 粘贴到这里：");
+
+		saved = string.trim(console.getText());
+
+		if (#saved == 0) {
+			console.log("没有客户端 ID，无法测试微软登录。");
+			console.pause();
+			return;
+		}
+
+		cfg.ms_client_id = saved;
+		m3config.save_keys(cfg, {"ms_client_id"});
+	}
+
+	m3auth.set_client(saved);
+}
 
 // ---------- 微软 ----------
 function test_msa() {
