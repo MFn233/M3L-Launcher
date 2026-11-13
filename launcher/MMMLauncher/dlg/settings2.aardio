@@ -1282,10 +1282,13 @@ function mods_render() {
 
 		var top = {};
 
-		for i = #keys; i >= 1; 1 {
+		//递减要写 end 值，不能写条件：aardio 是 for(起, 止, 步)
+		for i = #keys; 1; -1 {
 			if (#top >= 5) break;
 
 			var r = keyed[keys[i]];
+			if (!r) break;
+
 			table.push(top, string.format("%6dms  %s", r.ms, r.file));
 		}
 
