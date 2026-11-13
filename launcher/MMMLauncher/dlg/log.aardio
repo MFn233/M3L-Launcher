@@ -29,6 +29,8 @@ chkAuto={cls="checkbox";text="自动滚动";left=232;top=412;right=340;bottom=43
 )
 /*}}*/
 
+m3theme.window(winform);
+
 //级别配色：错误用红（这是唯一例外，因为必须一眼看见），其余靠深浅与加粗区分
 var C_FATAL = m3theme.C_RED;
 var C_ERROR = m3theme.C_RED;
@@ -341,8 +343,7 @@ winform.bind = function(sess, owner_inst) {
 }
 
 winform.chkAuto.oncommand = function(id, event) {
-	cfg.log_autoscroll = winform.chkAuto.checked;
-	m3config.save_keys(cfg, {"log_autoscroll"});
+	m3config.update(function(c) { c.log_autoscroll = winform.chkAuto.checked; });
 
 	if (winform.chkAuto.checked) scroll_bottom();
 }

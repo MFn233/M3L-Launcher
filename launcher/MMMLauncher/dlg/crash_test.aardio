@@ -28,6 +28,8 @@ btnClose={cls="plus";text="关闭";left=476;top=440;right=576;bottom=472;font=LO
 )
 /*}}*/
 
+m3theme.window(winform);
+
 m3theme.note(winform.lblCase);
 m3theme.note(winform.lblResult);
 

@@ -405,8 +405,29 @@ namespace m3config{
 		json.save(file_path(), out);
 	}
 
-	// 只回写几个字段：各窗口手里的 cfg 是打开时的快照，
+	// 原子修改：读最新 → 改 → 保存，一步到位。
+	// 凡是"新值要参考旧值"的改动（取反、仅在相等时清空、自增等）都该用它；
+	// 用打开界面时的快照去算新值，会写出过期结果（今天踩过两次）。
+	function update(fn) {
+		var cfg = read();
+
+		if (fn) fn(cfg);
+
+		save(cfg);
+
+		return cfg;
+	}
+
+	// 回写指定的几个键：各窗口手里的 cfg 是打开时的快照，
 	// 整份写回会把别处刚改的内容（比如 Java 列表）覆盖掉。
+	//
+	// 两者怎么选（重要）：
+	//   · 新值**要参考旧值**（取反、仅在相等时清空、自增、按旧列表删一项）
+	//       → m3config.update(function(c) { ... })
+	//   · 值来自界面或外部，只是"把这些键存下来"
+	//       → m3config.save_keys(cfg, {"键"})
+	// 反例：用快照算取反，等于每次点都从同一个旧值翻，会把开关翻回原状
+	//（操作日志的开关就这么坏过一次）。
 	function save_keys(cfg, keys) {
 		var fresh = read();
 

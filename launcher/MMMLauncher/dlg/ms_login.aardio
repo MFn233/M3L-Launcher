@@ -23,6 +23,8 @@ btnCancel={cls="plus";text="取消";left=440;top=196;right=536;bottom=230;font=L
 )
 /*}}*/
 
+m3theme.window(winform);
+
 m3theme.note(winform.lblTip);
 m3theme.ink(winform.lblUri);
 m3theme.ink(winform.lblCode);

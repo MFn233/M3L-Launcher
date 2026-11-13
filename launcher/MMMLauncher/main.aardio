@@ -38,6 +38,8 @@ lblStatus={cls="static";left=24;top=64;right=520;bottom=96;anchors={left=1;top=1
 )
 /*}}*/
 
+m3theme.window(winform);
+
 // ---------- 主题 ----------
 
 m3theme.note(winform.lblStatus);
@@ -326,8 +328,7 @@ function load_version_combo() {
 
 	var picked = items[at];
 	if (picked != cfg.version) {
-		cfg.version = picked;
-		m3config.save_keys(cfg, {"version"});
+		m3config.update(function(c) { c.version = picked; });
 		refresh_status();
 	}
 }
@@ -340,8 +341,7 @@ winform.comboVer.onSelChange = function() {
 	if (cfg.version == name) return;
 
 	m3act.log("切换版本：" ++ name);
-	cfg.version = name;
-	m3config.save_keys(cfg, {"version"});
+	m3config.update(function(c) { c.version = name; });
 	refresh_status();
 }
 
@@ -940,8 +940,7 @@ function start_game(retried, inst) {
 			var p, m2 = m3java.pick_cfg(cfg, info.java_version);
 
 			if (p) {
-				cfg.java = p;
-				m3config.save_keys(cfg, {"java"});
+				m3config.update(function(c) { c.java = p; });
 				log("已换用 Java " ++ m2 ++ "：" ++ p);
 			}
 			else {
@@ -1176,10 +1175,9 @@ function run_debug_action(want, cfg) {
 	if (want == ID.actlog) {
 		// 以磁盘现值为准取反，避免用到旧快照
 		var fresh = m3config.read();
-		var on = !(fresh.action_log === true);
+		var on = (fresh.action_log !== true);
 
-		fresh.action_log = on;
-		m3config.save_keys(fresh, {"action_log"});
+		m3config.update(function(c) { c.action_log = on; });
 
 		// 先写"关"这一笔，再真正关掉，否则最后一条会丢
 		if (on) m3act.set_enabled(true);
@@ -1195,8 +1193,7 @@ function run_debug_action(want, cfg) {
 	if (want == ID.exit_debug) {
 		m3act.log("关闭调试模式");
 
-		cfg.debug = false;
-		m3config.save_keys(cfg, {"debug"});
+		m3config.update(function(c) { c.debug = false; });
 		refresh_status();
 
 		notice("已关闭调试模式。" ++ '\r\n' ++ "如需重新打开，请到「设置 → 启动器设置」勾选。");

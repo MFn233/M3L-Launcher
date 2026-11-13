@@ -42,6 +42,8 @@ lblPageTitle={cls="static";left=232;top=14;right=680;bottom=42;font=LOGFONT(h=-1
 )
 /*}}*/
 
+m3theme.window(winform);
+
 // ---------- 三区：左导航 / 右内容 / 底部条 ----------
 // 背景一律用 bkplus（无句柄背景控件）画，它不会抢 Z 序。
 // 注意所有灰都是等值 RGB，ARGB 与 COLORREF 之间不需要反转。
@@ -3282,8 +3284,7 @@ ver_tools.right[1].oncommand = function(id, event) {
 		return;
 	}
 
-	cfg.version = name;
-	m3config.save_keys(cfg, {"version"});
+	m3config.update(function(c) { c.version = name; });
 	vers_render();
 	lblVerHint.text = "已设为当前版本：" ++ short_name(name);
 }

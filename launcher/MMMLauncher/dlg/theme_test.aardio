@@ -41,6 +41,8 @@ btnClose={cls="plus";text="关闭";left=496;top=634;right=596;bottom=666;font=LO
 )
 /*}}*/
 
+m3theme.window(winform);
+
 // ---------- 样式：全部来自主题库 ----------
 
 m3theme.button(winform.btnPrimary);

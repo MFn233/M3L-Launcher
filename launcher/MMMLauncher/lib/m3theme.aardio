@@ -146,6 +146,16 @@ namespace m3theme {
 		ctrl.color = C_RED;
 		ctrl.bgcolor = C_BG;
 	}
+
+	// 窗口底色统一：DSG 里的 bgcolor 是设计器写死的，这里运行时覆盖一次，
+	// 以后改主题只改 C_BG 一处（12 个对话框都不再各自为准）。
+	function window(f) {
+		if (!f) return;
+
+		f.bgcolor = C_BG;
+
+		return f;
+	}
 }
 
 /**intellisense(m3theme)
@@ -176,6 +186,7 @@ plain(__/*控件*/) = 无框无底，主页标题那种
 rule(__/*控件*/) = 分隔线：1px 高的 plus，只填色
 slider(__/*控件*/) = 滑条：圆形滑块，三个状态形状一致
 field(__/*控件*/) = 输入框：文字色 + 底色
+window(__/*窗口*/) = 窗口底色统一（DSG 里的 bgcolor 会被它覆盖）
 ink(__/*控件*/) = 静态文本：主要文字
 note(__/*控件*/) = 静态文本：说明 / 标签
 danger(__/*控件*/) = 静态文本：错误红（不能叫 error，和内置函数冲突）

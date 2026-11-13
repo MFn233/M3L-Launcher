@@ -45,6 +45,8 @@ listLogs={cls="listview";left=24;top=362;right=616;bottom=466;bgcolor=0xFFFFFF;f
 )
 /*}}*/
 
+m3theme.window(winform);
+
 m3theme.ink(winform.lblTitle);
 m3theme.ink(winform.lblReason);
 m3theme.note(winform.lblSuspect);
