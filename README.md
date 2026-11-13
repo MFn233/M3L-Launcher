@@ -152,8 +152,16 @@ M3L\
 
 - 启动器不写注册表，卸载直接删目录（连 `M3L\` 一起删）；
 - **从旧布局升级**：启动时会自动把散落在 exe 旁边的文件搬进 `M3L\`
-  （只在目标不存在时搬，不覆盖）；也可以手动跑迁移工具 `migrate-layout.aardio`
-  （发布成 exe 放在启动器旁边，支持 `--dry` 只看计划）；
+  （只在目标不存在时搬，不覆盖）。也可以手动跑
+  `launcher/MMMLauncher/migrate-layout.bat`（复制到启动器旁边双击即可）：
+
+  ```
+  migrate-layout.bat            迁移本目录
+  migrate-layout.bat D:\M3L     指定目录
+  migrate-layout.bat --dry      只看计划，不动文件
+  ```
+
+  它和启动器内的自动迁移用同一份清单，重复运行安全。
 - 版本目录里的 `.m3l-meta.json`（边车文件）由 MMM-DL 写入，记录下载时确定的游戏版本与加载器；
   没有这个文件时，启动器按版本 JSON 自行推断。
 
