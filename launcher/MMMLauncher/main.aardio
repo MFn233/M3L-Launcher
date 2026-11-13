@@ -15,6 +15,7 @@ import m3opts;
 import m3log;
 import m3java;
 import m3game;
+import m3auth;
 import m3app;
 import crypt;
 import fsys;
@@ -643,12 +644,45 @@ function start_game(retried, inst) {
 		m3game.set_fullscreen(work_dir, false);
 	}
 
-	// 离线 UUID：账号里填过就用填的，否则按用户名生成
+	// 账号：离线 / 正版（微软）/ 外置登录
 	var uuid = crypt.md5("OfflinePlayer:" ++ username);
+	var access_token = "0";
+	var user_type = "msa";
 	var acc = m3config.find_account(cfg, username);
+
 	if (acc) {
 		var custom = string.trim(acc.uuid or "");
 		if (#custom > 0) uuid = custom;
+	}
+
+	if (acc and (acc.type == "msa" or acc.type == "authlib") and #(acc.access_token or "") > 0) {
+		// 微软凭据快到期就先续期：否则游戏能起来但进服务器会被踢
+		if (acc.type == "msa") {
+			var exp = tonumber(acc.expires_at) or 0;
+			var now = tonumber(time.now());
+
+			if (exp > 0 and (exp - now) < 600 and #(acc.refresh_token or "") > 0) {
+				var r, rerr = m3auth.refresh_ms(acc.refresh_token);
+
+				if (r) {
+					acc.access_token = r.access_token;
+					acc.refresh_token = r.refresh_token;
+					acc.expires_at = now + r.expires_in;
+					m3config.save_keys(cfg, {"accounts"});
+					log("[提示] 登录凭据已自动续期。");
+				}
+				else {
+					log("[警告] 登录凭据续期失败：" ++ tostring(rerr), true);
+				}
+			}
+		}
+
+		access_token = acc.access_token;
+		user_type = (acc.type == "authlib" ? "mojang" : "msa");
+
+		if (#(acc.uuid or "") > 0) uuid = acc.uuid;
+
+		log("[提示] 使用账号：" ++ username ++ "（" ++ (acc.type == "authlib" ? "外置登录" : "正版") ++ "）");
 	}
 
 	// 自定义 JVM 参数：一行一条，空行忽略
@@ -662,13 +696,28 @@ function start_game(retried, inst) {
 		}
 	}
 
+	// 外置登录：把 authlib-injector 挂成 javaagent（缺 jar 会自己去下）
+	if (acc and acc.type == "authlib" and #(acc.authlib_server or "") > 0) {
+		var injector_dir = io.joinpath(io.splitpath(io._exepath).dir, "authlib-injector");
+		var agent, aerr = m3auth.injector_arg(acc.authlib_server, injector_dir);
+
+		if (agent) {
+			table.push(extra_jvm, agent);
+			log("[提示] 已挂载外置登录：" ++ tostring(acc.authlib_server));
+		}
+		else {
+			log("[警告] " ++ tostring(aerr), true);
+			log("        本次将以离线身份启动。", true);
+		}
+	}
+
 	var opts = {
 		minecraft_dir = cfg.game_path;
 		version = cfg.version;
 		username = username;
 		uuid = uuid;
-		access_token = "0";
-		user_type = "msa";
+		access_token = access_token;
+		user_type = user_type;
 		version_type = "M3LC";
 		memory = eff.memory;
 		work_dir = work_dir;

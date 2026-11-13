@@ -1,0 +1,121 @@
+//test-auth.aardio
+
+//登录测试台：在 IDE 里按 F5 直接跑。
+//
+//它只做两件事，和界面无关：
+//   1. 微软设备码登录 → 换到 Minecraft token → 打印玩家名与 UUID
+//   2. 外置登录（可选）：命令行传 authlib，按提示输入服务器地址与账号密码
+//
+//用法：
+//   F5 直接跑      → 微软登录
+//   命令行加 authlib → 外置登录（例：test-auth.aardio authlib）
+
+import console;
+import m3auth;
+import web.json;
+
+console.setTitle("登录测试台");
+
+console.log("选择要测的登录方式：");
+console.log("  1 = 微软（正版）");
+console.log("  2 = 外置登录（authlib-injector）");
+console.log("");
+
+var mode = "msa";
+var pick = console.getText();
+if (string.trim(pick) == "2") mode = "authlib";
+
+// ---------- 微软 ----------
+function test_msa() {
+	var dev, err = m3auth.device_start();
+
+	if (!dev) {
+		console.log("申请设备码失败：" + tostring(err));
+		return;
+	}
+
+	console.log("--------------------------------------------------");
+	console.log("浏览器打开：" + tostring(dev.verify_uri));
+	console.log("输入代码：  " + tostring(dev.user_code));
+	console.log("--------------------------------------------------");
+	console.log("等待确认…（" + tostring(dev.expires_in) + " 秒内有效，每 " + tostring(dev.interval) + " 秒问一次）");
+	console.log("");
+
+	var waited = 0;
+	var interval = dev.interval or 5;
+
+	while (waited < dev.expires_in) {
+		sleep(1000 * interval);
+		waited = waited + interval;
+
+		var r = m3auth.device_poll_once(dev.device_code);
+
+		if (r.state == "ok") {
+			console.log("微软授权成功，正在换 Minecraft token…");
+
+			var mc, mcerr = m3auth.to_minecraft(r.access_token);
+
+			if (!mc) {
+				console.log("[失败] " + tostring(mcerr));
+				return;
+			}
+
+			console.log("");
+			console.log("成功：");
+			console.log("  玩家名   " + mc.name);
+			console.log("  UUID     " + mc.uuid);
+			console.log("  token    " + string.left(mc.access_token, 12) + "…（" + #mc.access_token + " 字节）");
+			console.log("  有效期   " + tostring(mc.expires_in) + " 秒");
+			console.log("");
+			console.log("refresh_token 长度：" + #(r.refresh_token or "") + "（要存下来，用来续期）");
+			return;
+		}
+
+		if (r.state == "error") {
+			console.log("[失败] " + tostring(r.msg));
+			return;
+		}
+
+		console.log("…还没确认（已等 " + waited + " 秒）");
+	}
+
+	console.log("[失败] 超时，请重新运行");
+}
+
+// ---------- 外置登录 ----------
+function test_authlib() {
+	console.log("服务器地址（例：https://example.com/api/yggdrasil）：");
+	var server = console.getText();
+
+	console.log("账号：");
+	var user = console.getText();
+
+	console.log("密码：");
+	var pass = console.getText();
+
+	var r, err = m3auth.authlib_login(server, user, pass);
+
+	if (!r) {
+		console.log("[失败] " + tostring(err));
+		return;
+	}
+
+	console.log("");
+	console.log("成功：");
+	console.log("  玩家名   " + r.name);
+	console.log("  UUID     " + r.uuid);
+	console.log("  token    " + string.left(r.access_token, 12) + "…");
+	console.log("  服务器   " + r.server);
+
+	var agent, aerr = m3auth.injector_arg(server, io.joinpath(io.splitpath(io._exepath).dir, "authlib-injector"));
+
+	if (agent) console.log("  启动参数 " + agent);
+	else console.log("[警告] 取 authlib-injector 失败：" + tostring(aerr));
+}
+
+if (mode == "authlib") test_authlib();
+else test_msa();
+
+console.log("");
+console.log("按任意键退出…");
+console.pause();

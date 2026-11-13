@@ -1,0 +1,333 @@
+//m3auth.aardio
+
+//账号登录：微软设备码（正版）、外置登录（authlib-injector）。
+//
+//这一层只做"拿 token"，不碰界面、不写配置：
+//   device_start()       → 让用户去浏览器输代码
+//   device_poll_once()   → 每次问一次"好了没"，由界面用定时器驱动（不要在这里 sleep）
+//   to_minecraft()       → 微软 token 换 Minecraft token + 名字/UUID
+//   authlib_login()      → 外置登录的 Yggdrasil 认证
+//   injector_arg()       → 生成 -javaagent 参数（缺文件就下载）
+
+namespace m3auth {
+	import inet.http;
+	import inet.url;
+	import web.json;
+	import string;
+	import table;
+	import io;
+	import fsys;
+
+	//微软的公共客户端 ID。要用自己的 Azure 应用就改这一行。
+	MS_CLIENT = "00000000402b5328";
+	MS_SCOPE = "XboxLive.signin offline_access";
+
+	MS_DEVICE = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+	MS_TOKEN = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
+
+	//---------- 底层 HTTP ----------
+
+	//发一次 JSON 请求。返回 解析后的表, HTTP 状态码, 错误说明
+	//网络错误时第一个返回 null；4xx/5xx 时表仍然解析（错误体里通常有 error 字段），由调用方判断。
+	function json_call(method, url, obj, bearer) {
+		var http = inet.http();
+		var heads = { "Content-Type: application/json"; "Accept: application/json" };
+		if (bearer) table.push(heads, "Authorization: Bearer " ++ bearer);
+
+		var body = obj ? web.json.stringify(obj) : null;
+		var resp;
+
+		try {
+			if (method == "POST") resp = http.post(url, body, heads);
+			else resp = http.get(url, heads);
+		}
+		catch(e) {
+			return null, 0, tostring(e);
+		}
+
+		var code = http.statusCode or 0;
+		http.close();
+
+		if (!resp) return null, code, "服务器没有返回内容";
+
+		var tab = null;
+		try {
+			tab = web.json.parse(resp);
+		}
+		catch(e) {
+			tab = null;
+		}
+
+		return tab, code, (tab ? null : "返回内容不是 JSON：" ++ string.left(tostring(resp), 120));
+	}
+
+	//application/x-www-form-urlencoded
+	function form_call(url, pairs) {
+		var http = inet.http();
+		var body = inet.url.stringifyParameters(pairs);
+
+		var resp;
+		try {
+			resp = http.post(url, body, { "Content-Type: application/x-www-form-urlencoded"; "Accept: application/json" });
+		}
+		catch(e) {
+			return null, 0, tostring(e);
+		}
+
+		var code = http.statusCode or 0;
+		http.close();
+
+		if (!resp) return null, code, "服务器没有返回内容";
+
+		var tab = null;
+		try { tab = web.json.parse(resp); }
+		catch(e) { tab = null; }
+
+		return tab, code, (tab ? null : "返回内容不是 JSON：" ++ string.left(tostring(resp), 120));
+	}
+
+	//---------- 微软设备码 ----------
+
+	//开始登录：返回 { device_code; user_code; verify_uri; interval; expires_in; message }
+	function device_start() {
+		var t, code, err = form_call(MS_DEVICE, {
+			client_id = MS_CLIENT;
+			scope = MS_SCOPE;
+		});
+
+		if (!t) return null, tostring(err);
+		if (!t.device_code) return null, tostring(t.error_description or t.error or "设备码申请失败");
+
+		return {
+			device_code = t.device_code;
+			user_code = t.user_code;
+			verify_uri = t.verification_uri or t.verification_url;
+			interval = t.interval or 5;
+			expires_in = t.expires_in or 900;
+			message = t.message;
+		};
+	}
+
+	//轮询一次。state: "pending" 还没确认 / "ok" 好了 / "error" 失败
+	function device_poll_once(device_code) {
+		var t, code, err = form_call(MS_TOKEN, {
+			grant_type = "urn:ietf:params:oauth:grant-type:device_code";
+			client_id = MS_CLIENT;
+			device_code = device_code;
+		});
+
+		if (!t) return { state = "error"; msg = tostring(err) };
+
+		if (t.access_token) {
+			return {
+				state = "ok";
+				access_token = t.access_token;
+				refresh_token = t.refresh_token;
+				expires_in = t.expires_in or 3600;
+			};
+		}
+
+		var e = tostring(t.error or "");
+		if (e == "authorization_pending") return { state = "pending" };
+		if (e == "slow_down") return { state = "pending"; slower = true };
+
+		return { state = "error"; msg = tostring(t.error_description or e or "登录失败") };
+	}
+
+	//用 refresh_token 续期
+	function refresh_ms(refresh_token) {
+		var t, code, err = form_call(MS_TOKEN, {
+			grant_type = "refresh_token";
+			client_id = MS_CLIENT;
+			refresh_token = refresh_token;
+			scope = MS_SCOPE;
+		});
+
+		if (!t or !t.access_token) {
+			return null, tostring((t and (t.error_description or t.error)) or err);
+		}
+
+		return {
+			access_token = t.access_token;
+			refresh_token = t.refresh_token or refresh_token;
+			expires_in = t.expires_in or 3600;
+		};
+	}
+
+	//微软 token → Xbox Live → XSTS → Minecraft
+	//返回 { access_token; expires_in; name; uuid }
+	function to_minecraft(ms_access_token) {
+		//1) Xbox Live
+		var xbl, code, err = json_call("POST", "https://user.auth.xboxlive.com/user/authenticate", {
+			Properties = {
+				AuthMethod = "RPS";
+				SiteName = "user.auth.xboxlive.com";
+				RpsTicket = "d=" ++ ms_access_token;
+			};
+			RelyingParty = "http://auth.xboxlive.com";
+			TokenType = "JWT";
+		});
+
+		if (!xbl or !xbl.Token) {
+			return null, "Xbox Live 认证失败：" ++ tostring((xbl and (xbl.Message or xbl.error)) or err);
+		}
+
+		var uhs = "";
+		var claims = xbl.DisplayClaims;
+		if (claims and claims.xui and claims.xui[1]) uhs = claims.xui[1].uhs or "";
+
+		//2) XSTS
+		var xsts, code2, err2 = json_call("POST", "https://xsts.auth.xboxlive.com/xsts/authorize", {
+			Properties = {
+				SandboxId = "RETAIL";
+				UserTokens = { xbl.Token };
+			};
+			RelyingParty = "rp://api.minecraftservices.com/";
+			TokenType = "JWT";
+		});
+
+		if (!xsts or !xsts.Token) {
+			var msg = tostring((xsts and (xsts.Message or xsts.error)) or err2);
+
+			//常见：账号没建过 Xbox 档案 / 未成年
+			if (xsts and xsts.XErr) {
+				var xerr = tostring(xsts.XErr);
+				if (xerr == "2148916233") msg = "这个微软账号还没有 Xbox 档案，请先去 Xbox 官网创建。";
+				elseif (xerr == "2148916238") msg = "这个账号被判定为未成年，需要加入家庭组。";
+				elseif (xerr == "2148916235") msg = "这个账号所在地区不支持 Xbox Live。";
+				else msg = "XSTS 认证失败：" ++ xerr;
+			}
+
+			return null, msg;
+		}
+
+		if (xsts.DisplayClaims and xsts.DisplayClaims.xui and xsts.DisplayClaims.xui[1]) {
+			uhs = xsts.DisplayClaims.xui[1].uhs or uhs;
+		}
+
+		//3) Minecraft
+		var mc, code3, err3 = json_call("POST", "https://api.minecraftservices.com/authentication/login_with_xbox", {
+			identityToken = "XBL3.0 x=" ++ uhs ++ ";" ++ xsts.Token;
+		});
+
+		if (!mc or !mc.access_token) {
+			return null, "Minecraft 认证失败：" ++ tostring((mc and (mc.errorMessage or mc.error)) or err3);
+		}
+
+		//4) 档案（名字与 UUID）
+		var prof, code4, err4 = json_call("GET", "https://api.minecraftservices.com/minecraft/profile", null, mc.access_token);
+
+		if (!prof or !prof.id) {
+			return null, "读取档案失败（这个账号可能还没有购买 Minecraft）："
+				++ tostring((prof and (prof.errorMessage or prof.error)) or err4);
+		}
+
+		return {
+			access_token = mc.access_token;
+			expires_in = mc.expires_in or 86400;
+			name = prof.name;
+			uuid = string.replace(prof.id, "-", "");
+		};
+	}
+
+	//---------- 外置登录（Yggdrasil / authlib-injector） ----------
+
+	//server 形如 https://example.com/api/yggdrasil
+	//返回 { access_token; name; uuid }
+	function authlib_login(server, username, password) {
+		server = string.trimRight(tostring(server or ""));
+		if (!string.startsWith(string.lower(server), "http")) return null, "外置登录地址要以 http:// 或 https:// 开头";
+		if (string.endsWith(server, "/")) server = string.slice(server, 1, #server - 1);
+
+		var t, code, err = json_call("POST", server ++ "/authserver/authenticate", {
+			agent = { name = "Minecraft"; version = 1 };
+			username = username;
+			password = password;
+			requestUser = false;
+		});
+
+		if (!t or !t.accessToken) {
+			return null, "外置登录失败：" ++ tostring((t and (t.errorMessage or t.error)) or err);
+		}
+
+		var name = username;
+		var uuid = "";
+
+		var sp = t.selectedProfile;
+		if (sp) {
+			name = sp.name or name;
+			uuid = string.replace(sp.id or "", "-", "");
+		}
+
+		return {
+			access_token = t.accessToken;
+			name = name;
+			uuid = uuid;
+			server = server;
+		};
+	}
+
+	//---------- authlib-injector ----------
+
+	//确保有 authlib-injector 的 jar，返回本地路径。
+	//放 <launcher_dir>/authlib-injector/ 下；已有就直接用，不重复下载。
+	function injector_path(dir) {
+		if (!io.exist(dir)) fsys.createDir(dir);
+
+		//已有任意版本就用（文件名里带版本号）
+		var files = fsys.list(dir);
+		for i, p in files {
+			if (string.indexOf(string.lower(p), "authlib-injector") and string.endsWith(string.lower(p), ".jar")) {
+				return p;
+			}
+		}
+
+		return null;
+	}
+
+	function injector_download(dir) {
+		var meta, code, err = json_call("GET", "https://authlib-injector.yushi.moe/artifact/latest.json", null);
+		if (!meta or !meta.download_url) {
+			return null, "获取 authlib-injector 下载地址失败：" ++ tostring(err);
+		}
+
+		var url = meta.download_url;
+		var ver = tostring(meta.version or "latest");
+		if (!io.exist(dir)) fsys.createDir(dir);
+
+		var target = io.joinpath(dir, "authlib-injector-" ++ ver ++ ".jar");
+
+		var http = inet.http();
+		var data;
+		try {
+			data = http.get(url);
+		}
+		catch(e) {
+			http.close();
+			return null, "下载 authlib-injector 失败：" ++ tostring(e);
+		}
+		http.close();
+
+		if (!data) return null, "下载 authlib-injector 失败：没有内容";
+		if (!string.save(target, data)) return null, "写入失败：" ++ target;
+
+		return target;
+	}
+
+	//生成 -javaagent 参数；缺 jar 就下载。
+	//返回 " -javaagent:<jar>=<server>" 这样的单条参数（不含引号，路径由启动参数处理器负责）
+	function injector_arg(server, dir) {
+		var jar = injector_path(dir);
+
+		if (!jar) {
+			var err;
+			jar, err = injector_download(dir);
+			if (!jar) return null, err;
+		}
+
+		server = string.trimRight(tostring(server or ""));
+		if (string.endsWith(server, "/")) server = string.slice(server, 1, #server - 1);
+
+		return "-javaagent:" ++ jar ++ "=" ++ server;
+	}
+}
