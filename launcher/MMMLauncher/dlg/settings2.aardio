@@ -2133,6 +2133,7 @@ function acc_render() {
 
 		var type_text = "离线";
 		if (a.type == "msa" or a.type == "mojang") type_text = "正版";
+		elseif (a.type == "authlib") type_text = "外置";
 
 		var uuid_text = a.uuid or "";
 		if (#uuid_text == 0) {

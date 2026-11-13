@@ -552,6 +552,15 @@ function start_game(retried, inst) {
 
 	set_launching(true);
 
+	//落盘文件在这里就定好：账号、Java、兼容处理这些提示都在读 JSON 之前产生，
+	//晚设的话它们进不了文件（外置登录的提示就是这么丢的）。
+	if (#cfg.version > 0) {
+		launch_file = io.joinpath(cfg.game_path, "versions", cfg.version, "m3l-launch.txt");
+		string.save(launch_file, "");
+		launch_buf = "";
+		log("[提示] 本次启动日志： " ++ launch_file);
+	}
+
 	//把版本与核心构建写进日志：排查"发行版和 F5 表现不同"时，一眼看出是哪份代码
 	log("[提示] 启动器 " ++ m3app.version_text() ++ "，核心 " ++ MMMLC.BUILD);
 
