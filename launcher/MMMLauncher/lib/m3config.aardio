@@ -278,18 +278,21 @@ namespace m3config{
 		var want = cfg.account;
 		if (#want == 0) want = cfg.username;
 
-		var found = null;
-		for i, a in cfg.accounts {
-			if (a.name == want) {
-				found = a;
-				break;
-			}
+		// 优先按身份键找；旧配置（v0.2.2 之前）只有名字，就按名字找，
+		// 同名时优先带登录凭据的那个。
+		var found = find_by_key(cfg, cfg.account_key or "");
+
+		if (!found) {
+			found = find_account(cfg, want);
 		}
 
 		if (!found) found = cfg.accounts[1];
 
 		cfg.account = found.name;
 		cfg.username = found.name;
+
+		// 补上身份键：否则同名账号会同时显示 [当前]
+		if (#(cfg.account_key or "") == 0) cfg.account_key = key_of(found);
 	}
 
 	// 账号的身份是「类型 + 名字」：离线 / 正版 / 外置可以同名共存。

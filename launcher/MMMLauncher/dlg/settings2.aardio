@@ -123,10 +123,6 @@ var chkShot = P1.check("崩溃时提醒「请勿直接截图分享此窗口」",
 //用于排查"某条兼容规则反而把某个整合包搞坏"的情况。
 var chkCompat = P1.check("启动时自动兼容异常版本文件", cfg.compat_fix !== false);
 
-//留空 = 用内置的公共客户端 ID。填自己的可以避开内置应用被限流。
-var editMsClient = P1.row("微软客户端 ID", { cls = "edit" });
-P1.text("留空则使用内置的公共客户端 ID；如需用自己的 Azure 应用，请填入它的客户端 ID。", true);
-
 P1.section("样式设置", true);
 P1.text("尚未实现。（后续在这里提供主题与外观调整）", true);
 
@@ -176,19 +172,48 @@ var comboPri = P2.row("优先级", { cls = "combobox"; mode = "dropdownlist" });
 P2.finish();
 
 // ---------- 第三页：账户管理 ----------
+//
+// 两个子页：账户列表（日常）/ 高级设置（微软客户端 ID 这类不常改的东西）。
 
-var P3 = m3layout.create(winform, 232, 52, 504, { framed = true });
-P3.btn_w = 100;   // 这一页按钮文字长一些，四个并排要宽一点
+var P3 = m3layout.create(winform, 232, 52, 504, { framed = false });
 
-P3.section("账号列表");
+var ACC_TAB_W = 96;
+var ACC_TAB_TOP = P3.y;
 
-// 列表用 L.make 建：这样框架的底边会算进这一节的内容范围
-var listAcc = P3.make({
+var accTabList = winform.add({
+	cls = "plus";
+	text = "账户列表";
+	left = 232; top = ACC_TAB_TOP;
+	right = 232 + ACC_TAB_W; bottom = ACC_TAB_TOP + 28;
+	font = LOGFONT(name='Microsoft YaHei'; h=-12);
+});
+
+var accTabAdv = winform.add({
+	cls = "plus";
+	text = "高级设置";
+	left = 232 + ACC_TAB_W + 8; top = ACC_TAB_TOP;
+	right = 232 + ACC_TAB_W * 2 + 8; bottom = ACC_TAB_TOP + 28;
+	font = LOGFONT(name='Microsoft YaHei'; h=-12);
+});
+
+table.push(P3.controls, accTabList);
+table.push(P3.controls, accTabAdv);
+
+var ACC_BODY_TOP = ACC_TAB_TOP + 28 + 8;
+
+// ---------- 子页一：账户列表 ----------
+
+var P3A = m3layout.create(winform, 232, ACC_BODY_TOP, 504, { framed = true });
+
+P3A.section("账号列表");
+
+// 列表用 make 建：这样框架的底边会算进这一节的内容范围
+var listAcc = P3A.make({
 	cls = "listview";
 	left = 232;
-	top = P3.y;
+	top = P3A.y;
 	right = 736;
-	bottom = P3.y + 150;
+	bottom = P3A.y + 150;
 });
 
 listAcc.fullRow = true;
@@ -200,15 +225,101 @@ listAcc.columns = {
 
 m3list.fit(listAcc);
 
-P3.y = P3.y + 150 + 8;
+P3A.y = P3A.y + 150 + 8;
 
-P3.section("编辑");
-var editName = P3.row("用户名", { cls = "edit" });
-var editUuid = P3.row("UUID", { cls = "edit" });
-P3.text("UUID 留空则按用户名自动生成；必须填写 32 位十六进制的 UUID （可带横线）。", true);
-var lblAccHint = P3.text("", true);
-var acc_btns = P3.buttons({"添加账号"; "删除"; "应用修改"; "设为当前"});
-var acc_login_btns = P3.buttons({"微软登录"; "外置登录"});
+P3A.section("编辑");
+var editName = P3A.row("用户名", { cls = "edit" });
+var editUuid = P3A.row("UUID", { cls = "edit" });
+P3A.text("UUID 留空则按用户名自动生成；必须填写 32 位十六进制的 UUID （可带横线）。", true);
+var lblAccHint = P3A.text("", true);
+
+// 六个按钮排一行：左边创建/登录，右边删除/修改/切换。
+// 宽度按文字长度分配，右三贴着右边线，中间自然留出间隔。
+var ACC_BTN_H = 30;
+var ACC_GAP = 8;
+var acc_btn_y = P3A.y;
+
+function acc_button(text_str, left, width) {
+	var c = P3A.make({
+		cls = "plus";
+		text = text_str;
+		left = left; top = acc_btn_y;
+		right = left + width; bottom = acc_btn_y + ACC_BTN_H;
+	});
+
+	m3theme.button(c);
+
+	return c;
+}
+
+var btnAddOffline = acc_button("添加离线账户", 232, 92);
+var btnAuthlib = acc_button("外置登录", 232 + 92 + ACC_GAP, 68);
+var btnMsa = acc_button("正版登录", 232 + 92 + ACC_GAP + 68 + ACC_GAP, 68);
+
+var right_w = 52 + 84 + 84 + ACC_GAP * 2;
+var right_x = 736 - right_w;
+
+var btnDel = acc_button("删除", right_x, 52);
+var btnApply = acc_button("应用修改", right_x + 52 + ACC_GAP, 84);
+var btnSetCur = acc_button("设为当前", right_x + 52 + ACC_GAP + 84 + ACC_GAP, 84);
+
+P3A.y = acc_btn_y + ACC_BTN_H + 6;
+
+P3A.finish();
+
+// ---------- 子页二：高级设置 ----------
+
+var P3B = m3layout.create(winform, 232, ACC_BODY_TOP, 504, { framed = true });
+
+P3B.section("微软登录");
+var editMsClient = P3B.row("客户端 ID", { cls = "edit" });
+P3B.text("留空则使用内置的公共客户端 ID；如需用自己的 Azure 应用，请填入它的客户端 ID。", true);
+P3B.text("注册方法见项目里的《正版登录配置》：需要「个人 Microsoft 帐户」+「允许公共客户端流」，并通过官方的 AppID 审核。", true);
+
+P3B.finish();
+
+// 两个子页的控件都要进 P3 的清单，切页时才跟着显隐
+for k, c in P3A.controls {
+	table.push(P3.controls, c);
+}
+for k, c in P3B.controls {
+	table.push(P3.controls, c);
+}
+
+// ---------- 子页切换 ----------
+
+var acc_sub = 1;   // 1 = 账户列表，2 = 高级设置
+
+function acc_sub_apply() {
+	var on_list = (acc_sub == 1);
+
+	m3layout.batched(winform, function() {
+		for i, c in P3A.controls {
+			c.visible = on_list;
+		}
+		for i, c in P3B.controls {
+			c.visible = !on_list;
+		}
+
+		sub_btn_skin(accTabList, on_list);
+		sub_btn_skin(accTabAdv, !on_list);
+	});
+}
+
+function acc_sub_select(n) {
+	if (acc_sub == n) return;
+
+	acc_sub = n;
+	acc_sub_apply();
+}
+
+accTabList.oncommand = function(id, event) {
+	acc_sub_select(1);
+}
+
+accTabAdv.oncommand = function(id, event) {
+	acc_sub_select(2);
+}
 
 P3.finish();
 
@@ -1669,15 +1780,18 @@ function about_fill() {
 	editAbout.readonly = true;
 
 	// 关于
-	about_line("MFn's Minimalism MC Launcher ——专一且简单的启动器。", "title");
-	about_line("");
+	about_line("MFn's Minimalism MC Launcher", "title");
+	about_line("专一且简单的启动器。");
 	about_line("版本：" ++ m3app.version_text());
+	about_line("")
 	about_line("作者：MFn");
-	about_line("“一个妄图写出完美代码的程序爱好者。”");
+	about_line("一个妄图写出完美代码的程序爱好者。");
+	about_line("");
 	about_line("本项目遵循 GPL v3.0 or later 协议开源。");
 
 	about_line("");
 	about_line("————————————————————————");
+	about_line("鸣谢", "title");
 	about_line("");
 
 	// 鸣谢：正文在 lib/m3credits.aardio 里，改名单只改那个文件
@@ -1782,6 +1896,7 @@ function show_page(n) {
 
 	// 第五页、第六页里都有两个子页：上面刚把整页置为可见，
 	// 这里必须再收一次，否则两组会同时显示。
+	if (n == 3) acc_sub_apply();
 	if (n == 5) sub_apply();
 	if (n == 6) pv_sub_apply();
 }
@@ -2205,7 +2320,7 @@ listAcc.onSelChanged = function(sel, item, subItem, nm) {
 	editUuid.text = a.uuid or "";
 }
 
-acc_btns[1].oncommand = function(id, event) {
+btnAddOffline.oncommand = function(id, event) {
 	cfg.accounts = cfg.accounts or {};
 
 	// 起一个默认名字：player / player2 …（只避开同类型重名，
@@ -2225,7 +2340,7 @@ acc_btns[1].oncommand = function(id, event) {
 	lblAccHint.text = "已添加离线账号：" ++ name ++ "，可在上方修改用户名。";
 }
 
-acc_btns[2].oncommand = function(id, event) {
+btnDel.oncommand = function(id, event) {
 	var i = acc_index();
 	if (i == 0) {
 		lblAccHint.text = "请先选择一个账号。";
@@ -2268,7 +2383,7 @@ acc_btns[2].oncommand = function(id, event) {
 	lblAccHint.text = "已删除账号：" ++ name;
 }
 
-acc_btns[3].oncommand = function(id, event) {
+btnApply.oncommand = function(id, event) {
 	var i = acc_index();
 	if (i == 0) {
 		lblAccHint.text = "请先选择一个账号。";
@@ -2314,7 +2429,7 @@ acc_btns[3].oncommand = function(id, event) {
 	lblAccHint.text = "已保存账号：" ++ name;
 }
 
-acc_btns[4].oncommand = function(id, event) {
+btnSetCur.oncommand = function(id, event) {
 	var i = acc_index();
 	if (i == 0) {
 		lblAccHint.text = "请先选择一个账号。";
@@ -2381,7 +2496,7 @@ function acc_upsert(res, kind) {
 	lblAccHint.text = "已登录：" ++ a.name ++ "（" ++ (kind == "authlib" ? "外置登录" : "正版") ++ "）";
 }
 
-acc_login_btns[1].oncommand = function(id, event) {
+btnMsa.oncommand = function(id, event) {
 	//客户端 ID：用户填了自己的就用，否则内置默认
 	var cid = string.trim(cfg.ms_client_id or "");
 	if (#cid == 0) cid = m3app.MS_CLIENT_DEFAULT;
@@ -2395,7 +2510,7 @@ acc_login_btns[1].oncommand = function(id, event) {
 	acc_upsert(res, "msa");
 }
 
-acc_login_btns[2].oncommand = function(id, event) {
+btnAuthlib.oncommand = function(id, event) {
 	var frm = winform.loadForm("/dlg/authlib_login.aardio");
 
 	// 已选账号时把名字填进去，省得再打
