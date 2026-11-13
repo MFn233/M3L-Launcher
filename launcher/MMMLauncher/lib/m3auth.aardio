@@ -17,11 +17,11 @@ namespace m3auth {
 	import table;
 	import io;
 	import fsys;
+	import m3app;
 
-	//微软的公共客户端 ID 必须由**本项目的 Azure 应用**提供：
-	//旧的 00000000402b5328 在 consumers 租户里已不存在（AADSTS700016）。
-	//用 set_client() 注入（启动器从配置里读，测试台会提示输入）。
-	MS_CLIENT = "";
+	//微软的公共客户端 ID。默认用内置的（公共客户端，不是密钥）；
+	//用户填了自己的就用 set_client() 覆盖，避开内置应用被限流。
+	MS_CLIENT = m3app.MS_CLIENT_DEFAULT;
 	MS_SCOPE = "XboxLive.signin offline_access";
 
 	function set_client(id) {

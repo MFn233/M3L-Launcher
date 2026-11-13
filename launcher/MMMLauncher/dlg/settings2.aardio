@@ -25,6 +25,7 @@ import sys.mem;
 import fsys;
 import fsys.version;
 import m3app;
+import m3auth;
 import m3credits;
 import string;
 import math;
@@ -2342,6 +2343,11 @@ function acc_upsert(res, kind) {
 }
 
 acc_login_btns[1].oncommand = function(id, event) {
+	//客户端 ID：用户填了自己的就用，否则内置默认
+	var cid = string.trim(cfg.ms_client_id or "");
+	if (#cid == 0) cid = m3app.MS_CLIENT_DEFAULT;
+	m3auth.set_client(cid);
+
 	var frm = winform.loadForm("/dlg/ms_login.aardio");
 	var res = frm.doModal(winform);
 

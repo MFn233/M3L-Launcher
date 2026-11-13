@@ -7,6 +7,8 @@ import win.ui;
 import win.clip;
 import m3theme;
 import m3auth;
+import m3config;
+import m3app;
 
 /*DSG{{*/
 var winform = win.form(text="微软登录";right=560;bottom=300;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
@@ -92,6 +94,12 @@ function poll_once() {
 }
 
 function start() {
+	//客户端 ID：配置里填了就用，否则内置默认
+	var c = m3config.read();
+	var cid = string.trim(c.ms_client_id or "");
+	if (#cid == 0) cid = m3app.MS_CLIENT_DEFAULT;
+	m3auth.set_client(cid);
+
 	var d, err = m3auth.device_start();
 
 	if (!d) {
