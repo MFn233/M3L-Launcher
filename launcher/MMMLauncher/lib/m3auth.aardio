@@ -39,26 +39,43 @@ namespace m3auth {
 
 	//发一次 JSON 请求。返回 解析后的表, HTTP 状态码, 错误说明
 	//网络错误时第一个返回 null；4xx/5xx 时表仍然解析（错误体里通常有 error 字段），由调用方判断。
-	//注意返回值：inet.http 在非 2xx 时返回 (false, 响应体, 状态码)。
-	//只接第一个值会把"400 + JSON 错误体"误当成"没有内容"——微软的
-	//authorization_pending 正是 400，所以三个都要接。
+	//inet.http 的返回值有两种形状，必须先判类型再接：
+	//  成功：只有一个字符串（响应体）
+	//  非2xx：(false, 响应体, 状态码)
+	//直接 `ok, resp, status = http.post(...)` 会拿到 (响应体, nil, nil)，
+	//于是"成功"被当成"没内容"——微软设备码这一步就是这么被误判的。
+	function split_result(http, r1, r2, r3) {
+		var resp;
+		var ok = false;
+
+		if (type(r1) == "string") {
+			resp = r1;
+			ok = true;
+		}
+		else {
+			resp = r2;
+		}
+
+		return resp, (http.statusCode or r3 or 0), ok;
+	}
+
 	function json_call(method, url, obj, bearer) {
 		var http = inet.http();
 		var heads = { "Content-Type: application/json"; "Accept: application/json" };
 		if (bearer) table.push(heads, "Authorization: Bearer " ++ bearer);
 
 		var body = obj ? web.json.stringify(obj) : null;
-		var ok, resp, status;
+		var r1, r2, r3;
 
 		try {
-			if (method == "POST") ok, resp, status = http.post(url, body, heads);
-			else ok, resp, status = http.get(url, heads);
+			if (method == "POST") r1, r2, r3 = http.post(url, body, heads);
+			else r1, r2, r3 = http.get(url, heads);
 		}
 		catch(e) {
 			return null, 0, tostring(e);
 		}
 
-		var code = http.statusCode or status or 0;
+		var resp, code, ok = split_result(http, r1, r2, r3);
 		http.close();
 
 		if (!resp or #resp == 0) {
@@ -88,9 +105,9 @@ namespace m3auth {
 		var http = inet.http();
 		var body = inet.url.stringifyParameters(pairs);
 
-		var ok, resp, status;
+		var r1, r2, r3;
 		try {
-			ok, resp, status = http.post(url, body, {
+			r1, r2, r3 = http.post(url, body, {
 				"Content-Type: application/x-www-form-urlencoded";
 				"Accept: application/json";
 			});
@@ -99,7 +116,7 @@ namespace m3auth {
 			return null, 0, tostring(e);
 		}
 
-		var code = http.statusCode or status or 0;
+		var resp, code, ok = split_result(http, r1, r2, r3);
 		http.close();
 
 		if (!resp or #resp == 0) {
