@@ -1,0 +1,135 @@
+//dlg/ms_login.aardio
+
+//微软设备码登录对话框。
+//返回：{ name; uuid; access_token; refresh_token; expires_at } 或 null（取消/失败）
+
+import win.ui;
+import win.clip;
+import m3theme;
+import m3auth;
+
+/*DSG{{*/
+var winform = win.form(text="微软登录";right=560;bottom=300;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+winform.add(
+lblTip={cls="static";text="在浏览器里打开下面的网址，输入代码，然后回来等它自动完成。";left=24;top=20;right=536;bottom=44;font=LOGFONT(h=-12;name='Microsoft YaHei');z=1};
+lblUri={cls="static";left=24;top=52;right=536;bottom=76;font=LOGFONT(h=-13;name='Microsoft YaHei');z=2};
+lblCode={cls="static";left=24;top=84;right=536;bottom=140;font=LOGFONT(h=-44;name='Consolas');z=3};
+lblStatus={cls="static";text="正在申请登录代码…";left=24;top=152;right=536;bottom=176;font=LOGFONT(h=-11;name='Microsoft YaHei');z=4};
+btnCopy={cls="plus";text="复制代码";left=24;top=196;right=144;bottom=230;font=LOGFONT(name='Microsoft YaHei');z=5};
+btnOpen={cls="plus";text="打开网页";left=152;top=196;right=272;bottom=230;font=LOGFONT(name='Microsoft YaHei');z=6};
+btnCancel={cls="plus";text="取消";left=440;top=196;right=536;bottom=230;font=LOGFONT(name='Microsoft YaHei');z=7}
+)
+/*}}*/
+
+m3theme.note(winform.lblTip);
+m3theme.ink(winform.lblUri);
+m3theme.ink(winform.lblCode);
+m3theme.note(winform.lblStatus);
+
+m3theme.button(winform.btnCopy);
+m3theme.button(winform.btnOpen);
+m3theme.ghost(winform.btnCancel);
+
+var dev = null;
+var timer = null;
+var waited = 0;
+
+function stop_poll() {
+	if (timer) {
+		winform.clearInterval(timer);
+		timer = null;
+	}
+}
+
+function fail(msg) {
+	stop_poll();
+	winform.lblStatus.text = "[失败] " ++ tostring(msg);
+	winform.btnCode = null;
+}
+
+function finish(res) {
+	stop_poll();
+	winform.endModal(res);
+}
+
+function poll_once() {
+	if (!dev) return;
+
+	var r = m3auth.device_poll_once(dev.device_code);
+
+	if (r.state == "error") {
+		fail(r.msg);
+		return;
+	}
+
+	if (r.state == "ok") {
+		winform.lblStatus.text = "授权成功，正在换取 Minecraft 凭据…";
+		stop_poll();
+
+		var mc, mcerr = m3auth.to_minecraft(r.access_token);
+
+		if (!mc) {
+			fail(mcerr);
+			return;
+		}
+
+		finish({
+			name = mc.name;
+			uuid = mc.uuid;
+			access_token = mc.access_token;
+			refresh_token = r.refresh_token;
+			expires_at = tonumber(time.now()) + (mc.expires_in or 86400);
+		});
+		return;
+	}
+
+	waited = waited + (dev.interval or 5);
+	winform.lblStatus.text = "等待确认…（已等 " ++ waited ++ " 秒）";
+
+	if (waited > (dev.expires_in or 900)) {
+		fail("超时，请重新登录");
+	}
+}
+
+function start() {
+	var d, err = m3auth.device_start();
+
+	if (!d) {
+		fail(err);
+		return;
+	}
+
+	dev = d;
+	winform.lblUri.text = tostring(d.verify_uri or "https://www.microsoft.com/link");
+	winform.lblCode.text = tostring(d.user_code);
+	winform.lblStatus.text = "等待确认…（每 " ++ tostring(d.interval or 5) ++ " 秒检查一次）";
+
+	timer = winform.setInterval(poll_once, (d.interval or 5) * 1000);
+}
+
+winform.btnCopy.oncommand = function(id, event) {
+	if (!winform.lblCode.text) return;
+
+	win.clip.write(winform.lblCode.text);
+	winform.lblStatus.text = "代码已复制。";
+}
+
+winform.btnOpen.oncommand = function(id, event) {
+	if (!winform.lblUri.text) return;
+
+	import process;
+	process.execute(winform.lblUri.text);
+}
+
+winform.btnCancel.oncommand = function(id, event) {
+	stop_poll();
+	winform.endModal(null);
+}
+
+winform.onClose = function(hwnd, message, wParam, lParam) {
+	stop_poll();
+}
+
+start();
+
+return winform;

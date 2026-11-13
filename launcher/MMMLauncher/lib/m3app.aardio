@@ -18,6 +18,10 @@ namespace m3app {
 	// 用来确认"这个 exe 是我们自己的"：aardio 宿主 exe 的 ProductName 不是这个
 	PRODUCT = "M^3 Launcher";
 
+	// 微软登录用的 Azure 应用 ID（**公共客户端**，不是密钥，写在这里是正常的）。
+	// 用户可以在设置里填自己的，避开这个应用的限流。
+	MS_CLIENT_DEFAULT = "d199a26a-6a2b-4480-b5e5-a085d3015ebb";
+
 	// 返回 "0.2.0" 这样的三位版本号
 	function version_text() {
 		var vi = fsys.version.getInfo(..io._exepath);

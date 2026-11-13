@@ -121,6 +121,10 @@ var chkShot = P1.check("崩溃时提醒「请勿直接截图分享此窗口」",
 //用于排查"某条兼容规则反而把某个整合包搞坏"的情况。
 var chkCompat = P1.check("启动时自动兼容异常版本文件", cfg.compat_fix !== false);
 
+//留空 = 用内置的公共客户端 ID。填自己的可以避开内置应用被限流。
+var editMsClient = P1.row("微软客户端 ID", { cls = "edit" });
+P1.text("留空则使用内置的公共客户端 ID；如需用自己的 Azure 应用，请填入它的客户端 ID。", true);
+
 P1.section("样式设置", true);
 P1.text("尚未实现。（后续在这里提供主题与外观调整）", true);
 
@@ -202,6 +206,7 @@ var editUuid = P3.row("UUID", { cls = "edit" });
 P3.text("UUID 留空则按用户名自动生成；必须填写 32 位十六进制的 UUID （可带横线）。", true);
 var lblAccHint = P3.text("", true);
 var acc_btns = P3.buttons({"添加账号"; "删除"; "应用修改"; "设为当前"});
+var acc_login_btns = P3.buttons({"微软登录"; "外置登录"});
 
 P3.finish();
 
@@ -1925,6 +1930,7 @@ function collect_draft() {
 		allow_multi = chkMulti.checked;
 		shot_tip = chkShot.checked;
 		compat_fix = chkCompat.checked;
+		ms_client_id = string.trim(editMsClient.text);
 		jvm_args = editJvm.text;
 	};
 }
@@ -2295,6 +2301,67 @@ acc_btns[4].oncommand = function(id, event) {
 	m3config.save_keys(cfg, {"accounts"; "account"});
 	acc_render();
 	lblAccHint.text = "当前账号：" ++ cfg.account;
+}
+
+// 登录成功后的落库：同一个 UUID 就更新，否则新增
+function acc_upsert(res, kind) {
+	var idx = 0;
+
+	for i, a in cfg.accounts {
+		if (res.uuid and a.uuid == res.uuid) {
+			idx = i;
+			break;
+		}
+	}
+
+	if (idx == 0) {
+		table.push(cfg.accounts, { name = res.name; type = kind; uuid = res.uuid });
+		idx = #cfg.accounts;
+	}
+
+	var a = cfg.accounts[idx];
+
+	a.name = res.name;
+	a.type = kind;
+	a.uuid = res.uuid;
+	a.access_token = res.access_token;
+
+	if (res.refresh_token) a.refresh_token = res.refresh_token;
+	if (res.expires_at) a.expires_at = res.expires_at;
+	if (res.server) a.authlib_server = res.server;
+
+	cfg.account = a.name;
+	cfg.username = a.name;   // 主页的"玩家"跟着走
+
+	acc_selected = a.name;
+
+	m3config.save_keys(cfg, {"accounts"; "account"; "username"});
+	acc_render();
+
+	lblAccHint.text = "已登录：" ++ a.name ++ "（" ++ (kind == "authlib" ? "外置登录" : "正版") ++ "）";
+}
+
+acc_login_btns[1].oncommand = function(id, event) {
+	var frm = winform.loadForm("/dlg/ms_login.aardio");
+	var res = frm.doModal(winform);
+
+	if (!res) return;
+
+	acc_upsert(res, "msa");
+}
+
+acc_login_btns[2].oncommand = function(id, event) {
+	var frm = winform.loadForm("/dlg/authlib_login.aardio");
+
+	// 已选账号时把名字填进去，省得再打
+	var i = acc_index();
+	if (i > 0) frm.editUser.text = cfg.accounts[i].name or "";
+
+	var res = frm.doModal(winform);
+
+	if (!res) return;
+
+	acc_upsert(res, "authlib");
 }
 
 // ---------- Java 管理 ----------
@@ -3344,6 +3411,7 @@ editMem.text = tostring(cfg.memory);
 sliderMem.progressPos = cfg.memory;      // 滑条跟着数值走
 mem_refresh_stats();
 editJvm.text = cfg.jvm_args or "";
+editMsClient.text = cfg.ms_client_id or "";
 editW.text = tostring(cfg.width);
 editH.text = tostring(cfg.height);
 

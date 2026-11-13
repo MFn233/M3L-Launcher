@@ -13,6 +13,7 @@
 import console;
 import m3auth;
 import m3config;
+import m3app;
 
 var cfg = m3config.read();
 
@@ -31,6 +32,7 @@ if (string.trim(pick) == "2") mode = "authlib";
 //旧的 00000000402b5328 已经在 consumers 租户里失效（AADSTS700016）。
 if (mode == "msa") {
 	var saved = cfg.ms_client_id or "";
+	if (#saved == 0) saved = m3app.MS_CLIENT_DEFAULT;
 
 	if (#saved == 0) {
 		console.log("");

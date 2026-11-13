@@ -537,6 +537,11 @@ function start_game(retried, inst) {
 	//read_json 里就要用到，所以必须在读版本文件之前设置。
 	MMMLC.set_compat(cfg.compat_fix !== false);
 
+	//微软登录的客户端 ID：用户填了就用用户的，否则用内置默认
+	var ms_client = cfg.ms_client_id;
+	if (!ms_client or #ms_client == 0) ms_client = m3app.MS_CLIENT_DEFAULT;
+	m3auth.set_client(ms_client);
+
 	// 第一次进来才检查多开
 	if (!inst) {
 		if (#instances > 0 and !cfg.allow_multi) {
