@@ -267,7 +267,17 @@ namespace m3auth {
 		});
 
 		if (!mc or !mc.access_token) {
-			return null, "Minecraft 认证失败：" ++ tostring((mc and (mc.errorMessage or mc.error)) or err3);
+			var msg = tostring((mc and (mc.errorMessage or mc.error)) or err3);
+
+			//403 Invalid app registration：不是配置错，是这个 Azure 应用还没进
+			//Minecraft 的允许名单。要在官方表单里提交客户端 ID，等审核通过。
+			if (string.indexOf(string.lower(msg), "invalid app registration")) {
+				return null, "这个应用还没有被 Minecraft 官方列入允许名单（403 Invalid app registration）。"
+					++ '\r\n' ++ "请到 help.minecraft.net 找到「应用注册」表单，提交客户端 ID 后等审核。"
+					++ '\r\n' ++ "详情见 设计文稿\\正版登录配置.md 的最后一节。";
+			}
+
+			return null, "Minecraft 认证失败：" ++ msg;
 		}
 
 		//4) 档案（名字与 UUID）
