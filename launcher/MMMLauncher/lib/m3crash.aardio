@@ -132,6 +132,12 @@ namespace m3crash {
 	// 每条规则：{ 说明; { 探针模式… }; 可选的详情模式 }
 	// 模式是 aardio（Lua）风格：%d %s 是字符类，( ) 是捕获，不要写 Java 的 \\d / (?<name>…)
 	RULES = {
+		// JVM 初始化阶段就挂了：几乎都是 -javaagent 指的 jar 找不到或损坏
+		{ "JVM 参数里的 jar 无法加载"; {
+			"agent library failed Agent_OnLoad";
+			"Error opening zip file or JAR manifest missing";
+		} };
+
 		// Java
 		{ "Java 版本过低"; { "UnsupportedClassVersionError:.-version (%d+)%." }; "java_major" };
 		{ "Java 版本过高"; { "Unsupported class file major version"; "module java.base does not export"; "NoSuchFieldException: ucp" } };

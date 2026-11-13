@@ -341,10 +341,16 @@ namespace m3auth {
 		if (!io.exist(dir)) fsys.createDir(dir);
 
 		//已有任意版本就用（文件名里带版本号）
+		//注意：fsys.list 的第一个返回值是**文件名**而不是完整路径。
+		//直接 return 会得到 "authlib-injector-1.2.8.jar"，
+		//拼进 -javaagent 后 JVM 按工作目录找 jar，找不到就 Agent_OnLoad 失败、VM 起不来。
 		var files = fsys.list(dir);
 		for i, p in files {
-			if (string.indexOf(string.lower(p), "authlib-injector") and string.endsWith(string.lower(p), ".jar")) {
-				return p;
+			var name = io.splitpath(p).name;
+
+			if (string.indexOf(string.lower(name), "authlib-injector")
+				and string.endsWith(string.lower(name), ".jar")) {
+				return io.joinpath(dir, name);
 			}
 		}
 
@@ -390,6 +396,9 @@ namespace m3auth {
 			jar, err = injector_download(dir);
 			if (!jar) return null, err;
 		}
+
+		//绝对路径自检：相对路径会让 JVM 在版本目录里找 jar，直接启动失败
+		if (!io.exist(jar)) return null, "找不到 authlib-injector：" ++ tostring(jar);
 
 		server = string.trimRight(tostring(server or ""));
 		if (string.endsWith(server, "/")) server = string.slice(server, 1, #server - 1);
