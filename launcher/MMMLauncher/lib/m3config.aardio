@@ -10,6 +10,7 @@ namespace m3config{
 	import string;
 	import table;
 	import m3paths;
+	import m3secret;
 
 	//运行时文件都在 M3L\ 下（见 lib/m3paths.aardio）
 	function file_path() {
@@ -258,7 +259,30 @@ namespace m3config{
 		}
 
 		normalize_accounts(cfg);
+
+		// 令牌：优先从密文取；旧配置里还在 JSON 里的就地收进密文，下次 save 时清掉
+		var sec = m3secret.load();
+		var migrated = false;
+
+		for i, a in cfg.accounts {
+			var key = key_of(a);
+			var t = sec[key];
+
+			if (t) {
+				if (#(a.access_token or "") == 0) a.access_token = t.access_token;
+				if (#(a.refresh_token or "") == 0) a.refresh_token = t.refresh_token;
+				if (!a.expires_at) a.expires_at = t.expires_at;
+			}
+			elseif (#(a.access_token or "") > 0) {
+				// 旧式明文令牌：这一轮会随 save() 搬进密文
+				migrated = true;
+			}
+		}
+
 		normalize_shared(cfg);
+
+		if (migrated) save(cfg);
+
 		return cfg;
 	}
 
@@ -338,10 +362,47 @@ namespace m3config{
 		return found;
 	}
 
+	// 令牌单独存（DPAPI 密文），config.json 里只留账号信息。
+	// 注意：cfg 在内存里仍然带着令牌，运行时照旧用；只有写盘时摘掉。
 	function save(cfg) {
 		// username 跟着当前账号走，避免两个字段各说各话
 		if (#(cfg.account or "") > 0) cfg.username = cfg.account;
-		json.save(file_path(), cfg);
+
+		var sec = m3secret.load();
+		var out = {};
+
+		for k, v in cfg {
+			out[k] = v;
+		}
+
+		out.accounts = {};
+
+		for i, a in cfg.accounts {
+			var key = key_of(a);
+
+			if (#(a.access_token or "") > 0 or #(a.refresh_token or "") > 0) {
+				sec[key] = {
+					access_token = a.access_token;
+					refresh_token = a.refresh_token;
+					expires_at = a.expires_at;
+				};
+			}
+
+			var b = {};
+
+			for k, v in a {
+				b[k] = v;
+			}
+
+			b.access_token = null;
+			b.refresh_token = null;
+			b.expires_at = null;
+
+			table.push(out.accounts, b);
+		}
+
+		m3secret.save(sec);
+		json.save(file_path(), out);
 	}
 
 	// 只回写几个字段：各窗口手里的 cfg 是打开时的快照，

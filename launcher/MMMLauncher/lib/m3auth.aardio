@@ -17,6 +17,7 @@ namespace m3auth {
 	import table;
 	import io;
 	import fsys;
+	import m3paths;
 	import m3app;
 
 	//微软的公共客户端 ID。默认用内置的（公共客户端，不是密钥）；
@@ -352,6 +353,18 @@ namespace m3auth {
 				and string.endsWith(string.lower(name), ".jar")) {
 				return io.joinpath(dir, name);
 			}
+		}
+
+		// 自愈：jar 可能被搬到 M3L 根目录（迁移/手工整理时出现过），搬回来再用
+		var loose = fsys.list(m3paths.root());
+		for i, p in loose {
+			var name = io.splitpath(p).name;
+
+			if (!string.indexOf(string.lower(name), "authlib-injector")) continue;
+			if (!string.endsWith(string.lower(name), ".jar")) continue;
+
+			var target = io.joinpath(dir, name);
+			if (fsys.move(p, target)) return target;
 		}
 
 		return null;

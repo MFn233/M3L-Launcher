@@ -119,6 +119,23 @@ function dbg(text) {
 	if (debug_mode) log("[调试] " ++ text);
 }
 
+// 启动命令要写进日志（还会被打包分享），令牌一律打码。
+// 只打 --accessToken 的值：它是唯一"拿到就能冒用账号"的参数。
+function mask_token(text) {
+	var s = tostring(text);
+	var p = string.indexOf(s, "--accessToken ");
+
+	if (!p) return s;
+
+	var head = string.slice(s, 1, p + #"--accessToken " - 1);
+	var rest = string.slice(s, p + #"--accessToken ");
+	var sp = string.indexOf(rest, " ");
+
+	if (!sp) return head ++ "***";
+
+	return head ++ "***" ++ string.slice(rest, sp);
+}
+
 // 游戏输出也进落盘文件：出问题时不用再手工跑一遍命令才知道它报了什么。
 function note_to_file(text) {
 	if (#launch_file == 0 or #text == 0) return;
@@ -902,10 +919,10 @@ function start_game(retried, inst) {
 		var args, aerr = MMMLC.build_args(info, opts);
 		if (args) {
 			dbg("启动命令：");
-			dbg("    " ++ java ++ " " ++ process.joinArguments(args));
+			dbg("    " ++ mask_token(java ++ " " ++ process.joinArguments(args)));
 
-			//命令行对排查"游戏没输出/一闪而过"很关键，无条件落盘一份
-			note_to_file("[提示] 启动命令： " ++ java ++ " " ++ process.joinArguments(args));
+			//命令行对排查"游戏没输出/一闪而过"很关键，无条件落盘一份（令牌打码）
+			note_to_file("[提示] 启动命令： " ++ mask_token(java ++ " " ++ process.joinArguments(args)));
 		}
 		else {
 			dbg("无法生成命令：" ++ tostring(aerr));
