@@ -664,6 +664,8 @@ function start_game(retried, inst) {
 	dbg("实例 " ++ inst.id ++ "：游戏目录 " ++ cfg.game_path);
 	dbg("版本：" ++ cfg.version);
 	dbg("工作目录：" ++ work_dir);
+	note_to_file("[提示] 工作目录： " ++ work_dir);
+	note_to_file("[提示] Java： " ++ tostring(java));
 	dbg("内存：" ++ eff.memory ++ " MB");
 	dbg("窗口模式：" ++ eff.window_mode);
 	dbg("配置的 Java：" ++ tostring(cfg.java));
@@ -901,6 +903,9 @@ function start_game(retried, inst) {
 		if (args) {
 			dbg("启动命令：");
 			dbg("    " ++ java ++ " " ++ process.joinArguments(args));
+
+			//命令行对排查"游戏没输出/一闪而过"很关键，无条件落盘一份
+			note_to_file("[提示] 启动命令： " ++ java ++ " " ++ process.joinArguments(args));
 		}
 		else {
 			dbg("无法生成命令：" ++ tostring(aerr));
@@ -990,9 +995,13 @@ winform.btnSettings.oncommand = function(id, event) {
 	}
 }
 
-// 左键标题 = 调试菜单：顶部三行只读摘要，下面是测试台与运维动作。
-// 只有开了「调试模式」才响应，正式用户点不出来。
-winform.btnTitle.oncommand = function(id, event) {
+// 右键标题 = 调试菜单（只有开了「调试模式」才响应，正式用户点不出来）。
+// 左键不再绑定动作：标题本来就只是"关于"的入口，误点不该冒出开发工具。
+//
+// 菜单不用回调，而是：add(文字, 命令ID) → popup() 返回点中的 ID → 再分派。
+// 原因：在菜单回调里弹模态窗口（notice）会让回调重入，
+// 「记录操作日志」那次点击就被翻了两次开关（开→关），日志自然记不上。
+winform.btnTitle.onRightMouseDown = function(wParam, lParam) {
 	var cfg = m3config.read();
 	if (!cfg.debug) return;
 
@@ -1002,7 +1011,7 @@ winform.btnTitle.oncommand = function(id, event) {
 function show_debug_menu(cfg) {
 	var menu = win.ui.popmenu(winform);
 
-	// 只读摘要：置灰，点了没反应
+	// ---- 只读摘要：置灰，点了没反应 ----
 	var acc = m3config.current_account(cfg);
 	var acc_text = "尚未配置账号";
 
@@ -1022,24 +1031,57 @@ function show_debug_menu(cfg) {
 	menu.add({ text = "版本 " ++ ver_text; flag = 0x1 });
 	menu.add();
 
-	menu.add("控件样式测试台", function() {
-		m3act.log("打开控件样式测试台");
-		winform.loadForm("/dlg/theme_test.aardio").doModal(winform);
-	});
+	// ---- 可点项：自己分配命令 ID，方便 popup 之后分派 ----
+	var ID = {
+		style = 101;
+		crash = 102;
+		data = 103;
+		launchlog = 104;
+		cache = 105;
+		migrate = 106;
+		actlog = 107;
+		exit_debug = 108;
+	};
 
-	menu.add("崩溃窗口测试台", function() {
-		m3act.log("打开崩溃窗口测试台");
-		winform.loadForm("/dlg/crash_test.aardio").doModal(winform);
-	});
-
+	menu.add("控件样式测试台", ID.style);
+	menu.add("崩溃窗口测试台", ID.crash);
 	menu.add();
 
-	menu.add("打开数据目录", function() {
+	menu.add("打开数据目录", ID.data);
+	menu.add("打开启动日志目录", ID.launchlog);
+	menu.add();
+
+	menu.add("清空元数据缓存", ID.cache);
+	menu.add("重新执行布局迁移", ID.migrate);
+	menu.add({ text = "记录操作日志"; id = ID.actlog; flag = (cfg.action_log ? 0x8/*_MF_CHECKED*/ : 0); });
+	menu.add();
+
+	menu.add("关闭调试模式", ID.exit_debug);
+
+	var pick = menu.popup();
+
+	if (!pick) return;
+
+	// ---- 分派 ----
+	if (pick == ID.style) {
+		m3act.log("打开控件样式测试台");
+		winform.loadForm("/dlg/theme_test.aardio").doModal(winform);
+		return;
+	}
+
+	if (pick == ID.crash) {
+		m3act.log("打开崩溃窗口测试台");
+		winform.loadForm("/dlg/crash_test.aardio").doModal(winform);
+		return;
+	}
+
+	if (pick == ID.data) {
 		m3act.log("打开数据目录");
 		process.explore(m3paths.root());
-	});
+		return;
+	}
 
-	menu.add("打开启动日志目录", function() {
+	if (pick == ID.launchlog) {
 		if (#cfg.version == 0) {
 			notice("未选择版本。");
 			return;
@@ -1054,17 +1096,17 @@ function show_debug_menu(cfg) {
 
 		m3act.log("打开启动日志目录：" ++ cfg.version);
 		process.explore(dir);
-	});
+		return;
+	}
 
-	menu.add();
-
-	menu.add("清空元数据缓存", function() {
+	if (pick == ID.cache) {
 		var n = m3mod.cache_clear();
 		m3act.log("清空元数据缓存：" ++ n ++ " 项");
 		notice("已清空元数据缓存（" ++ n ++ " 项）。" ++ '\r\n' ++ "下次打开 Mod 列表会重新读取。");
-	});
+		return;
+	}
 
-	menu.add("重新执行布局迁移", function() {
+	if (pick == ID.migrate) {
 		var notes = {};
 		var r = m3paths.migrate(function(text) { table.push(notes, text); });
 
@@ -1082,28 +1124,33 @@ function show_debug_menu(cfg) {
 		}
 
 		notice(msg);
-	});
+		return;
+	}
 
-	menu.add();
+	if (pick == ID.actlog) {
+		// 以磁盘上的当前值为准取反，避免用到旧快照
+		var fresh = m3config.read();
+		var want = !(fresh.action_log === true);
 
-	menu.add({
-		text = "记录操作日志";
-		flag = (cfg.action_log ? 0x8/*_MF_CHECKED*/ : 0);
-		proc = function(id) {
-			cfg.action_log = !cfg.action_log;
+		fresh.action_log = want;
+		m3config.save_keys(fresh, {"action_log"});
 
-			m3config.save_keys(cfg, {"action_log"});
-			m3act.set_enabled(cfg.action_log);
-			m3act.log("操作日志：" ++ (cfg.action_log ? "开" : "关"));
+		// 先写"关"这一笔，再真正关掉，否则最后一条会丢
+		if (want) m3act.set_enabled(true);
+		m3act.log("操作日志：" ++ (want ? "开" : "关"));
+		if (!want) m3act.set_enabled(false);
 
-			notice((cfg.action_log ? "已开始记录操作日志。" : "已停止记录操作日志。")
-				++ '\r\n' ++ "文件：M3L\\actions.log");
-		};
-	});
+		if (want) {
+			notice("已开始记录操作日志。" ++ '\r\n' ++ "文件：M3L\\" ++ "actions.log");
+		}
+		else {
+			notice("已停止记录操作日志。");
+		}
 
-	menu.add();
+		return;
+	}
 
-	menu.add("关闭调试模式", function() {
+	if (pick == ID.exit_debug) {
 		m3act.log("关闭调试模式");
 
 		cfg.debug = false;
@@ -1111,9 +1158,8 @@ function show_debug_menu(cfg) {
 		refresh_status();
 
 		notice("已关闭调试模式。" ++ '\r\n' ++ "如需重新打开，请到「设置 → 启动器设置」勾选。");
-	});
-
-	menu.popup();
+		return;
+	}
 }
 
 // 启动时把操作日志的开关状态同步给 m3act
@@ -1127,6 +1173,12 @@ load_version_combo();
 // 状态栏的悬停提示：标准 tooltip 控件，自动显示/隐藏，不抢鼠标
 status_tip = win.ui.tooltip(winform);
 refresh_tooltip();
+
+// 关窗时把没落盘的日志刷出去，否则最后几行会丢
+winform.onClose = function(hwnd, message, wParam, lParam) {
+	note_to_file("[提示] 启动器关闭，日志至此。");
+	log_flush();
+}
 
 winform.show();
 return win.loopMessage();
