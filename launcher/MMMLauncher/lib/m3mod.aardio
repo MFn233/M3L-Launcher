@@ -167,6 +167,26 @@ namespace m3mod {
 		meta_cache[..string.lower(path)] = meta;
 	}
 
+	// 清空元数据缓存：内存与磁盘一起清，下次读 Mod 重新解析
+	function cache_clear() {
+		var n = 0;
+
+		for k, v in meta_cache {
+			n = n + 1;
+		}
+
+		meta_cache = {};
+		cache_loaded = true;
+
+		try {
+			if (io.exist(cache_file)) fsys.delete(cache_file);
+		}
+		catch(e) {
+		}
+
+		return n;
+	}
+
 	function cache_save() {
 		var out = { ["!ver"] = CACHE_VER };
 

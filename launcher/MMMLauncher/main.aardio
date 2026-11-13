@@ -18,6 +18,10 @@ import m3game;
 import m3auth;
 import m3app;
 import m3paths;
+import m3act;
+import m3mod;
+import win.ui.menu;
+import process;
 import crypt;
 import fsys;
 import string;
@@ -318,6 +322,7 @@ winform.comboVer.onSelChange = function() {
 	var cfg = m3config.read();
 	if (cfg.version == name) return;
 
+	m3act.log("切换版本：" ++ name);
 	cfg.version = name;
 	m3config.save_keys(cfg, {"version"});
 	refresh_status();
@@ -376,6 +381,7 @@ function finish_instance(inst) {
 
 	note_to_file("--------------------------------------------------");
 	note_to_file("游戏已退出，退出码 " ++ tostring(code));
+	m3act.log("游戏退出：退出码 " ++ tostring(code) ++ "，实例 " ++ tostring(inst.name or ""));
 
 	for i, v in instances {
 		if (v === inst) {
@@ -557,6 +563,8 @@ function start_game(retried, inst) {
 	if (launching) return;
 
 	var cfg = m3config.read();
+
+	m3act.log("启动游戏：" ++ tostring(cfg.version));
 	debug_mode = (cfg.debug ? true : false);
 
 	//兼容处理开关：关掉后 classpath/参数一律照 JSON 原样，不做任何"纠正"。
@@ -982,22 +990,134 @@ winform.btnSettings.oncommand = function(id, event) {
 	}
 }
 
-// 左键标题 = 控件样式测试台（改主题时用来对照）
-// Ctrl + 左键 = 崩溃窗口测试台（崩溃场景不好人为制造，用它验证分析逻辑）
-// 两个都是开发工具：只有开了「调试模式」才响应，正式用户点不出来
+// 左键标题 = 调试菜单：顶部三行只读摘要，下面是测试台与运维动作。
+// 只有开了「调试模式」才响应，正式用户点不出来。
 winform.btnTitle.oncommand = function(id, event) {
 	var cfg = m3config.read();
 	if (!cfg.debug) return;
 
-	var ctrl = ::GetKeyState(0x11/*_VK_CONTROL*/) & 0x8000;
+	show_debug_menu(cfg);
+}
 
-	if (ctrl) {
-		winform.loadForm("/dlg/crash_test.aardio").doModal(winform);
-		return;
+function show_debug_menu(cfg) {
+	var menu = win.ui.popmenu(winform);
+
+	// 只读摘要：置灰，点了没反应
+	var acc = m3config.current_account(cfg);
+	var acc_text = "尚未配置账号";
+
+	if (acc) {
+		var kind = "离线登录";
+		if (acc.type == "msa") kind = "正版登录";
+		elseif (acc.type == "authlib") kind = "外置登录";
+
+		acc_text = kind ++ "：" ++ tostring(acc.name or "");
 	}
 
-	winform.loadForm("/dlg/theme_test.aardio").doModal(winform);
+	var ver_text = cfg.version;
+	if (#ver_text == 0) ver_text = "未选择版本";
+
+	menu.add({ text = "启动器 " ++ m3app.version_text() ++ "　核心 " ++ MMMLC.BUILD; flag = 0x1/*_MF_GRAYED*/ });
+	menu.add({ text = "账号 " ++ acc_text; flag = 0x1 });
+	menu.add({ text = "版本 " ++ ver_text; flag = 0x1 });
+	menu.add();
+
+	menu.add("控件样式测试台", function() {
+		m3act.log("打开控件样式测试台");
+		winform.loadForm("/dlg/theme_test.aardio").doModal(winform);
+	});
+
+	menu.add("崩溃窗口测试台", function() {
+		m3act.log("打开崩溃窗口测试台");
+		winform.loadForm("/dlg/crash_test.aardio").doModal(winform);
+	});
+
+	menu.add();
+
+	menu.add("打开数据目录", function() {
+		m3act.log("打开数据目录");
+		process.explore(m3paths.root());
+	});
+
+	menu.add("打开启动日志目录", function() {
+		if (#cfg.version == 0) {
+			notice("未选择版本。");
+			return;
+		}
+
+		var dir = io.joinpath(cfg.game_path, "versions", cfg.version);
+
+		if (!io.exist(dir)) {
+			notice("找不到版本目录：" ++ dir);
+			return;
+		}
+
+		m3act.log("打开启动日志目录：" ++ cfg.version);
+		process.explore(dir);
+	});
+
+	menu.add();
+
+	menu.add("清空元数据缓存", function() {
+		var n = m3mod.cache_clear();
+		m3act.log("清空元数据缓存：" ++ n ++ " 项");
+		notice("已清空元数据缓存（" ++ n ++ " 项）。" ++ '\r\n' ++ "下次打开 Mod 列表会重新读取。");
+	});
+
+	menu.add("重新执行布局迁移", function() {
+		var notes = {};
+		var r = m3paths.migrate(function(text) { table.push(notes, text); });
+
+		m3act.log("重新执行布局迁移：移动 " ++ r.moved ++ " 项，失败 " ++ r.failed ++ " 项");
+
+		if (r.total == 0) {
+			notice("没有需要迁移的文件。");
+			return;
+		}
+
+		var msg = "移动 " ++ r.moved ++ " 项，失败 " ++ r.failed ++ " 项。";
+
+		for i, line in notes {
+			msg = msg ++ '\r\n' ++ line;
+		}
+
+		notice(msg);
+	});
+
+	menu.add();
+
+	menu.add({
+		text = "记录操作日志";
+		flag = (cfg.action_log ? 0x8/*_MF_CHECKED*/ : 0);
+		proc = function(id) {
+			cfg.action_log = !cfg.action_log;
+
+			m3config.save_keys(cfg, {"action_log"});
+			m3act.set_enabled(cfg.action_log);
+			m3act.log("操作日志：" ++ (cfg.action_log ? "开" : "关"));
+
+			notice((cfg.action_log ? "已开始记录操作日志。" : "已停止记录操作日志。")
+				++ '\r\n' ++ "文件：M3L\\actions.log");
+		};
+	});
+
+	menu.add();
+
+	menu.add("关闭调试模式", function() {
+		m3act.log("关闭调试模式");
+
+		cfg.debug = false;
+		m3config.save_keys(cfg, {"debug"});
+		refresh_status();
+
+		notice("已关闭调试模式。" ++ '\r\n' ++ "如需重新打开，请到「设置 → 启动器设置」勾选。");
+	});
+
+	menu.popup();
 }
+
+// 启动时把操作日志的开关状态同步给 m3act
+m3act.set_enabled(m3config.read().action_log === true);
 
 // ---------- 初始化 ----------
 

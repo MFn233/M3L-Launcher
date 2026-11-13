@@ -1,0 +1,48 @@
+//m3act.aardio
+
+//操作日志：把"用户做了什么"按时间记下来，默认关闭，调试面板里可开。
+//只记有副作用的操作（启动、切版本、改设置、登录、迁移、清缓存），
+//不记鼠标移动、滚动这类无意义事件。
+
+namespace m3act {
+	import io;
+	import fsys;
+	import string;
+	import time;
+	import m3paths;
+
+	var on = false;
+
+	function set_enabled(v) {
+		if (v) on = true;
+		else on = false;
+	}
+
+	function enabled() {
+		return on;
+	}
+
+	function file_path() {
+		return m3paths.path("actions.log");
+	}
+
+	// 追加一行。文件超过 1 MB 就滚成 actions.log.1（只留一份历史）。
+	function log(text) {
+		if (!on) return;
+
+		var p = file_path();
+
+		try {
+			if (io.exist(p)) {
+				if (io.getSize(p) > 1024 * 1024) {
+					fsys.delete(p ++ ".1");
+					fsys.rename(p, p ++ ".1");
+				}
+			}
+
+			string.save(p, time().format("%Y-%m-%d %H:%M:%S") ++ "  " ++ tostring(text) ++ '\r\n', 1);
+		}
+		catch(e) {
+		}
+	}
+}

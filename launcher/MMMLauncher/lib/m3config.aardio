@@ -126,6 +126,7 @@ namespace m3config{
 			ms_client_id = "";   // 微软客户端 ID，留空用内置默认
 			authlib_server = ""; // 上次用的外置登录服务器，用来预填
 			account_key = "";    // 当前账号身份键：type:name（同名不同属性靠它区分）
+			action_log = false;  // 操作日志：记录用户做了哪些动作（默认关）
 			priority = "normal";
 			shared = {};
 	fav_paths = {};      // 收藏的游戏路径：键 = 小写目录
@@ -235,6 +236,7 @@ namespace m3config{
 			if (data.ms_client_id !== null) cfg.ms_client_id = data.ms_client_id;
 			if (data.authlib_server !== null) cfg.authlib_server = data.authlib_server;
 			if (data.account_key !== null) cfg.account_key = data.account_key;
+			if (data.action_log !== null) cfg.action_log = data.action_log;
 		if (data.log_autoscroll !== null) cfg.log_autoscroll = data.log_autoscroll;
 			if (data.priority !== null) cfg.priority = data.priority;
 			if (data.shared) cfg.shared = data.shared;

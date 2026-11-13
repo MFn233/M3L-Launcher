@@ -28,6 +28,7 @@ import m3app;
 import m3auth;
 import m3credits;
 import m3paths;
+import m3act;
 import string;
 import math;
 import time;
@@ -2439,6 +2440,8 @@ btnSetCur.oncommand = function(id, event) {
 	cfg.account_key = m3config.key_of(cfg.accounts[i]);
 	acc_selected = cfg.account_key;
 
+	m3act.log("切换当前账号：" ++ cfg.account_key);
+
 	m3config.save_keys(cfg, {"accounts"; "account"; "account_key"});
 	acc_render();
 	lblAccHint.text = "当前账号：" ++ cfg.account;
@@ -2488,6 +2491,8 @@ function acc_upsert(res, kind) {
 	cfg.username = a.name;   // 主页的"玩家"跟着走
 
 	acc_selected = a.name;
+
+	m3act.log("登录账号：" ++ m3config.key_of(a));
 
 	m3config.save_keys(cfg, {"accounts"; "account"; "account_key"; "username"; "authlib_server"});
 	acc_render();
