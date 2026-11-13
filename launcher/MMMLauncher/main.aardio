@@ -996,11 +996,13 @@ winform.btnSettings.oncommand = function(id, event) {
 }
 
 // 右键标题 = 调试菜单（只有开了「调试模式」才响应，正式用户点不出来）。
-// 左键不再绑定动作：标题本来就只是"关于"的入口，误点不该冒出开发工具。
 //
-// 菜单不用回调，而是：add(文字, 命令ID) → popup() 返回点中的 ID → 再分派。
-// 原因：在菜单回调里弹模态窗口（notice）会让回调重入，
-// 「记录操作日志」那次点击就被翻了两次开关（开→关），日志自然记不上。
+// 三件事要一起绕开：
+// 1) popmenu.popup() 不带 TPM_RETURNCMD，返回值恒为 0 —— 判断点中项只能靠菜单项回调；
+// 2) 回调可能在 popup() 返回后才分派 —— 所以动作延一拍执行，不紧接着 popup 就跑；
+// 3) 在回调里弹模态窗口会让回调重入 —— 所以回调只记"想做什么"，动作统一在 run_debug_action 里做。
+var debug_want = 0;
+
 winform.btnTitle.onRightMouseDown = function(wParam, lParam) {
 	var cfg = m3config.read();
 	if (!cfg.debug) return;
@@ -1031,7 +1033,7 @@ function show_debug_menu(cfg) {
 	menu.add({ text = "版本 " ++ ver_text; flag = 0x1 });
 	menu.add();
 
-	// ---- 可点项：自己分配命令 ID，方便 popup 之后分派 ----
+	// ---- 可点项 ----
 	var ID = {
 		style = 101;
 		crash = 102;
@@ -1043,45 +1045,72 @@ function show_debug_menu(cfg) {
 		exit_debug = 108;
 	};
 
-	menu.add("控件样式测试台", ID.style);
-	menu.add("崩溃窗口测试台", ID.crash);
+	debug_want = 0;
+
+	var pick = function(id) {
+		return function(id2) {
+			debug_want = id;
+		};
+	}
+
+	menu.add("控件样式测试台", pick(ID.style));
+	menu.add("崩溃窗口测试台", pick(ID.crash));
 	menu.add();
 
-	menu.add("打开数据目录", ID.data);
-	menu.add("打开启动日志目录", ID.launchlog);
+	menu.add("打开数据目录", pick(ID.data));
+	menu.add("打开启动日志目录", pick(ID.launchlog));
 	menu.add();
 
-	menu.add("清空元数据缓存", ID.cache);
-	menu.add("重新执行布局迁移", ID.migrate);
-	menu.add({ text = "记录操作日志"; id = ID.actlog; flag = (cfg.action_log ? 0x8/*_MF_CHECKED*/ : 0); });
+	menu.add("清空元数据缓存", pick(ID.cache));
+	menu.add("重新执行布局迁移", pick(ID.migrate));
+	menu.add({ text = "记录操作日志"; flag = (cfg.action_log ? 0x8/*_MF_CHECKED*/ : 0); proc = pick(ID.actlog) });
 	menu.add();
 
-	menu.add("关闭调试模式", ID.exit_debug);
+	menu.add("关闭调试模式", pick(ID.exit_debug));
 
-	var pick = menu.popup();
+	// 阻塞到菜单关闭；点击结果记在 debug_want 里
+	menu.popup();
 
-	if (!pick) return;
+	// 点击可能由消息队列稍后分派，延一拍再执行（此时菜单已关，可安全弹模态窗口）
+	winform.setTimeout(function() {
+		var want = debug_want;
+		debug_want = 0;
 
-	// ---- 分派 ----
-	if (pick == ID.style) {
+		if (want != 0) run_debug_action(want, cfg);
+	}, 30);
+}
+
+function run_debug_action(want, cfg) {
+	var ID = {
+		style = 101;
+		crash = 102;
+		data = 103;
+		launchlog = 104;
+		cache = 105;
+		migrate = 106;
+		actlog = 107;
+		exit_debug = 108;
+	};
+
+	if (want == ID.style) {
 		m3act.log("打开控件样式测试台");
 		winform.loadForm("/dlg/theme_test.aardio").doModal(winform);
 		return;
 	}
 
-	if (pick == ID.crash) {
+	if (want == ID.crash) {
 		m3act.log("打开崩溃窗口测试台");
 		winform.loadForm("/dlg/crash_test.aardio").doModal(winform);
 		return;
 	}
 
-	if (pick == ID.data) {
+	if (want == ID.data) {
 		m3act.log("打开数据目录");
 		process.explore(m3paths.root());
 		return;
 	}
 
-	if (pick == ID.launchlog) {
+	if (want == ID.launchlog) {
 		if (#cfg.version == 0) {
 			notice("未选择版本。");
 			return;
@@ -1099,14 +1128,14 @@ function show_debug_menu(cfg) {
 		return;
 	}
 
-	if (pick == ID.cache) {
+	if (want == ID.cache) {
 		var n = m3mod.cache_clear();
 		m3act.log("清空元数据缓存：" ++ n ++ " 项");
 		notice("已清空元数据缓存（" ++ n ++ " 项）。" ++ '\r\n' ++ "下次打开 Mod 列表会重新读取。");
 		return;
 	}
 
-	if (pick == ID.migrate) {
+	if (want == ID.migrate) {
 		var notes = {};
 		var r = m3paths.migrate(function(text) { table.push(notes, text); });
 
@@ -1127,30 +1156,26 @@ function show_debug_menu(cfg) {
 		return;
 	}
 
-	if (pick == ID.actlog) {
-		// 以磁盘上的当前值为准取反，避免用到旧快照
+	if (want == ID.actlog) {
+		// 以磁盘现值为准取反，避免用到旧快照
 		var fresh = m3config.read();
-		var want = !(fresh.action_log === true);
+		var on = !(fresh.action_log === true);
 
-		fresh.action_log = want;
+		fresh.action_log = on;
 		m3config.save_keys(fresh, {"action_log"});
 
 		// 先写"关"这一笔，再真正关掉，否则最后一条会丢
-		if (want) m3act.set_enabled(true);
-		m3act.log("操作日志：" ++ (want ? "开" : "关"));
-		if (!want) m3act.set_enabled(false);
+		if (on) m3act.set_enabled(true);
+		m3act.log("操作日志：" ++ (on ? "开" : "关"));
+		if (!on) m3act.set_enabled(false);
 
-		if (want) {
-			notice("已开始记录操作日志。" ++ '\r\n' ++ "文件：M3L\\" ++ "actions.log");
-		}
-		else {
-			notice("已停止记录操作日志。");
-		}
+		if (on) notice("已开始记录操作日志。");
+		else notice("已停止记录操作日志。");
 
 		return;
 	}
 
-	if (pick == ID.exit_debug) {
+	if (want == ID.exit_debug) {
 		m3act.log("关闭调试模式");
 
 		cfg.debug = false;
