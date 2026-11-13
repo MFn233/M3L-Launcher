@@ -452,6 +452,16 @@ function poll() {
 		if (out or errout) {
 			inst.buffer = inst.buffer ++ (out or "") ++ (errout or "");
 			flush_lines(inst);
+
+			inst.last_out = time.tick();
+			inst.hang_reported = false;
+		}
+		elseif (inst.last_out and !inst.hang_reported and (time.tick() - inst.last_out) > 60000) {
+			//进程还活着但一分钟没有新输出：多半卡在 mod 自己的下载/加载上，
+			//先说清楚，免得用户以为启动器没反应。
+			inst.hang_reported = true;
+
+			log("[提示] 已经 60 秒没有新的游戏输出，可能卡在下载或加载上（不是启动器这边在等）。");
 		}
 
 		if (!inst.prcs.stillActive()) table.push(done, inst);
@@ -774,6 +784,7 @@ function start_game(retried, inst) {
 		inst.java = java;
 		inst.memory = eff.memory;
 		inst.started = time.tick();
+	inst.last_out = inst.started;   // 卡住提示用
 
 		// 打包日志时把启动命令行也带上，排查 Java 参数问题很有用
 		try {

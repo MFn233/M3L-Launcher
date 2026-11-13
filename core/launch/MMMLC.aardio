@@ -854,6 +854,20 @@ namespace MMMLC{
 			}
 		}
 
+		//系统代理：用户没自己写代理参数时补上。
+		//mod 里常见的"启动时联网下载"走的是 Java 的 HTTP 栈，
+		//不打开这个开关就只会直连，代理开着也白搭。
+		if (!has_token_prefix(args, "-Djava.net.useSystemProxies=")
+			and !has_token_prefix(args, "-Dhttp.proxyHost")
+			and !has_token_prefix(args, "-Dhttps.proxyHost")
+			and !has_token_prefix(args, "-DsocksProxyHost")
+			and !has_token_prefix(args, "-Djava.net.socks.")
+			and !has_token_prefix(extra, "-Djava.net.useSystemProxies=")
+			and !has_token_prefix(extra, "-Dhttp.proxyHost")
+			and !has_token_prefix(extra, "-Dhttps.proxyHost")) {
+			table.push(args, "-Djava.net.useSystemProxies=true");
+		}
+
 		if (!has_token_prefix(args, "-Djava.library.path=")) {
 			table.push(args, "-Djava.library.path=" + info.natives);
 		}
