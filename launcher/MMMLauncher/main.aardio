@@ -96,6 +96,14 @@ function dbg(text) {
 	if (debug_mode) log("[调试] " ++ text);
 }
 
+// 游戏输出也进落盘文件：出问题时不用再手工跑一遍命令才知道它报了什么。
+function note_to_file(text) {
+	if (#launch_file == 0 or #text == 0) return;
+
+	launch_buf = launch_buf ++ text ++ '\r\n';
+	if (#launch_buf > 8192) log_flush();
+}
+
 // 把某个实例缓冲区里的完整行搬进它的日志会话
 function flush_lines(inst) {
 	var chunk = "";
@@ -118,6 +126,8 @@ function flush_lines(inst) {
 
 		inst.buffer = string.slice(inst.buffer, p + 1);
 		if (!inst.buffer) inst.buffer = "";
+
+		note_to_file(line);
 
 		if (string.indexOf(line, "/ERROR]") or string.indexOf(line, "/FATAL]")) {
 			if (#chunk > 0) {
@@ -337,6 +347,9 @@ function finish_instance(inst) {
 	inst.session.write("--------------------------------------------------");
 	inst.session.write("游戏已退出，退出码 " ++ tostring(code), code != 0);
 
+	note_to_file("--------------------------------------------------");
+	note_to_file("游戏已退出，退出码 " ++ tostring(code));
+
 	for i, v in instances {
 		if (v === inst) {
 			table.remove(instances, i);
@@ -508,6 +521,10 @@ function start_game(retried, inst) {
 
 	var cfg = m3config.read();
 	debug_mode = (cfg.debug ? true : false);
+
+	//兼容处理开关：关掉后 classpath/参数一律照 JSON 原样，不做任何"纠正"。
+	//read_json 里就要用到，所以必须在读版本文件之前设置。
+	MMMLC.set_compat(cfg.compat_fix !== false);
 
 	// 第一次进来才检查多开
 	if (!inst) {

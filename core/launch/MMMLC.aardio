@@ -20,7 +20,15 @@ namespace MMMLC{
 	// 少一个依赖就少一处可坏的资源。
 	// 核心构建标记：每次改这个库就改一行。
 	// 发行版与 F5 的差异全靠它区分——日志里能直接看出跑的哪份代码。
-	BUILD = "2026-11-11";
+	BUILD = "2026-11-15";
+
+	//做不做"自动兼容处理"。默认开；出问题时可一键关掉，退回"照 JSON 原样"。
+	//为什么要开关：这些规则是从少量实例反推的，别的整合包上可能误伤。
+	var COMPAT = true;
+
+	function set_compat(on) {
+		COMPAT = (on ? true : false);
+	}
 
 	import process;
 	import process.popen;
@@ -108,11 +116,17 @@ namespace MMMLC{
 		//org.lwjgl.Sys 会去加载 lwjgl64.dll，随后 ClassFormatError（org/lwjgl/PointerWrapper）
 		//把整个 JVM 带崩。凡是 classpath 里已经有 LWJGL3，就把 LWJGL2 摘掉。
 		var has_lwjgl3 = false;
+		var is_cleanroom = (string.indexOf(string.lower(info.main_class), "top.outlands.foundation") ? true : false);
 		for i, m in info.class_meta {
-			if (m and m.key == "org.lwjgl:lwjgl") has_lwjgl3 = true;
+			if (!m or !m.key) continue;
+
+			if (m.key == "org.lwjgl:lwjgl") has_lwjgl3 = true;
+			if (string.startsWith(m.key, "com.cleanroommc:")) is_cleanroom = true;
 		}
 
-		if (has_lwjgl3) {
+		//只在 Cleanroom 这类版本上剔除 LWJGL2：它靠 lwjglxx 在 Java 层模拟 LWJGL2，
+		//再放真 LWJGL2 会互相遮蔽。别的整合包真有"两套并存"需求时不能删。
+		if (has_lwjgl3 and is_cleanroom and COMPAT) {
 			var kept = {};
 			var kept_meta = {};
 			var dropped = 0;
@@ -280,6 +294,38 @@ namespace MMMLC{
 		return out, out_meta;
 	}
 
+	//JSON 没写 javaVersion 时，按"游戏版本"给 Java 下限（照成熟实现的下限表）：
+	//1.13→8  1.17→16  1.18→17  1.20.5→21  26.1→25
+	//1.12.2 及以前、1.13~1.16.5 都是 8。故意不用模式匹配：只认开头的数字与点。
+	function java_floor(name) {
+		var s = tostring(name or "");
+		var num = "";
+
+		for i = 1; #s; 1 {
+			var ch = string.slice(s, i, i);
+			if ((ch >= "0" and ch <= "9") or ch == ".") num = num ++ ch;
+			else break;
+		}
+
+		var parts = string.split(num, ".");
+		var major = tonumber(parts[1]) or 1;
+		var minor = tonumber(parts[2]) or 0;
+		var patch = tonumber(parts[3]) or 0;
+
+		if (major >= 26) return 25;
+		if (major > 1) return 8;
+
+		if (minor >= 21) return 21;
+		if (minor == 20) {
+			if (patch >= 5) return 21;
+			return 17;
+		}
+		if (minor >= 18) return 17;
+		if (minor == 17) return 16;
+
+		return 8;
+	}
+
 	//解析单个版本的 JSON，不做继承
 	function parse_version(data, minecraft_dir, version_name, version_dir) {
 		var info = {
@@ -308,6 +354,9 @@ namespace MMMLC{
 
 		if (data.javaVersion and data.javaVersion.majorVersion) {
 			info.java_version = data.javaVersion.majorVersion;
+		}
+		else {
+			info.java_version = java_floor(version_name);
 		}
 
 		//启动参数：新格式 arguments.game 与旧格式 minecraftArguments 可能同时存在。
@@ -497,6 +546,7 @@ namespace MMMLC{
 
 		var written = 0;
 		var failed = {};
+		var expected = {};   // 这次应该存在哪些文件（用来清掉上次残留的旧 DLL）
 
 		for i, item in info.native_jars {
 			var fileName_only = file_name_of(item.path);
@@ -514,6 +564,8 @@ namespace MMMLC{
 				//必须按文件名平铺，否则 java.library.path 找不到。
 				var name = file_name_of(fileName);
 				var target = io.joinpath(dir, name);
+
+				expected[name] = true;
 
 				var data = zip.readCurrentFile();
 				if (!data) {
@@ -534,6 +586,20 @@ namespace MMMLC{
 
 			zip.close();
 		}
+
+		//清掉上一轮留下、这次已经不需要的旧库：
+		//换 Java 架构或换版本后，残留的旧 DLL 会被优先加载，表现为莫名其妙的崩溃。
+		var removed = 0;
+		var files, folders = fsys.list(dir);
+
+		for i, p in files {
+			var nm = file_name_of(p);
+			if (expected[nm]) continue;
+
+			if (fsys.delete(p)) removed = removed + 1;
+		}
+
+		if (removed > 0 and log) log("清掉 " ++ removed ++ " 个过期的原生库");
 
 		if (#failed > 0) {
 			table.push(info.notes, #failed ++ " 个原生库没读出来（" ++ failed[1] ++ " 等），可能影响渲染或音频。");
@@ -635,6 +701,48 @@ namespace MMMLC{
 		return false;
 	}
 
+	//args 里是否已有"同一个键"的参数 —— 决定还要不要追加默认值。
+	//-Xmx/-Xms/-Xmn/-Xss 按前缀比；-Dkey=... 比 key=；-XX:Key[=v] 比 Key（忽略 +/-）；
+	//其余整串相等。这比"整串相等"更接近 JVM 语义：同一个键后来的会覆盖前面的。
+	function has_key(args, token) {
+		if (string.startsWith(token, "-XX:")) {
+			var body = string.slice(token, 5);
+			var eq = string.indexOf(body, "=");
+			var key = (eq ? string.left(body, eq - 1) : body);
+
+			key = string.replace(key, "+", "");
+			key = string.replace(key, "-", "");
+
+			for i, v in args {
+				if (!string.startsWith(v, "-XX:")) continue;
+
+				var b = string.slice(v, 5);
+				var e = string.indexOf(b, "=");
+				var k = (e ? string.left(b, e - 1) : b);
+
+				k = string.replace(k, "+", "");
+				k = string.replace(k, "-", "");
+
+				if (k == key) return true;
+			}
+
+			return false;
+		}
+
+		if (string.startsWith(token, "-D")) {
+			var eq = string.indexOf(token, "=");
+			if (eq) return has_token_prefix(args, string.left(token, eq) ++ "=");
+
+			return has_token_prefix(args, token);
+		}
+
+		for i, opt in { "-Xmx"; "-Xms"; "-Xmn"; "-Xss" } {
+			if (string.startsWith(token, opt)) return has_token_prefix(args, opt);
+		}
+
+		return has_token(args, token);
+	}
+
 	function has_token_prefix(args, prefix) {
 		for i, v in args {
 			if (string.startsWith(v, prefix)) return true;
@@ -646,8 +754,12 @@ namespace MMMLC{
 	//它若排在 forge 前面，会把 forge 自己的同名类遮蔽掉，1.8.9 上表现为
 	//NoSuchMethodError: RegistryDelegate.getResourceName()Lnet/minecraft/util/ResourceLocation;
 	//（实测：同一个实例、同一组 jar，只有 OptiFine 的位置不同，另一个启动器把它排在最后就能进游戏）
-	//所以把 optifine 的条目挪到末尾。
-	function order_classpath(list) {
+	//只在 LaunchWrapper 场景（≤1.12.2 的 Forge）这么做：
+	//新版本走 ModLauncher 的另一套 transformer 发现机制，不需要也不该重排。
+	function order_classpath(list, main_class) {
+		if (!COMPAT) return list;
+		if (!main_class or !string.startsWith(main_class, "net.minecraft.launchwrapper")) return list;
+
 		var normal = {};
 		var optifine = {};
 
@@ -665,7 +777,7 @@ namespace MMMLC{
 		if (#info.main_class == 0) return null, "版本 JSON 里没有 mainClass";
 		if (#info.classpath == 0) return null, "classpath 为空，库文件可能一个都没下载";
 
-		var classpath = table.concat(order_classpath(info.classpath), ";");
+		var classpath = table.concat(order_classpath(info.classpath, info.main_class), ";");
 
 		//JSON 参数里的占位符 → 真实值
 		var vars = {
@@ -707,7 +819,7 @@ namespace MMMLC{
 		}
 
 		//2. JSON 与用户参数里都没有才补上：内存
-		if (!has_token_prefix(args, "-Xmx") and !has_token_prefix(extra, "-Xmx")) {
+		if (!has_key(args, "-Xmx") and !has_key(extra, "-Xmx")) {
 			table.push(args, "-Xmx" ++ tostring(opts.memory) ++ "M");
 		}
 
@@ -723,7 +835,8 @@ namespace MMMLC{
 
 		//Java 24 起 sun.misc.Unsafe 的内存访问默认被限制，LWJGL2 与不少老模组会因此失败。
 		//JDK 提供了放行开关，但只有 24+ 才认，低版本传了会直接启动失败，所以按版本判断。
-		if (opts.java_major and opts.java_major >= 24) {
+		//只对 24/25 加：26 起这个开关可能被移除，传了反而启动失败（成熟实现也这么划界）
+		if (opts.java_major and opts.java_major >= 24 and opts.java_major <= 25) {
 			if (!has_token_prefix(args, "--sun-misc-unsafe-memory-access=")) {
 				table.push(args, "--sun-misc-unsafe-memory-access=allow");
 			}
@@ -736,8 +849,7 @@ namespace MMMLC{
 			"-Dfml.ignorePatchDiscrepancies=true";
 			"-Dlog4j2.formatMsgNoLookups=true";
 		} {
-			var tag = string.match(flag, "^[^=]+");
-			if (!has_token_prefix(args, tag ++ "=") and !has_token_prefix(extra, tag ++ "=")) {
+			if (!has_key(args, flag) and !has_key(extra, flag)) {
 				table.push(args, flag);
 			}
 		}

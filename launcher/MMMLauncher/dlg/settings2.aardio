@@ -117,6 +117,10 @@ var chkDebug = P1.check("调试模式", cfg.debug);
 var chkMulti = P1.check("允许同时运行多个实例", cfg.allow_multi);
 var chkShot = P1.check("崩溃时提醒「请勿直接截图分享此窗口」", cfg.shot_tip);
 
+//兼容处理默认开。关掉后 classpath 与启动参数一律照版本 JSON 原样，
+//用于排查"某条兼容规则反而把某个整合包搞坏"的情况。
+var chkCompat = P1.check("启动时自动兼容异常版本文件", cfg.compat_fix !== false);
+
 P1.section("样式设置", true);
 P1.text("尚未实现。（后续在这里提供主题与外观调整）", true);
 
@@ -1917,6 +1921,7 @@ function collect_draft() {
 		debug = chkDebug.checked;
 		allow_multi = chkMulti.checked;
 		shot_tip = chkShot.checked;
+		compat_fix = chkCompat.checked;
 		jvm_args = editJvm.text;
 	};
 }

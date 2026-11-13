@@ -120,6 +120,7 @@ namespace m3config{
 			debug = false;
 			allow_multi = false;
 			shot_tip = true;      // 弹日志窗口时提醒「不要截图分享」，新用户默认开
+			compat_fix = true;    // 启动时自动做兼容处理（关掉就照 JSON 原样）
 			priority = "normal";
 			shared = {};
 	fav_paths = {};      // 收藏的游戏路径：键 = 小写目录
@@ -225,6 +226,7 @@ namespace m3config{
 			if (data.debug !== null) cfg.debug = data.debug;
 			if (data.allow_multi !== null) cfg.allow_multi = data.allow_multi;
 			if (data.shot_tip !== null) cfg.shot_tip = data.shot_tip;
+			if (data.compat_fix !== null) cfg.compat_fix = data.compat_fix;
 		if (data.log_autoscroll !== null) cfg.log_autoscroll = data.log_autoscroll;
 			if (data.priority !== null) cfg.priority = data.priority;
 			if (data.shared) cfg.shared = data.shared;
