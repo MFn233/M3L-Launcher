@@ -137,8 +137,23 @@ tools\deploy-core-lib.bat
 
 ## 配置与数据
 
-- `config.json` 与 exe 同目录，纯文本，可手工编辑；
-- 启动器不写注册表，卸载直接删目录；
+运行时文件都在 **exe 同目录的 `M3L\` 下**，exe 旁边只留程序本身：
+
+```
+M3L\
+├── config.json            配置（纯文本，可手工编辑）
+├── config.pending.json    设置窗口草稿
+├── migrate.log            旧布局迁移记录（只有搬过东西才有）
+├── cache\                 元数据缓存
+├── diag\                  诊断输出（mod-scan.txt / mod-diag.txt）
+├── logs\                  预留：日志打包输出
+└── authlib-injector\      外置登录用的 jar
+```
+
+- 启动器不写注册表，卸载直接删目录（连 `M3L\` 一起删）；
+- **从旧布局升级**：启动时会自动把散落在 exe 旁边的文件搬进 `M3L\`
+  （只在目标不存在时搬，不覆盖）；也可以手动跑迁移工具 `migrate-layout.aardio`
+  （发布成 exe 放在启动器旁边，支持 `--dry` 只看计划）；
 - 版本目录里的 `.m3l-meta.json`（边车文件）由 MMM-DL 写入，记录下载时确定的游戏版本与加载器；
   没有这个文件时，启动器按版本 JSON 自行推断。
 

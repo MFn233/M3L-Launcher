@@ -5,6 +5,7 @@
 //聊天窗口里发一个 zip，比截图有用得多，也比逐条复制快。
 
 namespace m3pack {
+	import m3paths;
 	import zlib.zip;
 	import io;
 	import fsys;
@@ -73,8 +74,10 @@ namespace m3pack {
 		var file_name = "m3l-logs-" ++ stamp ++ ".zip";
 
 		var zip_path;
+		//有工作目录就放在实例旁边（方便和实例一起备份）；
+		//没有（比如还没启动过游戏）就放到 M3L\logs
 		if (#work_dir > 0) zip_path = work_dir ++ "\" ++ file_name;
-		else zip_path = io.fullpath("/" ++ file_name);
+		else zip_path = m3paths.logs(file_name);
 
 		var z, err = zlib.zip(zip_path);
 		if (!z) return null, tostring(err);

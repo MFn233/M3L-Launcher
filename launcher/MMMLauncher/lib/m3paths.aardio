@@ -1,0 +1,167 @@
+//m3paths.aardio
+
+//启动器的运行时文件统一放在 exe 同目录的 M3L\ 下，别再散落在 exe 旁边：
+//
+//	M3L\config.json           配置
+//	M3L\config.pending.json   设置窗口草稿
+//	M3L\cache\                元数据缓存
+//	M3L\diag\                 诊断输出（mod-scan.txt / mod-diag.txt）
+//	M3L\logs\                 预留：日志打包输出
+//	M3L\authlib-injector\     外置登录用的 jar
+//
+//所有路径都由这里给出，别在别处再拼 io.fullpath("/...")。
+//迁移工具（migrate-layout.aardio）通过 set_base() 指定启动器目录后复用同一套规则。
+
+namespace m3paths {
+	import io;
+	import fsys;
+	import string;
+	import table;
+
+	// 启动器目录。空 = 当前 exe 所在目录（发布版就是对的）；
+	// F5 调试或迁移工具里用 set_base() 指定。
+	var BASE = null;
+
+	function set_base(dir) {
+		var d = tostring(dir or "");
+		BASE = (#d > 0) ? d : null;
+	}
+
+	//发布版：exe 所在目录。
+	//F5 调试：exe 是 aardio.exe，这时要用工程目录（否则配置会被写到 aardio 安装目录）。
+	function dir() {
+		if (BASE) return BASE;
+
+		var p = io.splitpath(io._exepath);
+		var name = string.lower(p.name or "");
+
+		if (string.indexOf(name, "aardio")) return io.fullpath("/");
+
+		return p.dir;
+	}
+
+	function root() {
+		return io.joinpath(dir(), "M3L");
+	}
+
+	function ensure(p) {
+		if (!io.exist(p)) fsys.createDir(p);
+		return p;
+	}
+
+	function path(sub) {
+		ensure(root());
+		return io.joinpath(root(), sub);
+	}
+
+	function config() {
+		return path("config.json");
+	}
+
+	function draft() {
+		return path("config.pending.json");
+	}
+
+	function cache(name) {
+		var d = io.joinpath(root(), "cache");
+		ensure(d);
+
+		return io.joinpath(d, name);
+	}
+
+	function diag(name) {
+		var d = io.joinpath(root(), "diag");
+		ensure(d);
+
+		return io.joinpath(d, name);
+	}
+
+	function logs(name) {
+		var d = io.joinpath(root(), "logs");
+		ensure(d);
+
+		return io.joinpath(d, name);
+	}
+
+	function injector_dir() {
+		var d = io.joinpath(root(), "authlib-injector");
+		ensure(d);
+
+		return d;
+	}
+
+	/* ---------- 旧布局迁移 ---------- */
+
+	// 旧文件清单：{ src; dst; is_dir }。只列"源存在、目标不存在"的项，不写盘。
+	function plan() {
+		var out = {};
+		var exe_dir = dir();
+
+		var pairs = {
+			{ io.joinpath(exe_dir, "config.json");         config() };
+			{ io.joinpath(exe_dir, "config.pending.json"); draft() };
+			{ io.joinpath(exe_dir, "mod-meta-cache.json"); cache("mod-meta-cache.json") };
+			{ io.joinpath(exe_dir, "mod-scan.txt");        diag("mod-scan.txt") };
+			{ io.joinpath(exe_dir, "mod-diag.txt");        diag("mod-diag.txt") };
+		};
+
+		for i, p in pairs {
+			var src = p[1];
+			var dst = p[2];
+
+			if (!io.exist(src)) continue;
+			if (io.exist(dst)) continue;   // 新位置已有：不动，也不覆盖
+
+			table.push(out, { src = src; dst = dst; is_dir = false });
+		}
+
+		// 目录：authlib-injector
+		var old_dir = io.joinpath(exe_dir, "authlib-injector");
+		var new_dir = io.joinpath(root(), "authlib-injector");
+
+		if (io.exist(old_dir) and !io.exist(new_dir)) {
+			table.push(out, { src = old_dir; dst = new_dir; is_dir = true });
+		}
+
+		// 老版本可能把打包日志放 exe 旁边
+		var files = fsys.list(exe_dir);
+		for i, fp in files {
+			var name = io.splitpath(fp).name;
+
+			if (!string.startsWith(string.lower(name), "m3l-logs-")) continue;
+			if (!string.endsWith(string.lower(name), ".zip")) continue;
+
+			var dst = logs(name);
+			if (io.exist(dst)) continue;
+
+			table.push(out, { src = fp; dst = dst; is_dir = false });
+		}
+
+		return out;
+	}
+
+	// 执行迁移。report(text) 可为 null。返回 { moved = n; failed = n }
+	function migrate(report) {
+		var list = plan();
+		var moved = 0;
+		var failed = 0;
+
+		for i, item in list {
+			var ok = false;
+
+			if (item.is_dir) ok = fsys.move(item.src, item.dst);
+			else ok = fsys.move(item.src, item.dst);
+
+			if (ok) {
+				moved = moved + 1;
+				if (report) report("移动：" ++ item.src ++ " → " ++ item.dst);
+			}
+			else {
+				failed = failed + 1;
+				if (report) report("失败：" ++ item.src);
+			}
+		}
+
+		return { moved = moved; failed = failed; total = #list };
+	}
+}

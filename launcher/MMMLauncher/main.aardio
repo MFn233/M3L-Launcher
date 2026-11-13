@@ -17,6 +17,7 @@ import m3java;
 import m3game;
 import m3auth;
 import m3app;
+import m3paths;
 import crypt;
 import fsys;
 import string;
@@ -52,6 +53,23 @@ m3theme.button(winform.btnSettings);
 
 // 最小窗口大小，否则缩放后排版会挤在一起
 win.ui.minmax(winform, 480, 260);
+
+// ---------- 旧布局迁移 ----------
+//运行时文件统一收进 M3L\；旧文件只在目标不存在时搬过去，不覆盖。
+var migrate_notes = {};
+
+var mres = m3paths.migrate(function(text) { table.push(migrate_notes, text); });
+
+//记一笔到 M3L\migrate.log（追加），方便回看搬过什么
+if (mres.total > 0) {
+	try {
+		string.save(m3paths.path("migrate.log"),
+			time() ++ "  移动 " ++ mres.moved ++ " 项，失败 " ++ mres.failed ++ " 项" ++ '\r\n'
+			++ table.concat(migrate_notes, '\r\n') ++ '\r\n', 1);
+	}
+	catch(e) {
+	}
+}
 
 // ---------- 运行状态 ----------
 // var 只对声明之后的代码生效，所以统一放在最前面。
@@ -720,7 +738,7 @@ function start_game(retried, inst) {
 
 	// 外置登录：把 authlib-injector 挂成 javaagent（缺 jar 会自己去下）
 	if (acc and acc.type == "authlib" and #(acc.authlib_server or "") > 0) {
-		var injector_dir = io.joinpath(io.splitpath(io._exepath).dir, "authlib-injector");
+		var injector_dir = m3paths.injector_dir();
 		var agent, aerr = m3auth.injector_arg(acc.authlib_server, injector_dir);
 
 		if (agent) {

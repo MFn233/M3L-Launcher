@@ -10,7 +10,11 @@ dist/
 test/
 launchertest/
 
-# 本地运行时配置（含用户名、路径、账号，不进仓库）
+# 运行时数据目录（配置含令牌、缓存、诊断输出，都不进仓库）
+M3L/
+launcher/MMMLauncher/M3L/
+
+# 本地运行时配置（旧布局，留着以防回退）
 launcher/MMMLauncher/config.json
 launcher/MMMLauncher/config.txt
 launcher/MMMLauncher/config.pending.json

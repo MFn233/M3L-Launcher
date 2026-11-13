@@ -9,9 +9,11 @@ namespace m3config{
 	import json;
 	import string;
 	import table;
+	import m3paths;
 
+	//运行时文件都在 M3L\ 下（见 lib/m3paths.aardio）
 	function file_path() {
-		return io.fullpath("/config.json");
+		return m3paths.config();
 	}
 
 	function old_file_path() {
@@ -21,7 +23,7 @@ namespace m3config{
 	// 设置窗口的草稿：改了但还没点「保存」的值先写在这里。
 	// 只存"值类设置"，列表类操作（删账号/删版本等）本身是提交动作，仍然立即写 config.json。
 	function draft_path() {
-		return io.fullpath("/config.pending.json");
+		return m3paths.draft();
 	}
 
 	function load_draft() {

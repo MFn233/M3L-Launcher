@@ -27,6 +27,7 @@ import fsys.version;
 import m3app;
 import m3auth;
 import m3credits;
+import m3paths;
 import string;
 import math;
 import time;
@@ -1140,7 +1141,7 @@ var mod_scan_stats = null;
 var mod_scan_file_path = null;
 
 function mod_scan_file() {
-	if (!mod_scan_file_path) mod_scan_file_path = ..io.fullpath("/mod-scan.txt");
+	if (!mod_scan_file_path) mod_scan_file_path = m3paths.diag("mod-scan.txt");
 
 	return mod_scan_file_path;
 }
@@ -1497,7 +1498,7 @@ function mod_dump_diag() {
 	table.push(lines, "--- 共 " ++ n ++ " 条 ---");
 
 	try {
-		string.save(io.fullpath("/mod-diag.txt"), table.concat(lines, '\r\n'));
+		string.save(m3paths.diag("mod-diag.txt"), table.concat(lines, '\r\n'));
 	}
 	catch(e) {
 	}

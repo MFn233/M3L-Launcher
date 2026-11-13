@@ -13,6 +13,7 @@ namespace m3mod {
 	import zlib.unzip;
 	import m3toml;
 	import m3zip;
+	import m3paths;
 	import table;     // 命名空间里访问 table.push 必须先 import，否则报 _get table
 	import m3config;
 
@@ -101,7 +102,7 @@ namespace m3mod {
 	// 结果按 路径+大小 缓存：同一个 Mod 反复重画列表时不用再开一次压缩包。
 
 	var meta_cache = {};
-	var cache_file = ..io.fullpath("/mod-meta-cache.json");
+	var cache_file = m3paths.cache("mod-meta-cache.json");
 	// 格式版本：解析规则改了就把这个数字 +1，旧缓存自动作废
 	var CACHE_VER = 3;   // 3：改用 string.toml 解析（2 及更早的名字/版本是错的）
 	var cache_loaded = false;
