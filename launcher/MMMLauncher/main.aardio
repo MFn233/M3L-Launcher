@@ -1250,9 +1250,34 @@ m3act.set_enabled(m3config.read().action_log === true);
 
 // ---------- 初始化 ----------
 
-// 先把"这份 exe 到底在哪、读哪份配置"记下来：
-// 发布版与 F5 的最大差别就在这里（exe 目录 vs 工程目录）。
+// 先把"这份 exe 到底在哪、读哪份配置、有没有写权限"记下来。
+// 发布版与 F5 的差别主要就在这里：exe 目录 vs 工程目录，权限也可能不同。
 m3act.log("启动器启动：exe=" ++ io._exepath ++ "，数据目录=" ++ m3paths.root());
+
+// 写权限自检：数据目录与游戏目录各试写一个临时文件。
+// 写不进去会表现成"配置读不到"或"natives 解不出来"，但表面看不出来。
+function probe_writable(label, dir) {
+	if (#(dir or "") == 0) return label ++ "：未配置";
+
+	var file = io.joinpath(dir, "m3l-write-test.tmp");
+	var ok = false;
+
+	try {
+		ok = string.save(file, "x") and true or false;
+	}
+	catch(e) {
+		ok = false;
+	}
+
+	if (ok) {
+		try{ fsys.delete(file); }catch(e){}
+	}
+
+	return label ++ "：" ++ (ok ? "可写" : "不可写");
+}
+
+var boot_cfg = m3config.read();
+m3act.log(probe_writable("数据目录", m3paths.root()) ++ "；" ++ probe_writable("游戏目录", boot_cfg.game_path));
 
 refresh_status();
 load_version_combo();

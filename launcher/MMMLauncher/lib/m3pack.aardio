@@ -68,7 +68,17 @@ namespace m3pack {
 	function pack(ctx) {
 		if (!ctx) return null, "没有可打包的内容";
 
-		var work_dir = ctx.work_dir or "";
+		var work_dir = tostring(ctx.work_dir or "");
+
+		//工作目录可能是空串、末尾带分隔符、或指向不存在的目录，都要先归一化。
+		//否则 zip 路径会拼成 "...\versions\1.11.2\\m3l-logs-….zip" 这种畸形串，
+		//zlib 只会报一句"压缩文件路径参数错误"，看不出是哪里错。
+		//注意：aardio 的双引号字符串是"原样"的，所以这里用单引号写 '\\'（编译期转义成 1 个反斜杠）
+		while (#work_dir > 0 and (string.endsWith(work_dir, '\\') or string.endsWith(work_dir, "/"))) {
+			work_dir = string.slice(work_dir, 1, #work_dir - 1);
+		}
+
+		if (#work_dir > 0 and !io.exist(work_dir)) work_dir = "";
 
 		var stamp = time().format('%Y%m%d-%H%M%S');
 		var file_name = "m3l-logs-" ++ stamp ++ ".zip";
@@ -76,11 +86,11 @@ namespace m3pack {
 		var zip_path;
 		//有工作目录就放在实例旁边（方便和实例一起备份）；
 		//没有（比如还没启动过游戏）就放到 M3L\logs
-		if (#work_dir > 0) zip_path = work_dir ++ "\" ++ file_name;
+		if (#work_dir > 0) zip_path = io.joinpath(work_dir, file_name);
 		else zip_path = m3paths.logs(file_name);
 
 		var z, err = zlib.zip(zip_path);
-		if (!z) return null, tostring(err);
+		if (!z) return null, "无法创建压缩文件（" ++ tostring(err) ++ "）：" ++ tostring(zip_path);
 
 		// 1. 启动器自己的日志（内存里的会话缓冲）
 		if (ctx.session and #ctx.session > 0) {
