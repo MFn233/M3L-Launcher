@@ -698,6 +698,20 @@ function start_game_core(retried, inst) {
 		return;
 	}
 
+	//启动前自检：版本目录不可写时，natives 解压、日志、模组配置全部会失败，
+	//而游戏给出的报错通常和真正原因无关（"无法创建窗口"之类），所以先拦下来。
+	//这同时是"提权能起、双击起不来"最常见的原因。
+	if (!can_write(work_dir)) {
+		log("[错误] 游戏目录不可写：" ++ tostring(work_dir), true);
+
+		notice("[错误] 游戏目录不可写：" ++ '\r\n' ++ tostring(work_dir) ++ '\r\n\r\n'
+			++ "natives、日志和模组配置都写不进去，游戏会启动失败。" ++ '\r\n'
+			++ "请给该目录写权限，或用管理员身份运行启动器。");
+
+		set_launching(false);
+		return;
+	}
+
 	// 参数齐了，建会话 + 日志窗口
 	if (!inst) {
 		// 没有实例在跑时从头编号，避免编号一直往上飘
@@ -1256,8 +1270,12 @@ m3act.log("启动器启动：exe=" ++ io._exepath ++ "，数据目录=" ++ m3pat
 
 // 写权限自检：数据目录与游戏目录各试写一个临时文件。
 // 写不进去会表现成"配置读不到"或"natives 解不出来"，但表面看不出来。
-function probe_writable(label, dir) {
-	if (#(dir or "") == 0) return label ++ "：未配置";
+// 说明：普通权限与管理员权限最现实的差别就是它 —— 同一份代码，
+// 提权能起、双击起不来，多半是这里。
+function can_write(dir) {
+	if (#(dir or "") == 0) return false;
+
+	if (!io.exist(dir)) return false;
 
 	var file = io.joinpath(dir, "m3l-write-test.tmp");
 	var ok = false;
@@ -1273,7 +1291,13 @@ function probe_writable(label, dir) {
 		try{ fsys.delete(file); }catch(e){}
 	}
 
-	return label ++ "：" ++ (ok ? "可写" : "不可写");
+	return ok;
+}
+
+function probe_writable(label, dir) {
+	if (#(dir or "") == 0) return label ++ "：未配置";
+
+	return label ++ "：" ++ (can_write(dir) ? "可写" : "不可写");
 }
 
 var boot_cfg = m3config.read();
