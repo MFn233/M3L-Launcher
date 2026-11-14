@@ -249,6 +249,20 @@ function refresh_tooltip() {
 	status_tip.add(winform.lblStatus, text);
 }
 
+// 运行期异常的记录器：发布版出错时弹窗一闪而过，先落盘再说。
+// 只在"发布版报错、F5 不报"这类跨环境问题时用它定位，不替代正常报错。
+function fatal_log(text) {
+	var line = time() ++ "  " ++ tostring(text);
+
+	try {
+		string.save(m3paths.path("error.log"), line ++ '\r\n', 1);
+	}
+	catch(e) {
+	}
+
+	log("[致命] " ++ tostring(text), true);
+}
+
 function set_launching(on) {
 	//切状态往往意味着"这次启动结束/失败了"，顺手把日志落盘
 	if (!on) log_flush();
@@ -487,6 +501,15 @@ function open_crash_window(inst, code, seconds) {
 
 // 60ms 轮询所有实例：搬日志、看谁退出了
 function poll() {
+	try {
+		poll_core();
+	}
+	catch(e) {
+		fatal_log("轮询进程输出时出错：" ++ tostring(e));
+	}
+}
+
+function poll_core() {
 	if (#instances == 0) {
 		if (poll_timer) {
 			winform.clearInterval(poll_timer);
@@ -578,6 +601,27 @@ function apply_priority(prcs, name) {
 
 function start_game(retried, inst) {
 	if (launching) return;
+
+	//异常统一记录：发布版没有控制台，靠在 M3L\error.log 里留痕
+	try {
+		start_game_core(retried, inst);
+	}
+	catch(e) {
+		var msg = "启动游戏时出错：" ++ tostring(e);
+
+		fatal_log(msg);
+
+		try {
+			notice(msg ++ '\r\n\r\n' ++ "详情已写入 M3L\\error.log。");
+		}
+		catch(e2) {
+		}
+
+		set_launching(false);
+	}
+}
+
+function start_game_core(retried, inst) {
 
 	var cfg = m3config.read();
 
@@ -1205,6 +1249,10 @@ function run_debug_action(want, cfg) {
 m3act.set_enabled(m3config.read().action_log === true);
 
 // ---------- 初始化 ----------
+
+// 先把"这份 exe 到底在哪、读哪份配置"记下来：
+// 发布版与 F5 的最大差别就在这里（exe 目录 vs 工程目录）。
+m3act.log("启动器启动：exe=" ++ io._exepath ++ "，数据目录=" ++ m3paths.root());
 
 refresh_status();
 load_version_combo();
