@@ -1296,13 +1296,58 @@ function can_write(dir) {
 	return ok;
 }
 
+// 分步探测：目录在不在 → 能不能建子目录 → 能不能写文件。
+// 三者失败原因不同（缺目录 / 缺 CreateDirectories / 缺 CreateFiles），
+// 分开报出来才能分清是 ACL、完整性级别，还是我们自己的路径拼错。
+function probe_write(dir) {
+	if (#(dir or "") == 0) return "未配置";
+
+	if (!io.exist(dir)) return "目录不存在";
+
+	// 建子目录
+	var sub = io.joinpath(dir, "m3l-write-test-dir");
+	var made = false;
+
+	try {
+		made = fsys.createDir(sub) and true or false;
+	}
+	catch(e) {
+		made = false;
+	}
+
+	if (made) {
+		try{ fsys.delete(sub); }catch(e){}
+	}
+
+	// 写文件
+	var file = io.joinpath(dir, "m3l-write-test.tmp");
+	var wrote = false;
+
+	try {
+		wrote = string.save(file, "x") and true or false;
+	}
+	catch(e) {
+		wrote = false;
+	}
+
+	if (wrote) {
+		try{ fsys.delete(file); }catch(e){}
+	}
+
+	if (made and wrote) return "可写";
+	if (!made and !wrote) return "不可写（建目录与写文件都被拒）";
+	if (!made) return "不可写（能写文件，不能建子目录）";
+
+	return "不可写（能建目录，不能写文件）";
+}
+
 function probe_writable(label, dir) {
 	if (#(dir or "") == 0) return label ++ "：未配置";
 
 	var shown = tostring(dir);
 	if (#shown > 60) shown = string.slice(shown, 1, 60) ++ "…";
 
-	return label ++ "：" ++ (can_write(dir) ? "可写" : "不可写") ++ "（" ++ shown ++ "）";
+	return label ++ "：" ++ probe_write(dir) ++ "（" ++ shown ++ "）";
 }
 
 var boot_cfg = m3config.read();
