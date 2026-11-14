@@ -1,16 +1,19 @@
 //dlg/notice.aardio
 
 //提示框：只有一个「确定」。
-//主窗口设置 lblMsg.text 之后 doModal，这里不调 show()。
+//主窗体设置 lblMsg.text 之后 doModal，这里不调 show()。
+//
+//高度留够 8 行：带路径的错误消息本来就长，原来的 180 高会把字裁掉，
+//用户只能看到半句话。
 
 import win.ui;
 import m3theme;
 
 /*DSG{{*/
-var winform = win.form(text="提示";right=460;bottom=180;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+var winform = win.form(text="提示";right=520;bottom=300;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-lblMsg={cls="static";text="";left=24;top=22;right=436;bottom=80;font=LOGFONT(name='Microsoft YaHei';h=-12);z=1};
-btnOk={cls="plus";text="确定";left=356;top=116;right=436;bottom=148;font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+lblMsg={cls="static";text="";left=24;top=22;right=496;bottom=224;font=LOGFONT(name='Microsoft YaHei';h=-12);z=1};
+btnOk={cls="plus";text="确定";left=416;top=236;right=496;bottom=268;font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
 )
 /*}}*/
 
