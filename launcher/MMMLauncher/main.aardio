@@ -1299,7 +1299,10 @@ function can_write(dir) {
 function probe_writable(label, dir) {
 	if (#(dir or "") == 0) return label ++ "：未配置";
 
-	return label ++ "：" ++ (can_write(dir) ? "可写" : "不可写");
+	var shown = tostring(dir);
+	if (#shown > 60) shown = string.slice(shown, 1, 60) ++ "…";
+
+	return label ++ "：" ++ (can_write(dir) ? "可写" : "不可写") ++ "（" ++ shown ++ "）";
 }
 
 var boot_cfg = m3config.read();
