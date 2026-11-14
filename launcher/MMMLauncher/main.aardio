@@ -704,11 +704,13 @@ function start_game_core(retried, inst) {
 	if (!can_write(work_dir)) {
 		log("[错误] 游戏目录不可写：" ++ tostring(work_dir), true);
 		log("        natives、日志、模组配置都写不进去，游戏会在创建窗口前失败。", true);
-		log("        解决：给该目录写权限，或用管理员身份运行启动器。", true);
+		log("        若目录权限正常（资源管理器能新建文件），多半是安全软件拦了本程序。", true);
+		log("        对策：把启动器加入信任区 / 排除项，或用管理员身份运行。", true);
 
 		notice("[错误] 游戏目录不可写：" ++ '\r\n' ++ tostring(work_dir) ++ '\r\n\r\n'
-			++ "请给该目录写权限（属性 → 安全），" ++ '\r\n'
-			++ "或用管理员身份运行启动器。");
+			++ "若目录权限正常（资源管理器里能新建文件），" ++ '\r\n'
+			++ "多半是安全软件拦截了本程序：" ++ '\r\n'
+			++ "请加入信任区 / 排除项，或用管理员身份运行。");
 
 		set_launching(false);
 		return;
