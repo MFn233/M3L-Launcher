@@ -23,7 +23,7 @@ m3theme.button(winform.btnOk);
 
 winform.lblBig.text = "请勿直接截图分享此窗口！！！";
 
-winform.lblSub.text = "请使用「打包日志」并发送完整文件。";
+winform.lblSub.text = "若要分享日志给他人，请使用「打包日志」并发送完整文件。";
 
 winform.btnOk.oncommand = function(id, event) {
 	winform.endModal(true);

@@ -46,9 +46,10 @@ namespace m3dlgs {
 		};
 
 		{
+			// 这个窗体自己会设文案（见 dlg 里的 lblBig / lblSub），不要再给 sample，
+			// 否则改 dlg 里的字，预览仍显示样例里的旧文本。
 			file = "/dlg/shot_tip.aardio";
 			title = "截图提示";
-			sample = { lblBig = "请勿直接截图分享此窗口！！！"; lblSub = "请使用「打包日志」导出文件。" };
 		};
 	};
 
@@ -72,7 +73,10 @@ namespace m3dlgs {
 			for name, text in item.sample {
 				var ctrl = frm[name];
 
-				if (ctrl) ctrl.text = text;
+				// 只填"空的"控件。
+				// 窗体自己写了默认文案的（比如截图提示）绝不能覆盖，
+				// 否则改了 dlg 里的字，预览里还是样例里那份旧的 —— 会被当成"保存没生效"。
+				if (ctrl and #tostring(ctrl.text or "") == 0) ctrl.text = text;
 			}
 		}
 
