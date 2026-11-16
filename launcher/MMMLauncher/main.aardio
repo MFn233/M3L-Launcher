@@ -122,20 +122,10 @@ function dbg(text) {
 }
 
 // 启动命令要写进日志（还会被打包分享），令牌一律打码。
-// 只打 --accessToken 的值：它是唯一"拿到就能冒用账号"的参数。
+// 实现放在 m3secret.redact：日志窗口、落盘、打包 zip、崩溃窗口共用一份，
+// 免得哪天有人在别处又拼出一条没打码的命令行。
 function mask_token(text) {
-	var s = tostring(text);
-	var p = string.indexOf(s, "--accessToken ");
-
-	if (!p) return s;
-
-	var head = string.slice(s, 1, p + #"--accessToken " - 1);
-	var rest = string.slice(s, p + #"--accessToken ");
-	var sp = string.indexOf(rest, " ");
-
-	if (!sp) return head ++ "***";
-
-	return head ++ "***" ++ string.slice(rest, sp);
+	return m3secret.redact(text);
 }
 
 // 游戏输出也进落盘文件：出问题时不用再手工跑一遍命令才知道它报了什么。
@@ -964,10 +954,12 @@ function start_game_core(retried, inst) {
 		inst.started = time.tick();
 	inst.last_out = inst.started;   // 卡住提示用
 
-		// 打包日志时把启动命令行也带上，排查 Java 参数问题很有用
+		// 打包日志时把启动命令行也带上，排查 Java 参数问题很有用。
+		// 存进 inst 之前就脱敏：这条会进日志窗口、崩溃窗口和打包 zip，
+		// 打包 zip 是准备发给别人的，里面绝不能有令牌。
 		try {
 			var cmd_args = MMMLC.build_args(info, opts);
-			inst.cmdline = java ++ " " ++ table.concat(cmd_args, " ");
+			inst.cmdline = m3secret.redact(java ++ " " ++ table.concat(cmd_args, " "));
 		}
 		catch(e) {
 			inst.cmdline = java;

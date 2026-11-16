@@ -6,6 +6,7 @@
 
 namespace m3pack {
 	import m3paths;
+	import m3secret;
 	import zlib.zip;
 	import io;
 	import fsys;
@@ -118,8 +119,10 @@ namespace m3pack {
 		z.writeData("系统信息.txt", info_text(ctx));
 
 		// 3. 启动命令（有就带上，排查 Java 参数问题时很有用）
+		//    写盘前再脱敏一次：这个 zip 是准备发给别人的，
+		//    即便上游漏了打码，也不能让令牌从这里出去
 		if (ctx.cmdline and #ctx.cmdline > 0) {
-			z.writeData("启动命令.txt", ctx.cmdline);
+			z.writeData("启动命令.txt", m3secret.redact(ctx.cmdline));
 		}
 
 		// 4. 游戏日志
