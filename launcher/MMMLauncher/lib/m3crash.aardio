@@ -185,6 +185,17 @@ namespace m3crash {
 			"contained no existing paths";
 		} };
 		{ "游戏文件被修改过"; { "SecurityException: SHA1 digest error for" } };
+		{ "版本 jar 带了签名但被改过"; {
+			"signer information does not match";
+			"does not match the signer information";
+		} };
+		{ "Forge 自校验下载失败（旧版本的下载源已失效）"; {
+			"invalid checksum";
+			"Checksum failed";
+			"deobfuscation_data";
+			"Failed to download deobfuscation";
+		} };
+		{ "微软应用未进允许名单（403）"; { "Invalid app registration" } };
 		{ "配置文件解析失败"; { "Not enough data available"; "Failed loading config file" } };
 		{ "手动触发的调试崩溃"; { "Manually triggered debug crash" } };
 	};

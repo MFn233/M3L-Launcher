@@ -118,6 +118,25 @@ tools\deploy-core-lib.bat
 它把 `core/launch/MMMLC.aardio` 复制到 aardio 的用户库目录（`<aardio>\lib\MMMLC.aardio`）。
 两个工程都是 `import MMMLC`，实际加载的是用户库目录里那一份，不跑这一步改动不生效。
 
+**发布后要签名**（不签的话 exe 会被按"信誉"对待：启动可能被 SmartScreen 拦，
+往受保护目录写文件会被拒）：
+
+```
+tools\sign-exe.bat -VerifyOnly                    只看当前签名状态
+tools\sign-exe.bat -SelfSigned                    用自签名证书签（本机有效，零成本）
+tools\sign-exe.bat -SelfSigned -Trust             顺手把自签名证书加入当前用户信任根
+tools\sign-exe.bat -Pfx D:\cert\m3l.pfx -PfxPassword ***   用买的 OV/EV 证书签
+```
+
+- 有 `signtool.exe`（Windows SDK）时优先用它，会加 RFC3161 时间戳；
+  没有就用系统自带的 `Set-AuthenticodeSignature` —— 能签名，但**不加时间戳**，
+  正式分发建议装 SDK。
+- 退出码：`0` 有效 / `2` 已签名但证书链不受信 / `3` 未签名 / `1` 失败。
+- 自签名证书只让**自己这台机器**认为有效，SmartScreen 仍然会拦 ——
+  对外分发要么买 OV/EV 证书，要么去
+  [WDSI](https://www.microsoft.com/en-us/wdsi/filesubmission) 提交误报。
+- 每次重新发布 exe 的哈希都变，信誉从零开始，所以**每次发布都要重新签**。
+
 ## 测试
 
 - **日常**：F5 直接跑；或把发布的 exe 放到 `launchertest/` 里跑（那里有自己的 `config.json`）。
