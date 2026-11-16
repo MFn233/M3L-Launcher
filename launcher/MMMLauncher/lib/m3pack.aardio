@@ -85,9 +85,10 @@ namespace m3pack {
 		var file_name = "m3l-logs-" ++ stamp ++ ".zip";
 
 		var zip_path;
-		//有工作目录就放在实例旁边（方便和实例一起备份）；
-		//没有（比如还没启动过游戏）就放到 M3L\logs
-		if (#work_dir > 0) zip_path = io.joinpath(work_dir, file_name);
+		//有工作目录就放到 <版本文件夹>\m3l-logs\ 下：日志包是"产物"，
+		//不该和版本文件（jar / json / mods）混在一起；
+		//没有工作目录（还没启动过游戏）就落到 M3L\logs。
+		if (#work_dir > 0) zip_path = io.joinpath(work_dir, "m3l-logs", file_name);
 		else zip_path = m3paths.logs(file_name);
 
 		// 实测（aardio_exec）：目标目录不存在时 zlib.zip **抛异常**，不是返回错误。
