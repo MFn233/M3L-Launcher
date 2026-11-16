@@ -1,0 +1,83 @@
+//m3dlgs.aardio
+
+//窗体清单 + 预览入口。
+//
+//为什么单独放一个文件：右键调试菜单要能"单独打开某个窗体"来调样式，
+//清单里有哪几个窗体、哪个需要预填样例文字，都是维护信息，不该塞进 main。
+
+namespace m3dlgs {
+	import string;
+	import table;
+
+	// file   : loadForm 用的资源路径
+	// title  : 菜单里显示的名字
+	// sample : 需要外部填内容的，字段名 → 样例文本（打开前写入）
+	// skip   : 不能单独打开的原因（菜单里置灰并给出说明）
+	LIST = {
+		{ file = "/dlg/settings2.aardio"; title = "设置窗口"; note = "最大的一个，改任何页都从这里看" };
+		{ file = "/dlg/theme_test.aardio"; title = "控件样式测试台" };
+		{ file = "/dlg/crash_test.aardio"; title = "崩溃窗口测试台" };
+		{ file = "/dlg/ms_login.aardio"; title = "微软登录"; note = "打开即申请设备码" };
+		{ file = "/dlg/authlib_login.aardio"; title = "外置登录" };
+
+		{
+			file = "/dlg/notice.aardio";
+			title = "提示框（长文本）";
+			sample = {
+				lblMsg = "这是一个用于调样式的长提示。" ++ '\r\n\r\n'
+					++ "第二段：带路径的错误通常有好几行，" ++ '\r\n'
+					++ "例如 C:\\Users\\DELL\\Desktop\\MMML\\launcher\\MMMLauncher\\M3L\\config.json";
+			};
+		};
+
+		{
+			file = "/dlg/confirm.aardio";
+			title = "确认框";
+			sample = { lblMsg = "确定删除这个版本吗？" ++ '\r\n\r\n' ++ "（删除的版本将移至回收站，可恢复）" };
+		};
+
+		{
+			file = "/dlg/java_warn.aardio";
+			title = "Java 版本提示";
+			sample = {
+				lblMsg = "当前 Java 是 21，这个版本需要 Java 8。";
+				lblHint = "换用推荐版本将自动挑选一个符合该游戏版本要求的 Java。";
+			};
+		};
+
+		{
+			file = "/dlg/shot_tip.aardio";
+			title = "截图提示";
+			sample = { lblBig = "请勿直接截图分享此窗口！！！"; lblSub = "请使用「打包日志」导出文件。" };
+		};
+	};
+
+	// 打开一个窗体预览。返回被 endModal 的值；打不开时返回 null, 原因
+	function open(winform, item) {
+		if (!winform or !item) return null, "参数不完整";
+
+		var frm;
+
+		try {
+			frm = winform.loadForm(item.file);
+		}
+		catch(e) {
+			return null, "打不开窗体：" ++ tostring(item.file) ++ "（" ++ tostring(e) ++ "）";
+		}
+
+		if (!frm) return null, "打不开窗体：" ++ tostring(item.file);
+
+		// 需要样例内容才能看出排版的，先填进去
+		if (item.sample) {
+			for name, text in item.sample {
+				var ctrl = frm[name];
+
+				if (ctrl) ctrl.text = text;
+			}
+		}
+
+		frm.doModal(winform);
+
+		return true;
+	}
+}

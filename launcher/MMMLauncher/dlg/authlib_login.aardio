@@ -6,20 +6,19 @@
 import win.ui;
 import m3theme;
 import m3auth;
-
 /*DSG{{*/
-var winform = win.form(text="外置登录";right=560;bottom=300;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
+var winform = win.form(text="外置登录";right=559;bottom=287;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
-lblServer={cls="static";text="服务器";left=24;top=24;right=96;bottom=48;font=LOGFONT(name='Microsoft YaHei');z=1};
-editServer={cls="edit";left=104;top=24;right=536;bottom=50;font=LOGFONT(name='Microsoft YaHei');z=2};
-lblUser={cls="static";text="账号";left=24;top=68;right=96;bottom=92;font=LOGFONT(name='Microsoft YaHei');z=3};
-editUser={cls="edit";left=104;top=68;right=536;bottom=94;font=LOGFONT(name='Microsoft YaHei');z=4};
-lblPass={cls="static";text="密码";left=24;top=112;right=96;bottom=136;font=LOGFONT(name='Microsoft YaHei');z=5};
-editPass={cls="edit";left=104;top=112;right=536;bottom=138;password=1;font=LOGFONT(name='Microsoft YaHei');z=6};
-lblHint={cls="static";text="服务器地址形如 https://example.com/api/yggdrasil。";left=24;top=152;right=536;bottom=176;font=LOGFONT(h=-11;name='Microsoft YaHei');z=7};
-lblStatus={cls="static";left=24;top=186;right=536;bottom=214;font=LOGFONT(h=-11;name='Microsoft YaHei');z=8};
+btnCancel={cls="plus";text="取消";left=440;top=232;right=536;bottom=266;font=LOGFONT(name='Microsoft YaHei');z=10};
 btnOk={cls="plus";text="登录";left=328;top=232;right=424;bottom=266;font=LOGFONT(name='Microsoft YaHei');z=9};
-btnCancel={cls="plus";text="取消";left=440;top=232;right=536;bottom=266;font=LOGFONT(name='Microsoft YaHei');z=10}
+editPass={cls="edit";left=104;top=112;right=536;bottom=138;font=LOGFONT(name='Microsoft YaHei');password=1;z=6};
+editServer={cls="edit";left=104;top=24;right=536;bottom=50;font=LOGFONT(name='Microsoft YaHei');z=2};
+editUser={cls="edit";left=104;top=68;right=536;bottom=94;font=LOGFONT(name='Microsoft YaHei');z=4};
+lblHint={cls="static";text="服务器地址形如 https://example.com/api/yggdrasil。";left=24;top=152;right=536;bottom=176;center=1;font=LOGFONT(h=-11;name='Microsoft YaHei');z=7};
+lblPass={cls="static";text="密码";left=24;top=112;right=96;bottom=136;center=1;font=LOGFONT(name='Microsoft YaHei');z=5};
+lblServer={cls="static";text="服务器";left=24;top=24;right=96;bottom=48;center=1;font=LOGFONT(name='Microsoft YaHei');z=1};
+lblStatus={cls="static";left=24;top=186;right=536;bottom=214;center=1;font=LOGFONT(h=-11;name='Microsoft YaHei');z=8};
+lblUser={cls="static";text="账号";left=24;top=68;right=96;bottom=92;center=1;font=LOGFONT(name='Microsoft YaHei');z=3}
 )
 /*}}*/
 
@@ -36,7 +35,7 @@ m3theme.field(winform.editUser);
 m3theme.field(winform.editPass);
 
 m3theme.button(winform.btnOk);
-m3theme.ghost(winform.btnCancel);
+m3theme.button(winform.btnCancel);
 
 winform.btnOk.oncommand = function(id, event) {
 	var server = string.trim(winform.editServer.text);

@@ -19,6 +19,7 @@ import m3auth;
 import m3app;
 import m3paths;
 import m3act;
+import m3dlgs;
 import m3mod;
 import win.ui.menu;
 import process;
@@ -1127,6 +1128,19 @@ function show_debug_menu(cfg) {
 	menu.add("崩溃窗口测试台", pick(ID.crash));
 	menu.add();
 
+	// ---- 子菜单：单独打开某个窗体（调样式用）----
+	// 清单在 lib/m3dlgs.aardio，加窗体只改那边。
+	var subDlg = win.ui.popmenu(winform);
+
+	for i, item in m3dlgs.LIST {
+		var code = 1000 + i;
+
+		subDlg.add(item.title, pick(code));
+	}
+
+	menu.add("打开窗体（调样式）", subDlg);
+	menu.add();
+
 	menu.add("打开数据目录", pick(ID.data));
 	menu.add("打开启动日志目录", pick(ID.launchlog));
 	menu.add();
@@ -1161,6 +1175,21 @@ function run_debug_action(want, cfg) {
 		actlog = 107;
 		exit_debug = 108;
 	};
+
+	// 窗体预览：1000 + 序号（清单见 lib/m3dlgs.aardio）
+	if (want >= 1000) {
+		var item = m3dlgs.LIST[want - 1000];
+
+		if (!item) return;
+
+		m3act.log("预览窗体：" ++ tostring(item.title));
+
+		var ok, why = m3dlgs.open(winform, item);
+
+		if (!ok and why) notice(why);
+
+		return;
+	}
 
 	if (want == ID.style) {
 		m3act.log("打开控件样式测试台");
