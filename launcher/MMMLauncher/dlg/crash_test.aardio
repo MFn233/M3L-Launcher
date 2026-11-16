@@ -4,7 +4,7 @@
 //崩溃场景很难人为制造，所以这里内置几份真实的崩溃报告片段：
 //  - 选一个样本 → 看 m3crash 分析出什么原因、疑似哪个模组；
 //  - 「打开崩溃窗口」→ 用样本写一个临时目录，走完整的崩溃窗口流程。
-// 入口：控件样式测试台里的按钮，或者主窗口标题上 Ctrl + 右键。
+// 入口：主窗口标题右键 → 调试菜单 →「崩溃窗口测试台」。
 
 import win.ui;
 import m3theme;
@@ -17,7 +17,7 @@ import string;
 var winform = win.form(text="崩溃窗口测试台";right=600;bottom=520;bgcolor=0xF2F2F2;border="dialog frame";max=false;min=false)
 winform.add(
 lblCase={cls="static";text="样本";left=24;top=18;right=80;bottom=40;font=LOGFONT(name='Microsoft YaHei';h=-12);z=1};
-comboCase={cls="combobox";left=88;top=14;right=400;bottom=114;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
+comboCase={cls="combobox";left=88;top=14;right=400;bottom=214;mode="dropdownlist";font=LOGFONT(name='Microsoft YaHei';h=-12);z=2};
 editSample={cls="richedit";left=24;top=48;right=576;bottom=248;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;font=LOGFONT(name='Consolas';h=-12);z=3};
 lblResult={cls="static";text="分析结果";left=24;top=258;right=120;bottom=280;font=LOGFONT(name='Microsoft YaHei';h=-12);z=4};
 editResult={cls="richedit";left=24;top=284;right=576;bottom=428;bgcolor=0xFFFFFF;readonly=1;multiline=1;vscroll=1;font=LOGFONT(name='Microsoft YaHei';h=-12);z=5};
@@ -39,73 +39,113 @@ m3theme.button(winform.btnMulti);
 m3theme.button(winform.btnClose);
 
 // ---------- 内置样本 ----------
-// 都是真实崩溃报告/日志里能见到的片段，故意写短，够规则匹配就行
+// 都是真实报告/日志里能见到的片段，故意写短，够规则匹配就行。
+// 用行表拼文本，比一串 ++ '\r\n' ++ 好改：加一行样本就多一行。
+function lines_to_text(lines) {
+	return table.concat(lines, '\r\n');
+}
+
 var SAMPLES = {
 	{
 		title = "Java 版本过低（class file 61 = Java 17）";
-		text = '---- Minecraft Crash Report ----'
-			++ '\r\n' ++ '// Oh dear. Looks like a problem occurred.'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
-			++ '\r\n' ++ 'Description: Initializing game'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'java.lang.UnsupportedClassVersionError: net/fabricmc/loader/impl/launch/knot/KnotClient has been compiled by a more recent version of the Java Runtime (class file version 61.0), this version of the Java Runtime only recognizes class file versions up to 52.0'
-			++ '\r\n' ++ '\tat java.base/java.lang.ClassLoader.defineClass1(Native Method)'
-			++ '\r\n' ++ '\tat java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1017)'
-			++ '\r\n' ++ '\tat net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:139)'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
-			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+		text = lines_to_text({
+			'---- Minecraft Crash Report ----';
+			'// Oh dear. Looks like a problem occurred.';
+			'';
+			'Description: Initializing game';
+			'';
+			'java.lang.UnsupportedClassVersionError: net/fabricmc/loader/impl/launch/knot/KnotClient has been compiled by a more recent version of the Java Runtime (class file version 61.0), this version of the Java Runtime only recognizes class file versions up to 52.0';
+			'\tat java.base/java.lang.ClassLoader.defineClass1(Native Method)';
+			'\tat net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:139)';
+		});
 	};
+
 	{
 		title = "模组 Mixin 注入失败";
-		text = '---- Minecraft Crash Report ----'
-			++ '\r\n' ++ '// Daisy, daisy...'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
-			++ '\r\n' ++ 'Description: Rendering overlay'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Redirector onTick()V in examplemod.mixins.json:GameRendererMixin failed injection check, (0/1) succeeded.'
-			++ '\r\n' ++ '\tat org.spongepowered.asm.mixin.injection.struct.InjectionInfo.postInject(InjectionInfo.java:468)'
-			++ '\r\n' ++ '\tat com.example.examplemod.mixin.GameRendererMixin.render(GameRendererMixin.java:42)'
-			++ '\r\n' ++ '\tat com.example.examplemod.core.RenderHook.onRender(RenderHook.java:88)'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
-			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+		text = lines_to_text({
+			'---- Minecraft Crash Report ----';
+			'// Daisy, daisy...';
+			'';
+			'Description: Rendering overlay';
+			'';
+			'org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Redirector onTick()V in examplemod.mixins.json:GameRendererMixin failed injection check, (0/1) succeeded.';
+			'\tat org.spongepowered.asm.mixin.injection.struct.InjectionInfo.postInject(InjectionInfo.java:468)';
+			'\tat com.example.examplemod.mixin.GameRendererMixin.render(GameRendererMixin.java:42)';
+		});
 	};
+
 	{
 		title = "内存不足";
-		text = '---- Minecraft Crash Report ----'
-			++ '\r\n' ++ '// This doesn\'t make any sense!'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
-			++ '\r\n' ++ 'Description: Ticking entity'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'java.lang.OutOfMemoryError: Java heap space'
-			++ '\r\n' ++ '\tat java.base/java.util.Arrays.copyOf(Arrays.java:3512)'
-			++ '\r\n' ++ '\tat net.minecraft.world.level.chunk.LevelChunk.<init>(LevelChunk.java:120)'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
-			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+		text = lines_to_text({
+			'---- Minecraft Crash Report ----';
+			'// This does not make any sense!';
+			'';
+			'Description: Ticking entity';
+			'';
+			'java.lang.OutOfMemoryError: Java heap space';
+			'\tat java.base/java.util.Arrays.copyOf(Arrays.java:3512)';
+			'\tat net.minecraft.world.level.chunk.LevelChunk.<init>(LevelChunk.java:120)';
+		});
 	};
+
 	{
 		title = "Fabric 模组依赖冲突";
-		text = '---- Minecraft Crash Report ----'
-			++ '\r\n' ++ '// Uh... Did I do that?'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'Time: 2026-11-01 22:00:00'
-			++ '\r\n' ++ 'Description: Initializing game'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'net.fabricmc.loader.impl.FormattedException: Mod resolution encountered an incompatible mod set!'
-			++ '\r\n' ++ 'A potential solution has been determined:'
-			++ '\r\n' ++ '\t- Replace mod \'sodium\' (any) with version 0.5.8 or later.'
-			++ '\r\n' ++ 'Unmet dependency listing:'
-			++ '\r\n' ++ '\t- Mod \'sodium\' requires any version of minecraft, which is missing!'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ '\tat net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:139)'
-			++ '\r\n' ++ ''
-			++ '\r\n' ++ 'A detailed walkthrough of the error, its code path and all known details is as follows:'
-			++ '\r\n' ++ '---------------------------------------------------------------------------------------';
+		text = lines_to_text({
+			'---- Minecraft Crash Report ----';
+			'// Uh... Did I do that?';
+			'';
+			'Description: Initializing game';
+			'';
+			'net.fabricmc.loader.impl.FormattedException: Mod resolution encountered an incompatible mod set!';
+			'A potential solution has been determined:';
+			'\t- Replace mod sodium (any) with version 0.5.8 or later.';
+			'Unmet dependency listing:';
+			'\t- Mod sodium requires any version of minecraft, which is missing!';
+			'\tat net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:139)';
+		});
+	};
+
+	// 下面四个是 2026-11 那几次真实事故，专门用来看规则有没有命中
+	{
+		title = "版本 jar 带了签名但被改过";
+		text = lines_to_text({
+			'---- Minecraft Crash Report ----';
+			'// I bet Cylons would not have this problem.';
+			'';
+			'Description: Initializing game';
+			'';
+			'java.lang.SecurityException: class bkf signer information does not match signer information of other classes in the same package';
+			'\tat java.base/java.lang.ClassLoader.checkCerts(ClassLoader.java:1121)';
+			'\tat java.base/java.lang.ClassLoader.preDefineClass(ClassLoader.java:890)';
+		});
+	};
+
+	{
+		title = "Forge 自校验下载失败（下载源已失效）";
+		text = lines_to_text({
+			'[main/INFO] [FML]: Downloading deobfuscation_data_1.5.2.zip from http://files.minecraftforge.net/maven/deobfuscation_data_1.5.2.zip';
+			'[main/ERROR] [FML]: Failed to download file.';
+			'[main/ERROR] [FML]: invalid checksum. Expected: 4a1b8c0e, got: 9f3c77aa';
+			'[main/ERROR] [FML]: There was a problem downloading the deobfuscation data.';
+			'java.lang.RuntimeException: invalid checksum for deobfuscation_data_1.5.2.zip';
+		});
+	};
+
+	{
+		title = "JVM 参数里的 jar 无法加载（-javaagent）";
+		text = lines_to_text({
+			'Error occurred during initialization of VM';
+			'agent library failed Agent_OnLoad: instrument';
+			'Error opening zip file or JAR manifest missing : authlib-injector-1.2.8.jar';
+		});
+	};
+
+	{
+		title = "微软应用未进允许名单（403）";
+		text = lines_to_text({
+			'[错误] Minecraft 认证失败：Invalid app registration, see https://aka.ms/AppRegInfo for more information';
+			'HTTP 403 - POST https://api.minecraftservices.com/authentication/login_with_xbox';
+		});
 	};
 };
 
@@ -149,10 +189,10 @@ function refresh_result() {
 	winform.editResult.text = table.concat(out, '\r\n');
 }
 
-winform.comboCase.add("Java 版本过低");
-winform.comboCase.add("模组 Mixin 注入失败");
-winform.comboCase.add("内存不足");
-winform.comboCase.add("Fabric 模组依赖冲突");
+// 下拉项从 SAMPLES 生成：加样本只改上面那一处
+for i, sample in SAMPLES {
+	winform.comboCase.add(tostring(sample.title));
+}
 winform.comboCase.selIndex = 1;
 
 winform.comboCase.onSelChange = function() {
