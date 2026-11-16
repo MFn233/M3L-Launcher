@@ -89,7 +89,24 @@ namespace m3pack {
 		if (#work_dir > 0) zip_path = io.joinpath(work_dir, file_name);
 		else zip_path = m3paths.logs(file_name);
 
-		var z, err = zlib.zip(zip_path);
+		// 实测（aardio_exec）：目标目录不存在时 zlib.zip **抛异常**，不是返回错误。
+		// 所以这里既要先建目录，也必须 try/catch —— 否则异常会一路冒到菜单回调，
+		// 弹成 "RAW CALLBACK ERROR ... 压缩文件路径参数错误"，跟真正原因没关系。
+		var parent = io.splitpath(zip_path).dir;
+
+		if (#parent > 0 and !io.exist(parent)) {
+			try { fsys.createDir(parent); } catch(e) {}
+		}
+
+		var z, err;
+
+		try {
+			z, err = zlib.zip(zip_path);
+		}
+		catch(e) {
+			return null, "无法创建压缩文件（" ++ tostring(e) ++ "）：" ++ tostring(zip_path);
+		}
+
 		if (!z) return null, "无法创建压缩文件（" ++ tostring(err) ++ "）：" ++ tostring(zip_path);
 
 		// 1. 启动器自己的日志（内存里的会话缓冲）
