@@ -245,9 +245,14 @@ winform.btnOpen.oncommand = function(id, event) {
 	build_crash_form(sample, 1).doModal(winform);
 }
 
-// 多实例崩溃窗口：三个样本各开一个，非模态，验证它们能同时存在
+// 多实例崩溃窗口：开 3 个，非模态，验证它们能同时存在、位置能错开。
+// 循环上限必须是 3：样本会随规则增加而变多，原来写 #SAMPLES 时
+// 样本涨到 8 个就会一次开 8 个窗口（按钮上还写着"连开 3 个"）。
 winform.btnMulti.oncommand = function(id, event) {
-	for i = 1; #SAMPLES; 1 {
+	var count = #SAMPLES;
+	if (count > 3) count = 3;
+
+	for i = 1; count; 1 {
 		var sample = SAMPLES[i];
 		if (!sample) continue;
 
